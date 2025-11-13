@@ -1,0 +1,177 @@
+<script setup lang="ts">
+import { ref, onMounted } from 'vue';
+import Badge from '../components/ui/Badge.vue';
+import ProgressBar from '../components/ui/ProgressBar.vue';
+import { useFormatters } from '../composables/useFormatters';
+
+const { formatDate } = useFormatters();
+
+type Shipment = {
+  id: number;
+  public_code: string | null;
+  origin: string;
+  destination: string;
+  status: string;
+  carrier_name: string | null;
+  driver_name: string | null;
+  driver_phone: string | null;
+  eta: string | null;
+  customer_name: string | null;
+};
+
+const shipments = ref<Shipment[]>([]);
+const loading = ref(true);
+const searchQuery = ref('');
+const statusFilter = ref('');
+
+const statusOptions = [
+  { value: '', label: 'Semua Status' },
+  { value: 'DRAFT', label: 'Draft', variant: 'default' },
+  { value: 'READY', label: 'Ready', variant: 'info' },
+  { value: 'LOADING', label: 'Loading', variant: 'warning' },
+  { value: 'IN_TRANSIT', label: 'In Transit', variant: 'info' },
+  { value: 'DELIVERED', label: 'Delivered', variant: 'success' }
+];
+
+async function loadShipments() {
+  loading.value = true;
+  try {
+    const url = statusFilter.value 
+      ? `/api/shipments/list?status=${statusFilter.value}` 
+      : '/api/shipments/list';
+    const res = await fetch(url);
+    const data = await res.json();
+    shipments.value = data.items || [];
+  } catch (e) {
+    console.error('Failed to load shipments:', e);
+  } finally {
+    loading.value = false;
+  }
+}
+
+function getProgress(status: string): number {
+  switch (status) {
+    case 'DRAFT': return 0;
+    case 'READY': return 25;
+    case 'LOADING': return 50;
+    case 'IN_TRANSIT': return 75;
+    case 'DELIVERED': return 100;
+    default: return 0;
+  }
+}
+
+function getStatusVariant(status: string): 'default' | 'info' | 'warning' | 'success' {
+  const opt = statusOptions.find(o => o.value === status);
+  return (opt?.variant || 'default') as 'default' | 'info' | 'warning' | 'success';
+}
+
+const filteredShipments = ref<Shipment[]>([]);
+
+function filterShipments() {
+  if (!searchQuery.value.trim()) {
+    filteredShipments.value = shipments.value;
+  } else {
+    const query = searchQuery.value.toLowerCase();
+    filteredShipments.value = shipments.value.filter(s => 
+      s.public_code?.toLowerCase().includes(query) ||
+      s.origin.toLowerCase().includes(query) ||
+      s.destination.toLowerCase().includes(query) ||
+      s.driver_name?.toLowerCase().includes(query) ||
+      s.customer_name?.toLowerCase().includes(query)
+    );
+  }
+}
+
+onMounted(() => {
+  loadShipments();
+});
+
+import { watch } from 'vue';
+watch([shipments, searchQuery], () => {
+  filterShipments();
+});
+
+watch(statusFilter, () => {
+  loadShipments();
+});
+</script>
+
+<template>
+  <div class="space-y-4">
+    <div class="text-xl font-semibold">Pelacakan Pengiriman</div>
+
+    <div class="flex gap-3">
+      <input
+        v-model="searchQuery"
+        type="text"
+        placeholder="Cari kode tracking, kota, driver..."
+        class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      <select
+        v-model="statusFilter"
+        class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">
+          {{ opt.label }}
+        </option>
+      </select>
+    </div>
+
+    <div v-if="loading" class="flex items-center justify-center h-64">
+      <div class="text-gray-500">Loading...</div>
+    </div>
+
+    <div v-else class="space-y-3">
+      <div v-if="filteredShipments.length === 0" class="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500">
+        Tidak ada shipment yang sesuai
+      </div>
+
+      <div
+        v-for="ship in filteredShipments"
+        :key="ship.id"
+        class="bg-white border border-gray-200 rounded-xl p-4 space-y-3"
+      >
+        <div class="flex items-start justify-between">
+          <div>
+            <div class="font-semibold text-lg">{{ ship.public_code }}</div>
+            <div class="text-sm text-gray-600">
+              {{ ship.driver_name || 'Driver' }} 
+              <span v-if="ship.driver_phone">• {{ ship.driver_phone }}</span>
+            </div>
+          </div>
+          <Badge :variant="getStatusVariant(ship.status)">
+            {{ statusOptions.find(o => o.value === ship.status)?.label || ship.status }}
+          </Badge>
+        </div>
+
+        <div class="flex items-center gap-4 text-sm">
+          <div class="flex-1">
+            <div class="text-gray-500">Origin</div>
+            <div class="font-medium">{{ ship.origin }}</div>
+          </div>
+          <div class="text-gray-400">→</div>
+          <div class="flex-1">
+            <div class="text-gray-500">Destination</div>
+            <div class="font-medium">{{ ship.destination }}</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="text-sm text-gray-500 mb-2">Progress</div>
+          <ProgressBar :value="getProgress(ship.status)" />
+        </div>
+
+        <div class="flex items-center justify-between text-sm">
+          <div>
+            <span class="text-gray-500">Customer:</span>
+            <span class="font-medium ml-1">{{ ship.customer_name || '-' }}</span>
+          </div>
+          <div v-if="ship.eta">
+            <span class="text-gray-500">ETA:</span>
+            <span class="font-medium ml-1">{{ formatDate(ship.eta) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>

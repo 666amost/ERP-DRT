@@ -1,0 +1,45 @@
+{
+  "name": "expedisi-darat-erwin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"tsx dev-server.js\"",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext .ts,.tsx,.vue",
+    "migrate": "tsx scripts/migrate-and-seed.ts",
+    "backfill:invoices": "tsx scripts/backfill-invoices-customer-id.ts",
+    "report:invoices-unmatched": "tsx scripts/report-invoices-unmatched.ts"
+  },
+  "dependencies": {
+    "@iconify/vue": "^4.2.0",
+    "@neondatabase/serverless": "^0.10.3",
+    "@vercel/blob": "^0.25.1",
+    "bcryptjs": "^2.4.3",
+    "bwip-js": "^4.8.0",
+    "qrcode": "^1.5.4",
+    "vue": "^3.5.12",
+    "vue-router": "^4.4.5"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/bwip-js": "^3.2.3",
+    "@types/node": "^20.11.24",
+    "@types/qrcode": "^1.5.6",
+    "@typescript-eslint/eslint-plugin": "^8.13.0",
+    "@typescript-eslint/parser": "^8.13.0",
+    "@vitejs/plugin-vue": "^6.0.0",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.14.0",
+    "eslint-plugin-vue": "^9.30.0",
+    "globals": "^15.11.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.16",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vercel": "^48.9.2",
+    "vite": "^7.2.2"
+  }
+}

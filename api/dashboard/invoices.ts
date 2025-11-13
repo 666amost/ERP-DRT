@@ -1,0 +1,28 @@
+export const config = { runtime: 'nodejs20.x' };
+
+import { getSql } from '../_lib/db';
+
+type Invoice = {
+  id: number;
+  invoice_number: string;
+  customer_name: string;
+  amount: number;
+  status: string;
+  issued_at: string;
+};
+
+export default async function handler(req: Request): Promise<Response> {
+  if (req.method !== 'GET') return new Response(null, { status: 405 });
+  
+  const sql = getSql();
+  
+  const invoices = await sql<Invoice[]>`
+    select 
+      id, invoice_number, customer_name, amount, status, issued_at
+    from invoices
+    order by issued_at desc
+    limit 10
+  `;
+  
+  return Response.json({ items: invoices });
+}

@@ -1,4 +1,4 @@
-export const config = { runtime: 'nodejs20.x' };
+export const config = { runtime: 'nodejs' };
 
 import { getSql } from '../_lib/db';
 import { serializeCookie } from '../_lib/cookies';

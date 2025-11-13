@@ -1,4 +1,4 @@
-export const config = { runtime: 'nodejs20.x' };
+export const config = { runtime: 'nodejs' };
 
 import bwipjs from 'bwip-js';
 import QRCode from 'qrcode';

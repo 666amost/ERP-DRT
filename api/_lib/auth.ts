@@ -1,9 +1,12 @@
 import { getSql, type Sql } from './db.js';
 import { parseCookies, serializeCookie } from './cookies.js';
-import { createHash } from 'crypto';
 
-function hashPassword(password: string): string {
-  return createHash('sha256').update(password).digest('hex');
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 
@@ -140,7 +143,7 @@ export async function requireSession(req: Request): Promise<RequireSessionResult
 }
 
 export async function verifyPassword(plain: string, storedHash: string): Promise<boolean> {
-  const inputHash = hashPassword(plain);
+  const inputHash = await hashPassword(plain);
   return inputHash === storedHash;
 }
 

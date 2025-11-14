@@ -20,16 +20,40 @@ export default async function handler(req: Request): Promise<Response> {
   )`;
 
   await sql`
+  create table if not exists cities (
+    id bigserial primary key,
+    name text not null unique,
+    code text not null unique,
+    province text,
+    created_at timestamptz default now()
+  )`;
+
+  await sql`
   create table if not exists shipments (
     id bigserial primary key,
     customer_id bigint references customers(id),
+    customer_name text,
     origin text not null,
     destination text not null,
     eta date,
     status text not null default 'DRAFT',
     total_colli int default 0,
     public_code text unique,
+    vehicle_plate_region text,
     created_at timestamptz default now()
+  )`;
+
+  await sql`
+  create table if not exists invoices (
+    id bigserial primary key,
+    shipment_id bigint references shipments(id),
+    invoice_number text unique not null,
+    customer_name text not null,
+    customer_id bigint references customers(id),
+    amount numeric(15,2) not null,
+    status text not null default 'pending',
+    issued_at timestamptz default now(),
+    paid_at timestamptz
   )`;
 
   await sql`

@@ -12,7 +12,7 @@ defineEmits<{
 <template>
   <header class="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 lg:px-6">
     <button
-      class="lg:hidden h-10 w-10 grid place-items-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 mr-2"
+      class="hidden md:grid h-10 w-10 place-items-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 mr-2"
       @click="$emit('toggleSidebar')"
     >
       <Icon

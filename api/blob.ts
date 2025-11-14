@@ -98,11 +98,121 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       res.end(JSON.stringify({ error: 'Failed to generate code', detail: message, stack }));
       return;
     }
-  } else if (endpoint === 'upload' && req.method === 'POST') {
-    // Upload endpoint disabled for now - needs full rewrite for Node API
-    res.writeHead(501, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Upload endpoint temporarily unavailable' }));
-    return;
+  } else if (endpoint === 'upload') {
+    // Support OPTIONS preflight for browser-based uploads
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      });
+      res.end();
+      return;
+    }
+
+    if (req.method !== 'POST') {
+      res.writeHead(405, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Method not allowed' }));
+      return;
+    }
+
+    const contentType = getHeader('content-type') || 'application/octet-stream';
+    const allowMime = new Set(['image/jpeg', 'image/png', 'application/pdf']);
+    const corsBase = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Content-Type': 'application/json',
+    } as Record<string, string>;
+
+    if (!allowMime.has(contentType)) {
+      res.writeHead(415, corsBase);
+      res.end(JSON.stringify({ error: 'Invalid content type' }));
+      return;
+    }
+
+    // Require a delivery token for public uploads (third-party uploads)
+    const podToken = url.searchParams.get('token');
+    if (!podToken) {
+      res.writeHead(401, corsBase);
+      res.end(JSON.stringify({ error: 'Missing token' }));
+      return;
+    }
+
+    const dbUrl = process.env.DATABASE_URL;
+    if (!dbUrl) {
+      res.writeHead(500, corsBase);
+      res.end(JSON.stringify({ error: 'Missing DATABASE_URL' }));
+      return;
+    }
+
+    try {
+      const { neon } = await import('@neondatabase/serverless');
+      const sql = neon(dbUrl);
+      const rows = (await sql`select id, expires_at, used_at from delivery_tokens where token = ${podToken} limit 1`) as { id: number; expires_at: string | null; used_at: string | null }[];
+      const t = rows[0];
+      if (!t) {
+        res.writeHead(401, corsBase);
+        res.end(JSON.stringify({ error: 'Invalid token' }));
+        return;
+      }
+      if (t.used_at) {
+        res.writeHead(401, corsBase);
+        res.end(JSON.stringify({ error: 'Token already used' }));
+        return;
+      }
+      if (t.expires_at && new Date(t.expires_at) <= new Date()) {
+        res.writeHead(401, corsBase);
+        res.end(JSON.stringify({ error: 'Token expired' }));
+        return;
+      }
+
+      // Read raw body from IncomingMessage
+      const readBody = (r: IncomingMessage): Promise<Buffer> => new Promise((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        r.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+        r.on('end', () => resolve(Buffer.concat(chunks)));
+        r.on('error', (err) => reject(err));
+      });
+
+      const buffer = await readBody(req);
+      const maxBytes = 5 * 1024 * 1024;
+      if (buffer.byteLength > maxBytes) {
+        res.writeHead(413, corsBase);
+        res.end(JSON.stringify({ error: 'File too large (max 5MB)' }));
+        return;
+      }
+
+      const now = new Date();
+      const keyDate = now.toISOString().slice(0, 7).replace('-', '/');
+      const uuid = (globalThis.crypto && 'randomUUID' in globalThis.crypto)
+        ? (globalThis.crypto as any).randomUUID()
+        : `${now.getTime()}-${Math.random().toString(16).slice(2)}`;
+      const ext = getExtFromName(null);
+      const key = `erp/${keyDate}/${uuid}.${ext}`;
+
+      const token = process.env.BLOB_READ_WRITE_TOKEN;
+      if (!token) {
+        res.writeHead(500, corsBase);
+        res.end(JSON.stringify({ error: 'Missing BLOB_READ_WRITE_TOKEN' }));
+        return;
+      }
+
+      const uploadOpts: any = { access: 'private', token, contentType };
+      const blob = await put(key, buffer, uploadOpts);
+
+      // Mark token as used
+      await sql`update delivery_tokens set used_at = now() where id = ${t.id}`;
+
+      res.writeHead(200, corsBase);
+      res.end(JSON.stringify({ url: blob.url, pathname: blob.pathname, size: buffer.byteLength, type: contentType }));
+      return;
+    } catch (err) {
+      console.error('Upload error:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Upload failed', detail: String(err) }));
+      return;
+    }
   } else if (endpoint === 'proxy' && req.method === 'GET') {
     // Proxy endpoint disabled for now - needs full rewrite for Node API
     res.writeHead(501, { 'Content-Type': 'application/json' });

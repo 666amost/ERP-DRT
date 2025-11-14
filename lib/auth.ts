@@ -1,6 +1,6 @@
 import { getSql, type Sql } from './db';
 import { parseCookies, serializeCookie } from './cookies';
-import bcrypt from 'bcryptjs';
+import * as bcrypt from 'bcryptjs';
 
 export type User = {
   id: number;
@@ -135,5 +135,13 @@ export async function requireSession(req: Request): Promise<RequireSessionResult
 }
 
 export async function verifyPassword(plain: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(plain, hash);
+  try {
+    console.log('Verifying password, hash length:', hash?.length);
+    const result = await bcrypt.compare(plain, hash);
+    console.log('bcrypt.compare result:', result);
+    return result;
+  } catch (err) {
+    console.error('bcrypt.compare error:', err);
+    throw err;
+  }
 }

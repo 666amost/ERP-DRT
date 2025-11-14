@@ -126,6 +126,9 @@ async function printDeliveryNote(shipment: Shipment) {
             padding: 20px;
           }
         }
+        /* Barcode container and sizing for precise printing */
+        .barcode-right { text-align: right; }
+        .barcode-right img { width: 320px; max-width: 100%; height: 72px; object-fit: contain; border: 1px solid #e5e7eb; padding: 6px; border-radius: 6px; background: #fff; }
       </style>
     </head>
     <body>
@@ -136,11 +139,10 @@ async function printDeliveryNote(shipment: Shipment) {
         <p>${company.address}</p>
       </div>
 
-      <div style="display:flex; gap:20px; align-items:center; justify-content:flex-end; margin:12px 0 24px;">
-        <div style="text-align:center;">
-          <div style="font-size:12px;color:#374151;margin-bottom:4px;">Barcode</div>
-          <img src="/api/blob?endpoint=generate&code=${shipment.public_code || ''}&type=barcode" alt="Barcode" style="height:110px;border:1px solid #e5e7eb;padding:6px;border-radius:6px;" />
-        </div>
+      <div class="barcode-right" style="margin:12px 0 24px;">
+        <div style="font-size:12px;color:#374151;margin-bottom:4px;">Barcode</div>
+        <!-- Use code128 explicitly for surat jalan -->
+        <img src="/api/blob?endpoint=generate&code=${shipment.public_code || ''}&type=code128" alt="Barcode" />
       </div>
 
       <div class="info-grid">

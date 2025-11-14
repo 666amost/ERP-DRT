@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onBeforeUnmount } from 'vue';
 import { useRoute } from 'vue-router';
 
 const route = useRoute();
@@ -12,6 +12,8 @@ const videoRef = ref<HTMLVideoElement | null>(null);
 let qrScanner: any = null;
 
 const files = ref<File[]>([]);
+// cached preview URLs for files; must keep indexes synced with `files`
+const filePreviews = ref<string[]>([]);
 const compressedBlobs = ref<Blob[]>([]);
 const uploading = ref(false);
 const progress = ref<number[]>([]);
@@ -36,11 +38,29 @@ function pickFiles(e: Event) {
       return;
     }
   }
-  files.value.push(...selected);
+  for (const f of selected) {
+    files.value.push(f);
+    try {
+      if (typeof window !== 'undefined' && typeof URL !== 'undefined') {
+        filePreviews.value.push(URL.createObjectURL(f));
+      } else {
+        filePreviews.value.push('');
+      }
+    } catch {
+      filePreviews.value.push('');
+    }
+  }
 }
 
 function removeFile(idx: number) {
+  try {
+    const url = filePreviews.value[idx];
+    if (url && typeof URL !== 'undefined') URL.revokeObjectURL(url);
+  } catch {
+    // noop
+  }
   files.value.splice(idx, 1);
+  filePreviews.value.splice(idx, 1);
 }
 
 function resetScan() {
@@ -48,6 +68,11 @@ function resetScan() {
   scannedAt.value = '';
   note.value = '';
   errorMsg.value = '';
+  // revoke and clear previews
+  try {
+    filePreviews.value.forEach((u) => { if (u && typeof URL !== 'undefined') URL.revokeObjectURL(u); });
+  } catch {}
+  filePreviews.value = [];
   files.value = [];
   uploads.value = [];
 }
@@ -122,6 +147,8 @@ async function startUpload() {
     progress.value = files.value.map(() => 0);
     compressedBlobs.value = [];
     uploads.value = [];
+  // Optionally, if you want to clear original file previews after successful upload, revoke them
+  // but keeping them allows user to see the images while upload finishes.
 
     for (let i = 0; i < files.value.length; i++) {
       const f = files.value[i];
@@ -152,18 +179,44 @@ async function submitPOD() {
         payload.token = token.value;
       }
 
+      // Debugging: log payload before sending
+      console.debug('submitPOD payload', payload);
+      // Validate uploads content
+      if (!uploads.value || uploads.value.length === 0) {
+        throw new Error('Belum ada foto yang diupload');
+      }
+      if (token.value === 'manual' || !token.value) {
+        // ensure we have dataUrl in uploads
+        const missing = uploads.value.some(u => !u || !u.dataUrl);
+        if (missing) throw new Error('Beberapa file belum ter-encode ke dataUrl. Silakan upload ulang.');
+      } else {
+        const missing = uploads.value.some(u => !u || !u.url);
+        if (missing) throw new Error('Beberapa file belum diupload. Silakan upload ulang.');
+      }
+
       const res = await fetch('/api/pod?endpoint=submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Submit gagal');
+      let text = await res.text();
+      let data: any = undefined;
+      try { data = text ? JSON.parse(text) : undefined; } catch {
+        // not JSON
+      }
+      if (!res.ok) {
+        const errMsg = (data && data.error) || text || `Submit failed: ${res.status}`;
+        console.error('submitPOD server error', res.status, errMsg);
+        throw new Error(errMsg);
+      }
       alert('POD tersimpan. ID: ' + data.pod_id);
       // after successful POD submission, redirect to dashboard or close
       window.location.href = '/';
     } catch (e: unknown) {
-      errorMsg.value = (e as Error).message;
+      // Display error message to UI and also console for debug
+      const message = (e as Error).message || String(e);
+      console.error('submitPOD error', message);
+      errorMsg.value = message;
     }
 }
 
@@ -199,6 +252,14 @@ function stopScanner() {
     scanning.value = false;
   }
 }
+
+onBeforeUnmount(() => {
+  try {
+    filePreviews.value.forEach((u) => { if (u && typeof URL !== 'undefined') URL.revokeObjectURL(u); });
+  } catch {}
+  filePreviews.value = [];
+  stopScanner();
+});
 </script>
 
 <template>
@@ -247,7 +308,7 @@ function stopScanner() {
       </div>
       <div v-if="files.length" class="mt-3 grid grid-cols-3 gap-2">
         <div v-for="(f, i) in files" :key="i" class="relative">
-          <img :src="URL.createObjectURL(f)" class="w-full h-24 object-cover rounded-md border" />
+          <img :src="filePreviews[i] || ''" class="w-full h-24 object-cover rounded-md border" />
           <button @click="removeFile(i)" class="absolute top-1 right-1 bg-white/80 rounded-full p-1 text-xs">✕</button>
         </div>
       </div>
@@ -262,10 +323,20 @@ function stopScanner() {
       </div>
     </div>
 
-    <div v-if="uploads.length" class="mb-6">
+      <div v-if="uploads.length" class="mb-6">
       <h3 class="text-sm font-medium mb-2">Uploaded</h3>
       <ul class="text-sm space-y-1">
-        <li v-for="(u, i) in uploads" :key="i">{{ u.pathname }} ({{ Math.round(u.size/1024) }} KB)</li>
+        <li v-for="(u, i) in uploads" :key="i">
+          <span class="font-mono">
+            <template v-if="u.url">
+              <a :href="u.url" target="_blank" rel="noopener noreferrer">{{ u.url }}</a>
+            </template>
+            <template v-else-if="u.pathname">{{ u.pathname }}</template>
+            <template v-else-if="u.dataUrl">local:dataUrl</template>
+            <template v-else>-</template>
+          </span>
+          <span class="text-xs text-gray-500"> ({{ Math.round((u.size || 0)/1024) }} KB)</span>
+        </li>
       </ul>
     </div>
 

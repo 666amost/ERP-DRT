@@ -261,6 +261,10 @@ async function printInvoice(inv: Invoice): Promise<void> {
     .totals td { border:none; }
     .footer { margin-top:24px; font-size:12px; color:#6b7280; text-align:center; }
     @media print { body { padding: 16px; } }
+    /* align QR with totals: inline QR next to totals table */
+    .totals-row { display:flex; justify-content:space-between; gap:20px; align-items:center; margin-top:10px; }
+    .qr-inline { width:90px; height:90px; border: 1px solid #e5e7eb; padding: 6px; border-radius: 6px; background: #fff; display:flex; align-items:center; justify-content:center; }
+    .qr-inline img { width: 100%; height: auto; display:block; }
   </style></head><body>`;
   const rows = invItems.map((it: Item, idx: number) => `<tr>
       <td>${idx + 1}</td>
@@ -285,21 +289,15 @@ async function printInvoice(inv: Invoice): Promise<void> {
         <div>Customer: ${inv.customer_name}</div>
       </div>
     </div>
-    <div style="display:flex; gap:20px; align-items:center; justify-content:flex-end; margin:6px 0 12px;">
-      <div style="text-align:center;">
-        <div style="font-size:12px;color:#374151;margin-bottom:4px;">QR</div>
-        <img src="/api/blob?endpoint=generate&code=${inv.invoice_number}&type=qr" alt="QR" style="height:110px;width:110px;border:1px solid #e5e7eb;padding:6px;border-radius:6px;" />
-      </div>
-      <div style="text-align:center;">
-        <div style="font-size:12px;color:#374151;margin-bottom:4px;">Barcode</div>
-        <img src="/api/blob?endpoint=generate&code=${inv.invoice_number}&type=barcode" alt="Barcode" style="height:110px;border:1px solid #e5e7eb;padding:6px;border-radius:6px;" />
-      </div>
-    </div>
     <table>
       <thead><tr><th>No</th><th>Deskripsi</th><th class="right">Qty</th><th class="right">Harga</th><th class="right">Diskon</th><th class="right">Subtotal</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="6" style="text-align:center;color:#6b7280;">Tidak ada item</td></tr>'}</tbody>
     </table>
-    <table class="totals">
+    <div class="totals-row">
+      <div class="qr-inline" title="QR Code">
+        <img src="/api/blob?endpoint=generate&code=${inv.invoice_number}&type=qr" alt="QR" />
+      </div>
+      <table class="totals">
       <tr>
         <td style="width:70%;"></td>
         <td class="right" style="width:15%;">Subtotal</td>
@@ -320,7 +318,8 @@ async function printInvoice(inv: Invoice): Promise<void> {
         <td class="right" style="font-weight:600;">Total</td>
         <td class="right" style="font-weight:700;">${formatRupiah(grand || inv.amount)}</td>
       </tr>
-    </table>
+      </table>
+    </div>
     <div class="footer">${(inv.notes || '').replace(/</g,'&lt;') || 'Terima kasih. Pembayaran sesuai ketentuan yang berlaku.'}</div>
   `);
   win.document.write('</body></html>');

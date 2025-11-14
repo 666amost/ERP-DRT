@@ -3,6 +3,8 @@ import { ref, onMounted } from 'vue';
 import Button from '../components/ui/Button.vue';
 import Badge from '../components/ui/Badge.vue';
 import { useFormatters } from '../composables/useFormatters';
+import { getCompany } from '../lib/company';
+const LOGO_URL = '/brand/logo.png';
 
 const { formatDate, formatDateLong } = useFormatters();
 
@@ -35,13 +37,14 @@ async function loadShipments() {
   }
 }
 
-function printDeliveryNote(shipment: Shipment) {
+async function printDeliveryNote(shipment: Shipment) {
   const printWindow = window.open('', '_blank');
   if (!printWindow) {
     alert('Popup blocked. Please allow popups for this site.');
     return;
   }
 
+  const company = await getCompany();
   const html = `
     <!DOCTYPE html>
     <html>
@@ -60,6 +63,9 @@ function printDeliveryNote(shipment: Shipment) {
           border-bottom: 2px solid #000;
           padding-bottom: 20px;
         }
+        .brand { display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:10px; }
+        .brand img { height: 48px; width: 48px; object-fit: contain; }
+        .brand-name { font-weight: 700; color: #1d4ed8; letter-spacing: .5px; }
         .header h1 {
           margin: 0;
           font-size: 24px;
@@ -124,9 +130,17 @@ function printDeliveryNote(shipment: Shipment) {
     </head>
     <body>
       <div class="header">
+        <div class="brand"><img src="${LOGO_URL}" alt="Logo" /><div class="brand-name">SUMBER TRANS EXPRESS</div></div>
         <h1>SURAT JALAN</h1>
-        <p>Ekspedisi Darat Erwin</p>
-        <p>Jl. Contoh No. 123, Jakarta</p>
+        <p>${company.name}</p>
+        <p>${company.address}</p>
+      </div>
+
+      <div style="display:flex; gap:20px; align-items:center; justify-content:flex-end; margin:12px 0 24px;">
+        <div style="text-align:center;">
+          <div style="font-size:12px;color:#374151;margin-bottom:4px;">Barcode</div>
+          <img src="/api/blob?endpoint=generate&code=${shipment.public_code || ''}&type=barcode" alt="Barcode" style="height:110px;border:1px solid #e5e7eb;padding:6px;border-radius:6px;" />
+        </div>
       </div>
 
       <div class="info-grid">

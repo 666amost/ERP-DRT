@@ -5,6 +5,7 @@ const Login = () => import('./pages/Login.vue');
 const Dashboard = () => import('./pages/Dashboard.vue');
 const PodUpload = () => import('./pages/PodUpload.vue');
 const AdminPodList = () => import('./pages/AdminPodList.vue');
+const AdminCompany = () => import('./pages/AdminCompany.vue');
 const BarangKeluar = () => import('./pages/BarangKeluar.vue');
 const Pelacakan = () => import('./pages/Pelacakan.vue');
 const Invoice = () => import('./pages/Invoice.vue');
@@ -26,6 +27,7 @@ export const router = createRouter({
         { path: 'invoice', name: 'invoice', component: Invoice },
         { path: 'surat-jalan', name: 'surat-jalan', component: SuratJalan },
         { path: 'admin/pod', name: 'admin-pod', component: AdminPodList }
+        ,{ path: 'admin/company', name: 'admin-company', component: AdminCompany }
       ]
     },
     { path: '/pod/:token', name: 'pod-upload', component: PodUpload, props: true }

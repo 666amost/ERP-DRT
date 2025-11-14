@@ -11,6 +11,7 @@ const items: Item[] = [
   { to: '/pelacakan', label: 'Pelacakan', icon: 'mdi:truck-outline' },
   { to: '/invoice', label: 'Invoice', icon: 'mdi:receipt-text-outline' },
   { to: '/surat-jalan', label: 'Surat Jalan', icon: 'mdi:file-document-outline' }
+  ,{ to: '/admin/company', label: 'Company', icon: 'mdi:office-building' }
 ];
 
 const route = useRoute();
@@ -35,9 +36,9 @@ function handleClick() {
   <aside class="h-screen w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
     <div class="h-16 flex items-center justify-between px-4 gap-3">
       <div class="flex items-center gap-3">
-        <div class="h-9 w-9 rounded-md bg-primary text-white flex items-center justify-center font-semibold">EP</div>
+        <img src="/brand/logo.png" alt="Logo" class="h-9 w-9 rounded-md object-contain border border-gray-200" />
         <div class="leading-tight">
-          <div class="text-sm font-semibold">Enterprise ERP</div>
+          <div class="text-sm font-semibold">SUMBER TRANS EXPRESS</div>
           <div class="text-xs text-gray-500">Operations</div>
         </div>
       </div>

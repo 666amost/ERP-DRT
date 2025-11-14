@@ -6,6 +6,7 @@ import CityAutocomplete from '../components/CityAutocomplete.vue';
 import CustomerAutocomplete from '../components/CustomerAutocomplete.vue';
 import { useFormatters } from '../composables/useFormatters';
 import { Icon } from '@iconify/vue';
+const LOGO_URL = '/brand/logo.png';
 
 const { formatDate } = useFormatters();
 
@@ -191,7 +192,7 @@ function printLabel() {
     body { margin:0; font-family: 'Inter', Arial, sans-serif; -webkit-print-color-adjust: exact; }
     .label-box {
       width: 100mm; height: 100mm; box-sizing: border-box;
-      padding: 0; border: 2px solid #b91c1c; border-radius: 8px;
+      padding: 0; border: 2px solid #1d4ed8; border-radius: 8px;
       display: flex; flex-direction: column; justify-content: space-between;
       background: #ffffff;
       position: relative; left: 0; top: 0;
@@ -199,11 +200,14 @@ function printLabel() {
     .label-inner {
       padding: 8mm; height: calc(100mm - 16mm); display: flex; flex-direction: column; justify-content: space-between;
     }
-    .label-header { text-align: center; font-size: 16px; font-weight: 700; color: #b91c1c; margin-bottom: 2mm; }
-    .label-route { text-align: center; font-size: 13px; font-weight: 500; color: #991b1b; margin-bottom: 4mm; }
+    .brand { display:flex; align-items:center; justify-content:center; gap:6px; margin-bottom: 2mm; }
+    .brand img { width: 18mm; height: 18mm; object-fit: contain; }
+    .brand-name { font-size: 12px; font-weight: 700; color: #1d4ed8; letter-spacing: .5px; }
+    .label-header { text-align: center; font-size: 16px; font-weight: 700; color: #1d4ed8; margin-bottom: 2mm; }
+    .label-route { text-align: center; font-size: 13px; font-weight: 500; color: #1e40af; margin-bottom: 4mm; }
     .codes { display: flex; gap: 8mm; justify-content: center; align-items: center; }
     .codes img { width: 38mm; height: 38mm; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 4px; background: #fff; }
-    .label-footer { text-align: center; font-size: 12px; color: #991b1b; margin-top: 4mm; }
+    .label-footer { text-align: center; font-size: 12px; color: #1e40af; margin-top: 4mm; }
     @media print {
       body { background: transparent; }
       .label-box { box-shadow: none; }
@@ -211,13 +215,14 @@ function printLabel() {
   </style></head><body>`);
   win.document.write(`<div class="label-box">
     <div class="label-inner">
+      <div class="brand"><img src="${LOGO_URL}" alt="Logo" /><div class="brand-name">SUMBER TRANS EXPRESS</div></div>
       <div class="label-header">${code}</div>
       <div class="label-route">${origin} → ${dest}</div>
       <div class="codes">
         <img src="/api/blob?endpoint=generate&code=${code}&type=qr" alt="QR Code" />
         <img src="/api/blob?endpoint=generate&code=${code}&type=barcode" alt="Barcode" />
       </div>
-      <div class="label-footer">ERP DARAT BUKAN BCE</div>
+      <div class="label-footer">SUMBER TRANS EXPRESS</div>
     </div>
   </div>`);
   win.document.write('</body></html>');
@@ -264,7 +269,11 @@ onMounted(() => {
             </td>
           </tr>
           <tr v-for="ship in shipments" :key="ship.id" class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
-            <td class="px-4 py-3 text-sm font-medium dark:text-gray-200">{{ ship.public_code }}</td>
+            <td class="px-4 py-3 text-sm font-medium dark:text-gray-200">
+              <div class="flex items-center gap-3">
+                <div class="min-w-[88px]">{{ ship.public_code }}</div>
+              </div>
+            </td>
             <td class="px-4 py-3 text-sm dark:text-gray-300">{{ ship.customer_name || '-' }}</td>
             <td class="px-4 py-3 text-sm dark:text-gray-300">{{ ship.origin }} → {{ ship.destination }}</td>
             <td class="px-4 py-3 text-sm text-center">{{ ship.total_colli }}</td>

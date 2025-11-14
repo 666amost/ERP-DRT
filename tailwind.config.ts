@@ -9,11 +9,10 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Neutral primary (black/white) so UI uses high-contrast monochrome
         primary: {
-          DEFAULT: '#111827', // gray-900 (near black)
-          dark: '#0b1220',
-          light: '#f8fafc' // near white for subtle backgrounds
+          DEFAULT: '#1d4ed8',
+          dark: '#1e40af',
+          light: '#e0e7ff'
         }
       },
       borderRadius: {

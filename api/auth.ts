@@ -7,9 +7,18 @@ import { findUserByEmail, verifyPassword, createSession, revokeSession, requireS
 type LoginBody = { email: string; password: string };
 
 type NodeLikeHeaders = Record<string, string | string[] | undefined>;
-function headerGetLike(headers: unknown, name: string): string | null {
+type HeaderBag = Headers | NodeLikeHeaders | undefined;
+type AppRequest = {
+  url?: string;
+  method?: string;
+  headers?: HeaderBag;
+  body?: unknown;
+  json?: () => Promise<unknown>;
+};
+
+function headerGetLike(headers: HeaderBag, name: string): string | null {
   const n = name.toLowerCase();
-  const h = headers as unknown as { get?: (key: string) => string | null } & NodeLikeHeaders | undefined;
+  const h = headers as ({ get?: (key: string) => string | null } & NodeLikeHeaders) | undefined;
   if (h && typeof h.get === 'function') return h.get(name);
   if (!h) return null;
   const v = (h as NodeLikeHeaders)[n] ?? (h as NodeLikeHeaders)[name];
@@ -18,20 +27,19 @@ function headerGetLike(headers: unknown, name: string): string | null {
   return v != null ? String(v) : null;
 }
 
-async function readJsonBody<T>(req: unknown): Promise<T> {
-  const r = req as { json?: () => Promise<unknown>; body?: unknown };
-  if (typeof r?.json === 'function') return (await r.json()) as T;
-  if (r && 'body' in (r as object)) {
-    const b = r.body as unknown;
+async function readJsonBody<T>(req: AppRequest): Promise<T> {
+  if (typeof req?.json === 'function') return (await req.json()) as T;
+  if (req && 'body' in (req as object)) {
+    const b = req.body as unknown;
     if (typeof b === 'string') return JSON.parse(b) as T;
     return b as T;
   }
   throw new Error('No JSON body');
 }
 
-export default async function handler(req: unknown): Promise<Response> {
-  const urlStr: string = (req as { url?: string }).url ?? '/api/auth';
-  const host = headerGetLike((req as { headers?: unknown }).headers, 'host') || 'localhost';
+export default async function handler(req: AppRequest): Promise<Response> {
+  const urlStr: string = req.url ?? '/api/auth';
+  const host = headerGetLike(req.headers, 'host') || 'localhost';
   const url = new URL(urlStr, `https://${host}`);
   const endpoint = url.searchParams.get('endpoint');
 
@@ -72,8 +80,8 @@ export default async function handler(req: unknown): Promise<Response> {
       }
 
       const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-      const ip = headerGetLike((req as { headers?: unknown }).headers, 'x-forwarded-for') || null;
-      const ua = headerGetLike((req as { headers?: unknown }).headers, 'user-agent') || null;
+      const ip = headerGetLike(req.headers, 'x-forwarded-for') || null;
+      const ua = headerGetLike(req.headers, 'user-agent') || null;
       const session = await createSession(sql, user.id, expires, ip, ua);
 
       const secure = (process.env.NODE_ENV === 'production');
@@ -98,9 +106,9 @@ export default async function handler(req: unknown): Promise<Response> {
         details: process.env.NODE_ENV === 'development' ? String(e) : undefined 
       }, { status: 500 });
     }
-  } else if (endpoint === 'logout' && (req as { method?: string }).method === 'POST') {
+  } else if (endpoint === 'logout' && req.method === 'POST') {
     try {
-      const cookies = parseCookies(headerGetLike((req as { headers?: unknown }).headers, 'cookie'));
+      const cookies = parseCookies(headerGetLike(req.headers, 'cookie'));
       const sid = cookies['sid'];
       const sql = getSql();
       if (sid) {
@@ -119,9 +127,9 @@ export default async function handler(req: unknown): Promise<Response> {
       console.error('Logout error:', e);
       return Response.json({ error: 'Server error' }, { status: 500 });
     }
-  } else if (endpoint === 'me' && (req as { method?: string }).method === 'GET') {
+  } else if (endpoint === 'me' && req.method === 'GET') {
     try {
-      const cookie = headerGetLike((req as { headers?: unknown }).headers, 'cookie');
+      const cookie = headerGetLike(req.headers, 'cookie');
       const headers = new Headers();
       if (cookie) headers.set('cookie', cookie);
       const fetchReq = new Request(url.toString(), { headers });

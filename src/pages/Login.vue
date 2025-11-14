@@ -27,13 +27,19 @@ async function handleLogin() {
     });
     
     if (!res.ok) {
-      error.value = 'Email atau password salah';
+      try {
+        const data = await res.json();
+        error.value = data?.error || 'Email atau password salah';
+      } catch {
+        error.value = 'Email atau password salah';
+      }
+      loading.value = false;
       return;
     }
     
     router.push('/dashboard');
   } catch (e) {
-    error.value = 'Gagal login, coba lagi';
+    error.value = 'Gagal terhubung ke server';
   } finally {
     loading.value = false;
   }

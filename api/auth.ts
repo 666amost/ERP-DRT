@@ -56,19 +56,22 @@ export default async function handler(req: AppRequest): Promise<Response> {
 
       const email = (body.email || '').toLowerCase().trim();
       const password = body.password || '';
-      console.log('Login attempt for:', email);
       
       if (!email || !password) {
-        console.error('Missing credentials');
-        return Response.json({ error: 'Missing credentials' }, { status: 400 });
+        return new Response(
+          JSON.stringify({ error: 'Email dan password harus diisi' }),
+          { status: 400, headers: { 'content-type': 'application/json' } }
+        );
       }
 
       const user = await findUserByEmail(sql, email);
-      console.log('User found:', user ? 'yes' : 'no');
       
       if (!user) {
         console.error('User not found:', email);
-        return new Response(null, { status: 401 });
+        return new Response(
+          JSON.stringify({ error: 'INVALID_CREDENTIALS' }),
+          { status: 401, headers: { 'content-type': 'application/json' } }
+        );
       }
       
       const ok = await verifyPassword(password, user.password_hash);
@@ -76,7 +79,10 @@ export default async function handler(req: AppRequest): Promise<Response> {
       
       if (!ok) {
         console.error('Invalid password for:', email);
-        return new Response(null, { status: 401 });
+        return new Response(
+          JSON.stringify({ error: 'INVALID_CREDENTIALS' }),
+          { status: 401, headers: { 'content-type': 'application/json' } }
+        );
       }
 
       const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -98,13 +104,8 @@ export default async function handler(req: AppRequest): Promise<Response> {
         { status: 200, headers: { 'content-type': 'application/json', 'set-cookie': setCookie } }
       );
     } catch (e: unknown) {
-      console.error('Login error details:', e);
-      console.error('Error stack:', e instanceof Error ? e.stack : 'No stack trace');
-      console.error('Error message:', e instanceof Error ? e.message : String(e));
-      return Response.json({ 
-        error: 'Server error',
-        details: process.env.NODE_ENV === 'development' ? String(e) : undefined 
-      }, { status: 500 });
+      console.error('Auth error:', e instanceof Error ? e.message : String(e));
+      return Response.json({ error: 'Server error' }, { status: 500 });
     }
   } else if (endpoint === 'logout' && req.method === 'POST') {
     try {

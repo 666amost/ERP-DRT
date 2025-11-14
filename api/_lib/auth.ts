@@ -135,13 +135,5 @@ export async function requireSession(req: Request): Promise<RequireSessionResult
 }
 
 export async function verifyPassword(plain: string, hash: string): Promise<boolean> {
-  try {
-    console.log('Verifying password, hash length:', hash?.length);
-    const result = await bcrypt.compare(plain, hash);
-    console.log('bcrypt.compare result:', result);
-    return result;
-  } catch (err) {
-    console.error('bcrypt.compare error:', err);
-    throw err;
-  }
+  return bcrypt.compare(plain, hash);
 }

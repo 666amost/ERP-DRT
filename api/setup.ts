@@ -1,7 +1,6 @@
 export const config = { runtime: 'nodejs' };
 
 import { getSql } from './_lib/db.js';
-import * as bcrypt from 'bcryptjs';
 
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== 'POST') return new Response(null, { status: 405 });
@@ -150,10 +149,10 @@ export default async function handler(req: Request): Promise<Response> {
     const password = process.env.ADMIN_PASSWORD || 'Admin123!';
     const name = process.env.ADMIN_NAME || 'Admin';
     
-    const hash = await bcrypt.hash(password, 10);
+    // Insert plain password; DB trigger will auto-hash it
     const rows = await sql`
       insert into users (email, password_hash, name, role)
-      values (${email}, ${hash}, ${name}, 'admin')
+      values (${email}, ${password}, ${name}, 'admin')
       on conflict (email) do update set password_hash = excluded.password_hash, name = excluded.name
       returning id
     ` as { id: number }[];

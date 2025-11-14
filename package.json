@@ -17,14 +17,12 @@
     "@iconify/vue": "^4.2.0",
     "@neondatabase/serverless": "^0.10.3",
     "@vercel/blob": "^0.25.1",
-    "bcryptjs": "^2.4.3",
     "bwip-js": "^4.8.0",
     "qrcode": "^1.5.4",
     "vue": "^3.5.12",
     "vue-router": "^4.4.5"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
     "@types/bwip-js": "^3.2.3",
     "@types/node": "^20.11.24",
     "@types/qrcode": "^1.5.6",

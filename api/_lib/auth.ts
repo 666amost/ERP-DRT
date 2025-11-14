@@ -1,6 +1,11 @@
 import { getSql, type Sql } from './db.js';
 import { parseCookies, serializeCookie } from './cookies.js';
-import bcrypt from 'bcryptjs';
+import { createHash } from 'crypto';
+
+function hashPassword(password: string): string {
+  return createHash('sha256').update(password).digest('hex');
+}
+
 
 export type User = {
   id: number;
@@ -134,6 +139,8 @@ export async function requireSession(req: Request): Promise<RequireSessionResult
   };
 }
 
-export async function verifyPassword(plain: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(plain, hash);
+export async function verifyPassword(plain: string, storedHash: string): Promise<boolean> {
+  const inputHash = hashPassword(plain);
+  return inputHash === storedHash;
 }
+

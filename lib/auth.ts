@@ -1,6 +1,6 @@
 import { getSql, type Sql } from './db';
 import { parseCookies, serializeCookie } from './cookies';
-import * as bcrypt from 'bcryptjs';
+import { createHash } from 'crypto';
 
 export type User = {
   id: number;
@@ -134,14 +134,12 @@ export async function requireSession(req: Request): Promise<RequireSessionResult
   };
 }
 
+function hashPassword(password: string): string {
+  return createHash('sha256').update(password).digest('hex');
+}
+
 export async function verifyPassword(plain: string, hash: string): Promise<boolean> {
-  try {
-    console.log('Verifying password, hash length:', hash?.length);
-    const result = await bcrypt.compare(plain, hash);
-    console.log('bcrypt.compare result:', result);
-    return result;
-  } catch (err) {
-    console.error('bcrypt.compare error:', err);
-    throw err;
-  }
+  // Compare SHA256 hex digest
+  const input = hashPassword(plain);
+  return input === hash;
 }

@@ -1,5 +1,5 @@
 export const config = { runtime: 'nodejs' };
-import { getSql } from '../lib/db';
+import { getSql } from 'lib/db';
 
 type Customer = { id: number; name: string; phone: string | null; };
 

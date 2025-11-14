@@ -3,6 +3,10 @@
     "target": "ES2022",
     "useDefineForClassFields": true,
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "baseUrl": "./",
+    "paths": {
+      "lib/*": ["lib/*"]
+    },
     "module": "ESNext",
     "skipLibCheck": true,
     "moduleResolution": "Bundler",

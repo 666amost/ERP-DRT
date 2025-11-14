@@ -18,7 +18,7 @@ const selectedId = ref<number|null>(null);
 
 async function loadCustomers() {
   try {
-    const res = await fetch('/api/customers/list');
+    const res = await fetch('/api/customers?endpoint=list');
     const data = await res.json();
     customers.value = data.items || [];
     filtered.value = customers.value;
@@ -50,7 +50,7 @@ async function addCustomer() {
   if (!newName.value.trim()) return;
   loading.value = true;
   try {
-    const res = await fetch('/api/customers/create', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ name:newName.value.trim(), phone:newPhone.value.trim() || undefined }) });
+    const res = await fetch('/api/customers?endpoint=create', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ name:newName.value.trim(), phone:newPhone.value.trim() || undefined }) });
     if (!res.ok) { const err = await res.json(); alert(err.error||'Gagal'); return; }
     const cust = await res.json();
     customers.value.push(cust);

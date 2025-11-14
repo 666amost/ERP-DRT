@@ -30,7 +30,7 @@ const loading = ref(false);
 
 async function loadCities() {
   try {
-    const res = await fetch('/api/cities/list');
+    const res = await fetch('/api/cities?endpoint=list');
     const data = await res.json();
     cities.value = data.items || [];
     filteredCities.value = cities.value;
@@ -61,7 +61,7 @@ async function addNewCity() {
   
   loading.value = true;
   try {
-    const res = await fetch('/api/cities/create', {
+    const res = await fetch('/api/cities?endpoint=create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 

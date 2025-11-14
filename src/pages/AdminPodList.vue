@@ -13,7 +13,7 @@ const errorMsg = ref('');
 async function load() {
   loading.value = true;
   errorMsg.value = '';
-  const res = await fetch('/api/pod/list');
+    const res = await fetch('/api/pod?endpoint=list');
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     errorMsg.value = data.error || 'Gagal memuat POD';
@@ -25,7 +25,7 @@ async function load() {
 
 function viewUrl(p: Photo) {
   const q = new URLSearchParams({ pathname: p.pathname });
-  return `/api/blob/proxy?${q.toString()}`;
+  return `/api/blob?endpoint=proxy&${q.toString()}`;
 }
 
 onMounted(load);

@@ -76,7 +76,7 @@ async function uploadOne(blob: Blob, name: string, index: number) {
   return await new Promise<{ url: string; pathname: string; size: number; type: string }>((resolve, reject) => {
     const ext = (name.split('.').pop() || 'jpg').toLowerCase();
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `/api/blob/upload?ext=${encodeURIComponent(ext)}`);
+    xhr.open('POST', `/api/blob?endpoint=upload&ext=${encodeURIComponent(ext)}`);
     xhr.setRequestHeader('Content-Type', blob.type || 'application/octet-stream');
     xhr.upload.onprogress = (ev) => {
       if (ev.lengthComputable) {
@@ -129,7 +129,7 @@ async function startUpload() {
 async function submitPOD() {
   try {
     errorMsg.value = '';
-    const res = await fetch('/api/pod/submit', {
+    const res = await fetch('/api/pod?endpoint=submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: token.value, photos: uploads.value })

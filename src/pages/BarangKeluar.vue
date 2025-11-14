@@ -190,8 +190,8 @@ function printLabel() {
   win.document.write(`<div class="row">${code}</div>`);
   win.document.write(`<div class="row">${origin} → ${dest}</div>`);
   win.document.write('<div class="codes">');
-  win.document.write(`<img src="/api/barcode/generate?code=${code}&type=qr" />`);
-  win.document.write(`<img src="/api/barcode/generate?code=${code}&type=barcode" />`);
+  win.document.write(`<img src="/api/blob?endpoint=generate&code=${code}&type=qr" />`);
+  win.document.write(`<img src="/api/blob?endpoint=generate&code=${code}&type=barcode" />`);
   win.document.write('</div>');
   win.document.write('</div></body></html>');
   win.document.close();
@@ -353,7 +353,7 @@ onMounted(() => {
           <div class="text-center">
             <div class="text-sm text-gray-600 mb-2">QR Code</div>
             <img
-              :src="`/api/barcode/generate?code=${selectedShipment.public_code}&type=qr`"
+              :src="`/api/blob?endpoint=generate&code=${selectedShipment.public_code}&type=qr`"
               alt="QR Code"
               class="mx-auto border border-gray-200 p-2 rounded"
             />
@@ -361,7 +361,7 @@ onMounted(() => {
           <div class="text-center">
             <div class="text-sm text-gray-600 mb-2">Barcode (Code 128)</div>
             <img
-              :src="`/api/barcode/generate?code=${selectedShipment.public_code}&type=barcode`"
+              :src="`/api/blob?endpoint=generate&code=${selectedShipment.public_code}&type=barcode`"
               alt="Barcode"
               class="mx-auto border border-gray-200 p-2 rounded"
             />

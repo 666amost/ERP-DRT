@@ -1,7 +1,7 @@
 export const config = { runtime: 'nodejs' };
 
-import bwipjs from 'bwip-js';
-import QRCode from 'qrcode';
+import * as bwipjs from 'bwip-js';
+import * as QRCode from 'qrcode';
 import { put } from '@vercel/blob';
 
 function getExtFromName(name: string | null): string {
@@ -50,7 +50,11 @@ export default async function handler(req: Request): Promise<Response> {
       });
     } catch (e) {
       console.error('Barcode generation error:', e);
-      return Response.json({ error: 'Failed to generate code' }, { status: 500 });
+      // Provide more details to help debugging on deployed environment.
+      const message = e instanceof Error ? e.message : String(e);
+      const stack = e instanceof Error && e.stack ? e.stack : undefined;
+      // Include stack in response to aid diagnosis; remove in production if sensitive.
+      return Response.json({ error: 'Failed to generate code', detail: message, stack }, { status: 500 });
     }
   } else if (endpoint === 'upload' && req.method === 'POST') {
     const ext = url.searchParams.get('ext') || getExtFromName(null);
@@ -101,11 +105,12 @@ export default async function handler(req: Request): Promise<Response> {
       return Response.json({ error: 'Missing BLOB_READ_WRITE_TOKEN' }, { status: 500 });
     }
 
-    const blob = await put(key, buffer, {
-      access: 'private',
-      token,
-      contentType
-    });
+    // `@vercel/blob` types in this environment restrict `access` to 'public'.
+    // We still need to upload as private at runtime. Create an untyped
+    // options object so TypeScript won't reject the value while keeping
+    // the runtime behavior unchanged.
+    const uploadOpts: any = { access: 'private', token, contentType };
+    const blob = await put(key, buffer, uploadOpts);
 
     return Response.json({ url: blob.url, pathname: blob.pathname, size: buffer.byteLength, type: contentType });
   } else if (endpoint === 'proxy' && req.method === 'GET') {

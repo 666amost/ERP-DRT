@@ -12,15 +12,22 @@ function getExtFromName(name: string | null): string {
   return last.toLowerCase();
 }
 
-export default async function handler(req: Request): Promise<Response> {
+export default async function handler(req: any): Promise<Response> {
+  // Support both Web Request (headers.get) and Node IncomingMessage (headers object)
+  const getHeader = (name: string): string | null => {
+    if (typeof req.headers?.get === 'function') return req.headers.get(name);
+    if (req.headers && typeof req.headers === 'object') return req.headers[name] || null;
+    return null;
+  };
+
   // `req.url` can be a relative path in some server runtimes (e.g. Vercel).
   // Ensure we always create an absolute URL to parse search params.
   let url: URL;
   try {
     url = new URL(req.url);
   } catch {
-    const host = req.headers.get('host') || process.env.VERCEL_URL || 'localhost';
-    const proto = (req.headers.get('x-forwarded-proto') || 'https').split(',')[0];
+    const host = getHeader('host') || process.env.VERCEL_URL || 'localhost';
+    const proto = (getHeader('x-forwarded-proto') || 'https').split(',')[0];
     url = new URL(req.url, `${proto}://${host}`);
   }
   const endpoint = url.searchParams.get('endpoint');
@@ -115,7 +122,7 @@ export default async function handler(req: Request): Promise<Response> {
     }
   } else if (endpoint === 'upload' && req.method === 'POST') {
     const ext = url.searchParams.get('ext') || getExtFromName(null);
-    const contentType = req.headers.get('content-type') || 'application/octet-stream';
+    const contentType = getHeader('content-type') || 'application/octet-stream';
 
     const allowMime = new Set(['image/jpeg', 'image/png', 'application/pdf']);
     if (!allowMime.has(contentType)) {

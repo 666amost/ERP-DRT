@@ -5,6 +5,11 @@ import { useRoute } from 'vue-router';
 const route = useRoute();
 const token = computed(() => (route.params.token as string) || '');
 const scannedCode = ref('');
+const scannedAt = ref('');
+const note = ref('');
+const scanning = ref(false);
+const videoRef = ref<HTMLVideoElement | null>(null);
+let qrScanner: any = null;
 
 const files = ref<File[]>([]);
 const compressedBlobs = ref<Blob[]>([]);
@@ -32,6 +37,19 @@ function pickFiles(e: Event) {
     }
   }
   files.value.push(...selected);
+}
+
+function removeFile(idx: number) {
+  files.value.splice(idx, 1);
+}
+
+function resetScan() {
+  scannedCode.value = '';
+  scannedAt.value = '';
+  note.value = '';
+  errorMsg.value = '';
+  files.value = [];
+  uploads.value = [];
 }
 
 import imageCompression from 'browser-image-compression';
@@ -128,6 +146,8 @@ async function submitPOD() {
           throw new Error('Masukkan atau scan resi terlebih dahulu');
         }
         payload.public_code = scannedCode.value;
+        payload.scanned_at = scannedAt.value || new Date().toISOString();
+        payload.note = note.value || null;
       } else {
         payload.token = token.value;
       }
@@ -146,49 +166,114 @@ async function submitPOD() {
       errorMsg.value = (e as Error).message;
     }
 }
+
+async function startScanner() {
+  try {
+    errorMsg.value = '';
+    scanning.value = true;
+    const mod = await import('qr-scanner');
+    const QrScanner = (mod as any).default || (mod as any);
+    // Use unpkg worker path so we don't need to bundle the worker file
+    (QrScanner as any).WORKER_PATH = 'https://unpkg.com/qr-scanner@1.4.2/qr-scanner-worker.min.js';
+    if (!videoRef.value) throw new Error('No video element');
+    qrScanner = new (QrScanner as any)(videoRef.value, (result: string) => {
+      scannedCode.value = result;
+      scannedAt.value = new Date().toISOString();
+      stopScanner();
+    });
+    await qrScanner.start();
+  } catch (e) {
+    scanning.value = false;
+    errorMsg.value = 'Scanner gagal: ' + String(e);
+  }
+}
+
+function stopScanner() {
+  try {
+    if (qrScanner) {
+      qrScanner.stop();
+      qrScanner.destroy && qrScanner.destroy();
+      qrScanner = null;
+    }
+  } finally {
+    scanning.value = false;
+  }
+}
 </script>
 
 <template>
-  <section style="max-width:720px;margin:24px auto;padding:16px">
-    <h2>POD Upload</h2>
-    <p>Token: {{ token || '(tanpa token di route)' }}</p>
-
-    <input
-      type="file"
-      accept="image/*"
-      multiple
-      :disabled="uploading"
-      @change="pickFiles"
-    />
-    <p v-if="files.length">
-      Dipilih: {{ files.length }} (maks {{ MAX_COUNT }})
-    </p>
-
-    <div v-if="files.length">
-      <button :disabled="uploading" @click="startUpload">
-        Upload
-      </button>
+  <section class="max-w-lg mx-auto p-4 sm:p-6">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h2 class="text-lg font-semibold">POD Upload</h2>
+        <p class="text-xs text-gray-500">Token: <span class="font-medium text-gray-700">{{ token || '(tanpa token di route)' }}</span></p>
+      </div>
+      <div class="flex gap-2">
+        <button @click="startScanner" :disabled="scanning" class="px-3 py-2 bg-indigo-600 text-white rounded-md text-sm disabled:opacity-60">Scan Resi</button>
+        <button @click="resetScan" class="px-3 py-2 bg-gray-100 text-gray-700 rounded-md text-sm">Reset</button>
+      </div>
     </div>
 
-    <div v-if="progress.length">
-      <div v-for="(p, i) in progress" :key="i" style="margin:8px 0;">
-        <div>File {{ i + 1 }}: {{ p || 0 }}%</div>
-        <div style="height:8px;background:#eee;border-radius:4px;overflow:hidden;">
-          <div :style="{ width: (p||0)+ '%', height: '8px', background: '#16a34a' }" />
+    <div v-if="scanning" class="mb-3">
+      <div class="w-full rounded-md overflow-hidden border border-gray-200">
+        <video ref="videoRef" autoplay muted playsinline class="w-full h-56 object-cover bg-black"></video>
+      </div>
+      <div class="mt-2 flex justify-end">
+        <button @click="stopScanner" class="px-3 py-1 bg-red-600 text-white rounded-md text-sm">Stop Scanner</button>
+      </div>
+    </div>
+
+    <div class="space-y-3 mb-4">
+      <div>
+        <label class="block text-sm font-medium mb-1">Resi (kode)</label>
+        <input v-model="scannedCode" placeholder="Scan atau masukkan kode resi" class="w-full px-3 py-2 border rounded-md" />
+        <div class="text-xs text-gray-500 mt-1">Scanned at: <span class="font-mono">{{ scannedAt || '-' }}</span></div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium mb-1">Note (opsional)</label>
+        <textarea v-model="note" rows="3" class="w-full px-3 py-2 border rounded-md" placeholder="Catatan untuk POD (mis. kondisi paket)"></textarea>
+      </div>
+    </div>
+
+    <div class="mb-4">
+      <label class="block text-sm font-medium mb-2">Foto POD (max {{ MAX_COUNT }})</label>
+      <div class="flex gap-2">
+        <label class="inline-flex items-center px-3 py-2 bg-white border rounded-md cursor-pointer text-sm shadow-sm">
+          <input type="file" accept="image/*" capture="environment" multiple :disabled="uploading" class="hidden" @change="pickFiles" />
+          <span class="text-sm">Pick from camera / gallery</span>
+        </label>
+        <button @click="startUpload" :disabled="uploading || files.length===0" class="px-3 py-2 bg-emerald-600 text-white rounded-md text-sm disabled:opacity-60">Compress & Upload</button>
+      </div>
+      <div v-if="files.length" class="mt-3 grid grid-cols-3 gap-2">
+        <div v-for="(f, i) in files" :key="i" class="relative">
+          <img :src="URL.createObjectURL(f)" class="w-full h-24 object-cover rounded-md border" />
+          <button @click="removeFile(i)" class="absolute top-1 right-1 bg-white/80 rounded-full p-1 text-xs">✕</button>
         </div>
       </div>
     </div>
 
-    <div v-if="uploads.length">
-      <h3>Uploaded</h3>
-      <ul>
-        <li v-for="(u, i) in uploads" :key="i">
-          {{ u.pathname }} ({{ Math.round(u.size/1024) }} KB)
-        </li>
-      </ul>
-      <button @click="submitPOD">Kirim POD</button>
+    <div v-if="progress.length" class="mb-4">
+      <div v-for="(p, i) in progress" :key="i" class="mb-2">
+        <div class="text-xs">File {{ i + 1 }}: {{ p || 0 }}%</div>
+        <div class="w-full h-2 bg-gray-200 rounded overflow-hidden">
+          <div :style="{ width: (p||0)+ '%' }" class="h-full bg-emerald-500"></div>
+        </div>
+      </div>
     </div>
 
-    <p v-if="errorMsg" style="color:#b91c1c">{{ errorMsg }}</p>
+    <div v-if="uploads.length" class="mb-6">
+      <h3 class="text-sm font-medium mb-2">Uploaded</h3>
+      <ul class="text-sm space-y-1">
+        <li v-for="(u, i) in uploads" :key="i">{{ u.pathname }} ({{ Math.round(u.size/1024) }} KB)</li>
+      </ul>
+    </div>
+
+    <div class="flex items-center justify-between">
+      <div class="text-sm text-red-600"> <span v-if="errorMsg">{{ errorMsg }}</span> </div>
+      <div class="flex gap-2">
+        <button @click="submitPOD" :disabled="(token==='manual' && !scannedCode) || uploads.length===0" class="px-4 py-2 bg-indigo-600 text-white rounded-md disabled:opacity-60">Kirim POD</button>
+      </div>
+    </div>
   </section>
 </template>

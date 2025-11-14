@@ -14,7 +14,10 @@ type Row = {
 };
 
 type SubmitPodBody = {
-  token: string;
+  token?: string;
+  public_code?: string;
+  scanned_at?: string;
+  note?: string;
   photos: Photo[];
 };
 
@@ -52,8 +55,8 @@ export default async function handler(req: Request): Promise<Response> {
     let tokenId: number | null = null;
 
     // If token provided, validate token and obtain shipment
-    if ((body as any).token) {
-      const token = (body as any).token as string;
+    if (body.token) {
+      const token = body.token as string;
       const tokenRow = await sql`select id, shipment_id, expires_at, used_at from delivery_tokens where token = ${token}` as { id: number; shipment_id: number; expires_at: string | null; used_at: string | null }[];
       if (tokenRow.length === 0) return Response.json({ error: 'Token tidak ditemukan' }, { status: 404 });
       const t = tokenRow[0];
@@ -64,8 +67,8 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     // If public_code provided (manual flow), find shipment by public_code
-    if ((body as any).public_code && !shipmentId) {
-      const code = (body as any).public_code as string;
+    if (body.public_code && !shipmentId) {
+      const code = body.public_code as string;
       const row = await sql`select id from shipments where public_code = ${code} limit 1` as [{ id: number }][];
       if (!row || row.length === 0) return Response.json({ error: 'Resi tidak ditemukan' }, { status: 404 });
       shipmentId = row[0].id;
@@ -105,9 +108,12 @@ export default async function handler(req: Request): Promise<Response> {
 
     const photos = normalizedPhotos;
 
+    const signedAtValue = body.scanned_at || new Date().toISOString();
+    const noteValue = (body as any).note || null;
+
     const podInsert = await sql`
-      insert into pod (shipment_id, method, signed_at, photos)
-      values (${shipmentId}, 'photo_only', now(), ${JSON.stringify(photos)}::jsonb)
+      insert into pod (shipment_id, method, signed_at, photos, note)
+      values (${shipmentId}, 'photo_only', ${signedAtValue}, ${JSON.stringify(photos)}::jsonb, ${noteValue})
       returning id;
     ` as { id: number }[];
 

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"vite\" \"tsx dev-server.js\"",
+    "dev": "npx concurrently \"npx vite\" \"npx tsx dev-server.js\"",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext .ts,.tsx,.vue",
@@ -36,9 +36,8 @@
     "globals": "^15.11.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.16",
-    "tsx": "^4.19.2",
+    "tsx": "^4.20.6",
     "typescript": "^5.6.3",
-    "vercel": "^25.2.3",
     "vite": "^7.2.2"
   }
 }

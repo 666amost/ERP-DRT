@@ -17,7 +17,7 @@ export default async function handler(req: Request): Promise<Response> {
   
   const sql = getSql();
   
-  const shipments = await sql<Shipment[]>`
+  const shipments = await sql`
     select 
       s.id, s.public_code, s.origin, s.destination, s.status,
       t.carrier_name, t.driver_name
@@ -27,7 +27,7 @@ export default async function handler(req: Request): Promise<Response> {
     where s.status in ('IN_TRANSIT', 'LOADING')
     order by s.created_at desc
     limit 10
-  `;
+  ` as Shipment[];
   
   return Response.json({ items: shipments });
 }

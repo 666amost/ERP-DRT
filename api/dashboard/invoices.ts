@@ -16,13 +16,13 @@ export default async function handler(req: Request): Promise<Response> {
   
   const sql = getSql();
   
-  const invoices = await sql<Invoice[]>`
+  const invoices = await sql`
     select 
       id, invoice_number, customer_name, amount, status, issued_at
     from invoices
     order by issued_at desc
     limit 10
-  `;
+  ` as Invoice[];
   
   return Response.json({ items: invoices });
 }

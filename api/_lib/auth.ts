@@ -21,7 +21,7 @@ export type Session = {
 };
 
 export async function findUserByEmail(sql: Sql, email: string): Promise<User | null> {
-  const rows = await sql<User[]>`select id, email, name, role, password_hash from users where email = ${email} limit 1`;
+  const rows = await sql`select id, email, name, role, password_hash from users where email = ${email} limit 1` as User[];
   return rows[0] ?? null;
 }
 
@@ -32,11 +32,11 @@ export async function createSession(
   ip: string | null,
   ua: string | null
 ): Promise<Session> {
-  const rows = await sql<Session[]>`
+  const rows = await sql`
     insert into sessions (user_id, expires_at, ip, ua)
     values (${userId}, ${expiresAt.toISOString()}, ${ip}, ${ua})
     returning id, user_id, expires_at, revoked_at, created_at, ip, ua
-  `;
+  ` as Session[];
   return rows[0];
 }
 
@@ -45,7 +45,7 @@ export async function revokeSession(sql: Sql, id: string): Promise<void> {
 }
 
 export async function getValidSession(sql: Sql, id: string): Promise<(Session & { user: User }) | null> {
-  const rows = await sql<(Session & { user: User })[]>`
+  const rows = await sql`
     select s.id, s.user_id, s.expires_at, s.revoked_at, s.created_at, s.ip, s.ua,
            u.id as user_id2, u.email, u.name, u.role, u.password_hash
     from sessions s
@@ -54,7 +54,7 @@ export async function getValidSession(sql: Sql, id: string): Promise<(Session & 
       and s.revoked_at is null
       and s.expires_at > now()
     limit 1
-  `;
+  ` as (Session & { user: User })[];
   const row = rows[0];
   if (!row) return null;
   type RowWithUser = Session & { user_id2: number; email: string; name: string | null; role: 'admin' | 'user'; password_hash: string };

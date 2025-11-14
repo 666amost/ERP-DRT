@@ -17,6 +17,6 @@ export default async function handler(req: Request): Promise<Response> {
     values (${email}, ${hash}, ${name}, 'admin')
     on conflict (email) do update set password_hash = excluded.password_hash, name = excluded.name
     returning id
-  `;
+  ` as { id: number }[];
   return Response.json({ id: (rows[0] as { id: number }).id, email });
 }

@@ -15,7 +15,7 @@ export default async function handler(req: Request): Promise<Response> {
   const sql = getSql();
   try {
     const { setCookieHeader } = await requireSession(req);
-  const rows = await sql<Row[]>`select id, shipment_id, signed_at, photos from pod order by id desc limit 50`;
+  const rows = await sql`select id, shipment_id, signed_at, photos from pod order by id desc limit 50` as Row[];
     const res = Response.json({ items: rows });
     if (setCookieHeader) {
       res.headers.set('set-cookie', setCookieHeader);

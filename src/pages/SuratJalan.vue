@@ -25,7 +25,7 @@ const loading = ref(true);
 async function loadShipments() {
   loading.value = true;
   try {
-    const res = await fetch('/api/shipments/list');
+    const res = await fetch('/api/shipments?endpoint=list');
     const data = await res.json();
     shipments.value = data.items || [];
   } catch (e) {

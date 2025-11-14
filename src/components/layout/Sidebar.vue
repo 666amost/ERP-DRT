@@ -22,7 +22,7 @@ const emit = defineEmits<{
 }>();
 
 async function handleLogout() {
-  await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+  await fetch('/api/auth?endpoint=logout', { method: 'POST', credentials: 'include' });
   router.push('/login');
 }
 

@@ -1,6 +1,6 @@
 export const config = { runtime: 'nodejs' };
 
-import { getSql } from '../_lib/db';
+import { getSql } from '../lib/db';
 
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== 'POST') return new Response(null, { status: 405 });

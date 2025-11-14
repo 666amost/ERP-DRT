@@ -40,7 +40,7 @@ const form = ref<CreateInvoiceForm>({
 async function loadInvoices() {
   loading.value = true;
   try {
-    const res = await fetch('/api/invoices/list');
+    const res = await fetch('/api/invoices?endpoint=list');
     const data = await res.json();
     invoices.value = data.items || [];
   } catch (e) {
@@ -76,7 +76,7 @@ async function saveInvoice() {
 
   try {
     if (editingId.value) {
-      const res = await fetch('/api/invoices/update', {
+      const res = await fetch('/api/invoices?endpoint=update', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -89,7 +89,7 @@ async function saveInvoice() {
       });
       if (!res.ok) throw new Error('Update failed');
     } else {
-      const res = await fetch('/api/invoices/create', {
+      const res = await fetch('/api/invoices?endpoint=create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -113,7 +113,7 @@ async function deleteInvoice(id: number) {
   if (!confirm('Yakin ingin menghapus invoice ini?')) return;
   
   try {
-    const res = await fetch(`/api/invoices/delete?id=${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/invoices?endpoint=delete&id=${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Delete failed');
     loadInvoices();
   } catch (e) {

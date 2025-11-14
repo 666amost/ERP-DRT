@@ -37,8 +37,8 @@ async function loadShipments() {
   loading.value = true;
   try {
     const url = statusFilter.value 
-      ? `/api/shipments/list?status=${statusFilter.value}` 
-      : '/api/shipments/list';
+      ? `/api/shipments?endpoint=list&status=${statusFilter.value}` 
+      : '/api/shipments?endpoint=list';
     const res = await fetch(url);
     const data = await res.json();
     shipments.value = data.items || [];

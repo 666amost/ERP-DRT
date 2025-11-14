@@ -42,9 +42,9 @@ const loading = ref(true);
 async function loadData() {
   try {
     const [statsRes, trackingRes, invoicesRes] = await Promise.all([
-      fetch('/api/dashboard/stats'),
-      fetch('/api/dashboard/tracking'),
-      fetch('/api/dashboard/invoices')
+      fetch('/api/dashboard?endpoint=stats'),
+      fetch('/api/dashboard?endpoint=tracking'),
+      fetch('/api/dashboard?endpoint=invoices')
     ]);
     
     stats.value = await statsRes.json();

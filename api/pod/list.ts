@@ -1,7 +1,7 @@
 export const config = { runtime: 'nodejs' };
 
-import { getSql } from '../_lib/db';
-import { requireSession } from '../_lib/auth';
+import { getSql } from '../lib/db';
+import { requireSession } from '../lib/auth';
 
 type Row = {
   id: number;

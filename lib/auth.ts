@@ -1,5 +1,5 @@
-import { getSql, type Sql } from '../_lib/db';
-import { parseCookies, serializeCookie } from '../_lib/cookies';
+import { getSql, type Sql } from './db';
+import { parseCookies, serializeCookie } from './cookies';
 import bcrypt from 'bcryptjs';
 
 export type User = {
@@ -37,6 +37,7 @@ export async function createSession(
     values (${userId}, ${expiresAt.toISOString()}, ${ip}, ${ua})
     returning id, user_id, expires_at, revoked_at, created_at, ip, ua
   ` as Session[];
+  if (!rows[0]) throw new Error('Failed to create session');
   return rows[0];
 }
 

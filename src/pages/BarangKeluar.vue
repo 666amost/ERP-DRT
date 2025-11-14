@@ -69,7 +69,7 @@ function viewBarcode(shipment: Shipment) {
 async function loadShipments() {
   loading.value = true;
   try {
-    const res = await fetch('/api/shipments/list');
+    const res = await fetch('/api/shipments?endpoint=list');
     const data = await res.json();
     shipments.value = data.items || [];
   } catch (e) {
@@ -120,7 +120,7 @@ async function saveShipment() {
 
   try {
     if (editingId.value) {
-      const res = await fetch('/api/shipments/update', {
+      const res = await fetch('/api/shipments?endpoint=update', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -137,7 +137,7 @@ async function saveShipment() {
       });
       if (!res.ok) throw new Error('Update failed');
     } else {
-      const res = await fetch('/api/shipments/create', {
+      const res = await fetch('/api/shipments?endpoint=create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -164,7 +164,7 @@ async function deleteShipment(id: number) {
   if (!confirm('Yakin ingin menghapus shipment ini?')) return;
   
   try {
-    const res = await fetch(`/api/shipments/delete?id=${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/shipments?endpoint=delete&id=${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Delete failed');
     loadShipments();
   } catch (e) {

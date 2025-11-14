@@ -35,7 +35,7 @@ export const router = createRouter({
 router.beforeEach(async (to, _from, next) => {
   if (to.meta.requiresAuth) {
     try {
-      const res = await fetch('/api/auth/me', { credentials: 'include' });
+      const res = await fetch('/api/auth?endpoint=me', { credentials: 'include' });
       if (res.ok) {
         next();
       } else {

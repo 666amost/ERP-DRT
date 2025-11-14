@@ -1,6 +1,6 @@
 export const config = { runtime: 'nodejs' };
 
-import { getSql } from '../_lib/db';
+import { getSql } from '../lib/db';
 
 type CreateCityBody = {
   name: string;

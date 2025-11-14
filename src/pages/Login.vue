@@ -90,6 +90,7 @@ async function handleLogin() {
               id="password"
               v-model="password"
               type="password"
+              autocomplete="current-password"
               required
               class="w-full h-10 px-3 rounded-lg border border-gray-300 outline-none focus:ring-2 focus:ring-blue-200"
               placeholder="••••••••"

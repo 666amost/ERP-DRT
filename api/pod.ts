@@ -2,6 +2,7 @@ export const config = { runtime: 'nodejs' };
 
 import { getSql } from './_lib/db.js';
 import { requireSession } from './_lib/auth.js';
+import { put } from '@vercel/blob';
 
 type Photo = { pathname: string; size: number; type: string };
 
@@ -40,32 +41,86 @@ export default async function handler(req: Request): Promise<Response> {
     if (!dbUrl) return Response.json({ error: 'Missing DATABASE_URL' }, { status: 500 });
 
     const body = await req.json().catch(() => null) as SubmitPodBody | null;
-    if (!body || !body.token || !Array.isArray(body.photos) || body.photos.length === 0) {
+    if (!body || !Array.isArray(body.photos) || body.photos.length === 0) {
       return Response.json({ error: 'Invalid payload' }, { status: 400 });
     }
 
     const { neon } = await import('@neondatabase/serverless');
     const sql = neon(dbUrl);
-    const tokenRow = await sql`select id, shipment_id, expires_at, used_at from delivery_tokens where token = ${body.token}` as { id: number; shipment_id: number; expires_at: string | null; used_at: string | null }[];
 
-    if (tokenRow.length === 0) return Response.json({ error: 'Token tidak ditemukan' }, { status: 404 });
-    const t = tokenRow[0];
-    if (!t) return Response.json({ error: 'Token tidak ditemukan' }, { status: 404 });
-    if (t.used_at) return Response.json({ error: 'Token sudah dipakai' }, { status: 400 });
-    if (t.expires_at && new Date(t.expires_at) < new Date()) return Response.json({ error: 'Token kadaluarsa' }, { status: 400 });
+    let shipmentId: number | null = null;
+    let tokenId: number | null = null;
 
-    const photos = body.photos.map((p) => ({ pathname: p.pathname, size: p.size, type: p.type }));
+    // If token provided, validate token and obtain shipment
+    if ((body as any).token) {
+      const token = (body as any).token as string;
+      const tokenRow = await sql`select id, shipment_id, expires_at, used_at from delivery_tokens where token = ${token}` as { id: number; shipment_id: number; expires_at: string | null; used_at: string | null }[];
+      if (tokenRow.length === 0) return Response.json({ error: 'Token tidak ditemukan' }, { status: 404 });
+      const t = tokenRow[0];
+      if (t.used_at) return Response.json({ error: 'Token sudah dipakai' }, { status: 400 });
+      if (t.expires_at && new Date(t.expires_at) < new Date()) return Response.json({ error: 'Token kadaluarsa' }, { status: 400 });
+      shipmentId = t.shipment_id;
+      tokenId = t.id;
+    }
+
+    // If public_code provided (manual flow), find shipment by public_code
+    if ((body as any).public_code && !shipmentId) {
+      const code = (body as any).public_code as string;
+      const row = await sql`select id from shipments where public_code = ${code} limit 1` as [{ id: number }][];
+      if (!row || row.length === 0) return Response.json({ error: 'Resi tidak ditemukan' }, { status: 404 });
+      shipmentId = row[0].id;
+    }
+
+    if (!shipmentId) return Response.json({ error: 'Missing token or public_code' }, { status: 400 });
+
+    // Normalize photos: accept either { pathname, size, type } or { dataUrl, size, type }
+    const photosInput = body.photos as any[];
+    const normalizedPhotos: { pathname?: string; size: number; type: string }[] = [];
+    const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
+
+    for (const p of photosInput) {
+      if (p.pathname) {
+        normalizedPhotos.push({ pathname: p.pathname, size: p.size, type: p.type });
+        continue;
+      }
+      if (p.dataUrl) {
+        if (!blobToken) return Response.json({ error: 'Missing BLOB_READ_WRITE_TOKEN' }, { status: 500 });
+        const m = String(p.dataUrl).match(/^data:(.+);base64,(.+)$/);
+        if (!m) return Response.json({ error: 'Invalid dataUrl' }, { status: 400 });
+        const contentType = m[1];
+        const b64 = m[2];
+        const buffer = Buffer.from(b64, 'base64');
+        const now = new Date();
+        const keyDate = now.toISOString().slice(0, 7).replace('-', '/');
+        const uuid = `${now.getTime()}-${Math.random().toString(16).slice(2)}`;
+        const ext = contentType.includes('png') ? 'png' : contentType.includes('jpeg') ? 'jpg' : 'bin';
+        const key = `erp/${keyDate}/${uuid}.${ext}`;
+        const uploadOpts: any = { access: 'private', token: blobToken, contentType };
+        const blob = await put(key, buffer, uploadOpts);
+        normalizedPhotos.push({ pathname: blob.pathname, size: buffer.length, type: contentType });
+        continue;
+      }
+      return Response.json({ error: 'Invalid photo payload' }, { status: 400 });
+    }
+
+    const photos = normalizedPhotos;
 
     const podInsert = await sql`
       insert into pod (shipment_id, method, signed_at, photos)
-      values (${t.shipment_id}, 'photo_only', now(), ${JSON.stringify(photos)}::jsonb)
+      values (${shipmentId}, 'photo_only', now(), ${JSON.stringify(photos)}::jsonb)
       returning id;
     ` as { id: number }[];
 
     const podId = podInsert[0]?.id;
     if (!podId) return Response.json({ error: 'Failed to create POD' }, { status: 500 });
 
-    await sql`update delivery_tokens set used_at = now() where id = ${t.id}`;
+    // mark token used if applicable
+    if (tokenId) {
+      await sql`update delivery_tokens set used_at = now() where id = ${tokenId}`;
+    }
+
+    // Mark shipment as DELIVERED on POD submission (manual delivery confirmation)
+    await sql`update shipments set status = 'DELIVERED' where id = ${shipmentId}`;
 
     return Response.json({ ok: true, pod_id: podId });
   } else {

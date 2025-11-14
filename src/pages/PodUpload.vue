@@ -4,12 +4,13 @@ import { useRoute } from 'vue-router';
 
 const route = useRoute();
 const token = computed(() => (route.params.token as string) || '');
+const scannedCode = ref('');
 
 const files = ref<File[]>([]);
 const compressedBlobs = ref<Blob[]>([]);
 const uploading = ref(false);
 const progress = ref<number[]>([]);
-const uploads = ref<{ url: string; pathname: string; size: number; type: string }[]>([]);
+const uploads = ref<{ url?: string; pathname?: string; size: number; type: string; dataUrl?: string }[]>([]);
 const errorMsg = ref('');
 
 const MAX_FILE_MB = 5;
@@ -51,6 +52,19 @@ async function compressToTarget(input: File, maxWidth = 1280, maxHeight = 1280, 
 }
 
 async function uploadOne(blob: Blob, name: string, index: number) {
+  // If manual flow (no delivery token), don't upload to /api/blob; instead encode to dataUrl
+  if (token.value === 'manual' || !token.value) {
+    return await new Promise<{ dataUrl: string; size: number; type: string }>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        progress.value[index] = 100;
+        resolve({ dataUrl: String(reader.result), size: (blob as any).size || 0, type: blob.type || 'image/jpeg' });
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(blob);
+    });
+  }
+
   return await new Promise<{ url: string; pathname: string; size: number; type: string }>((resolve, reject) => {
     const ext = (name.split('.').pop() || 'jpg').toLowerCase();
     const xhr = new XMLHttpRequest();
@@ -106,19 +120,31 @@ async function startUpload() {
 }
 
 async function submitPOD() {
-  try {
-    errorMsg.value = '';
-    const res = await fetch('/api/pod?endpoint=submit', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: token.value, photos: uploads.value })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Submit gagal');
-    alert('POD tersimpan. ID: ' + data.pod_id);
-  } catch (e: unknown) {
-    errorMsg.value = (e as Error).message;
-  }
+    try {
+      errorMsg.value = '';
+      const payload: any = { photos: uploads.value };
+      if (token.value === 'manual' || !token.value) {
+        if (!scannedCode.value) {
+          throw new Error('Masukkan atau scan resi terlebih dahulu');
+        }
+        payload.public_code = scannedCode.value;
+      } else {
+        payload.token = token.value;
+      }
+
+      const res = await fetch('/api/pod?endpoint=submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Submit gagal');
+      alert('POD tersimpan. ID: ' + data.pod_id);
+      // after successful POD submission, redirect to dashboard or close
+      window.location.href = '/';
+    } catch (e: unknown) {
+      errorMsg.value = (e as Error).message;
+    }
 }
 </script>
 

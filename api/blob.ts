@@ -198,7 +198,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         return;
       }
 
-      const uploadOpts: any = { access: 'private', token, contentType };
+      const uploadOpts: any = { access: 'public', token, contentType };
       const blob = await put(key, buffer, uploadOpts);
 
       // Mark token as used
@@ -214,10 +214,71 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       return;
     }
   } else if (endpoint === 'proxy' && req.method === 'GET') {
-    // Proxy endpoint disabled for now - needs full rewrite for Node API
-    res.writeHead(501, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Proxy endpoint temporarily unavailable' }));
-    return;
+    // Attempt to resolve pathname to stored public URL via DB (if photos stored url); otherwise fail gracefully
+    const pathname = url.searchParams.get('pathname');
+    if (!pathname) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing pathname' }));
+      return;
+    }
+    try {
+      const dbUrl = process.env.DATABASE_URL;
+      // 1) Try to find url in DB
+      if (dbUrl) {
+        const { neon } = await import('@neondatabase/serverless');
+        const sql = neon(dbUrl);
+        const rows = await sql`
+          select (p->>'url') as url
+          from pod, jsonb_array_elements(photos) as p
+          where p->>'pathname' = ${pathname}
+          limit 1
+        ` as { url: string | null }[];
+        const urlRow = rows[0];
+        if (urlRow && urlRow.url) {
+          // redirect to the public URL if found
+          res.writeHead(302, { Location: urlRow.url });
+          res.end();
+          return;
+        }
+      }
+
+      // 2) Try to fetch from Vercel Blob using SDK (get) to find a public URL or stream
+      const token = process.env.BLOB_READ_WRITE_TOKEN;
+      if (!token) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Proxy unavailable', detail: 'No public URL found and BLOB_READ_WRITE_TOKEN not set' }));
+        return;
+      }
+      const { head } = await import('@vercel/blob');
+      try {
+        const meta = await head(pathname, { token });
+        // If head returns downloadUrl, redirect to it
+        if (meta && meta.downloadUrl) {
+          res.writeHead(302, { Location: meta.downloadUrl });
+          res.end();
+          return;
+        }
+        // If head returns url and it's public, redirect
+        if (meta && meta.url) {
+          res.writeHead(302, { Location: meta.url });
+          res.end();
+          return;
+        }
+        // If we reached here, head didn't provide url/downloadUrl; no further action
+      } catch (err) {
+        console.error('Blob SDK get failed for pathname=', pathname, err);
+        // if SDK get fails, still reply not found below
+      }
+
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Proxy unavailable', detail: 'No public URL found for pathname' }));
+      return;
+    } catch (err) {
+      console.error('Proxy get error:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Proxy unavailable', detail: String(err) }));
+      return;
+    }
   } else {
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Not found' }));

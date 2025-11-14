@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue';
 import Button from '../components/ui/Button.vue';
 import Badge from '../components/ui/Badge.vue';
 
-type Photo = { pathname: string; size: number; type: string }
+type Photo = { pathname: string; url?: string; size: number; type: string }
 interface PodItem { id: number; shipment_id: number; signed_at: string | null; photos: Photo[] }
 
 const items = ref<PodItem[]>([]);
@@ -24,6 +24,16 @@ async function load() {
 }
 
 function viewUrl(p: Photo) {
+  if (p.url) {
+    try {
+      // validate URL
+      const _ = new URL(p.url);
+      return p.url;
+    } catch {
+      console.warn('Invalid photo url in DB, fallback to proxy for pathname=', p.pathname, p.url);
+      // fallback to pathname
+    }
+  }
   const q = new URLSearchParams({ pathname: p.pathname });
   return `/api/blob?endpoint=proxy&${q.toString()}`;
 }

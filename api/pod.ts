@@ -78,12 +78,12 @@ export default async function handler(req: Request): Promise<Response> {
 
     // Normalize photos: accept either { pathname, size, type } or { dataUrl, size, type }
     const photosInput = body.photos as any[];
-    const normalizedPhotos: { pathname?: string; size: number; type: string }[] = [];
+    const normalizedPhotos: { pathname?: string; url?: string; size: number; type: string }[] = [];
     const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
 
     for (const p of photosInput) {
       if (p.pathname) {
-        normalizedPhotos.push({ pathname: p.pathname, size: p.size, type: p.type });
+        normalizedPhotos.push({ pathname: p.pathname, url: p.url, size: p.size, type: p.type });
         continue;
       }
       if (p.dataUrl) {
@@ -98,9 +98,9 @@ export default async function handler(req: Request): Promise<Response> {
         const uuid = `${now.getTime()}-${Math.random().toString(16).slice(2)}`;
         const ext = contentType.includes('png') ? 'png' : contentType.includes('jpeg') ? 'jpg' : 'bin';
         const key = `erp/${keyDate}/${uuid}.${ext}`;
-        const uploadOpts: any = { access: 'private', token: blobToken, contentType };
+        const uploadOpts: any = { access: 'public', token: blobToken, contentType };
         const blob = await put(key, buffer, uploadOpts);
-        normalizedPhotos.push({ pathname: blob.pathname, size: buffer.length, type: contentType });
+        normalizedPhotos.push({ pathname: blob.pathname, url: blob.url, size: buffer.length, type: contentType });
         continue;
       }
       return Response.json({ error: 'Invalid photo payload' }, { status: 400 });
@@ -130,6 +130,62 @@ export default async function handler(req: Request): Promise<Response> {
 
     return Response.json({ ok: true, pod_id: podId });
   } else {
+    // Try sync endpoint (admin-only)
+    if (endpoint === 'sync-urls' && req.method === 'POST') {
+      return await syncPhotoUrls(req);
+    }
     return new Response(null, { status: 404 });
+  }
+}
+
+// Admin-only: synchronize photo `url` fields for legacy POD entries that only stored pathname
+// POST /api/pod?endpoint=sync-urls
+export async function syncPhotoUrls(req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const endpoint = url.searchParams.get('endpoint');
+  if (endpoint !== 'sync-urls' || req.method !== 'POST') return new Response(null, { status: 404 });
+  try {
+    // Require session (admin), reuse existing requireSession helper
+    await requireSession(req);
+  } catch (e) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) return Response.json({ error: 'Missing DATABASE_URL' }, { status: 500 });
+  const { neon } = await import('@neondatabase/serverless');
+  const sql = neon(dbUrl);
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  if (!token) return Response.json({ error: 'Missing BLOB_READ_WRITE_TOKEN' }, { status: 500 });
+  const { head } = await import('@vercel/blob');
+  try {
+    // Fetch pods with photos that have missing url
+    const rows = await sql`select id, photos from pod where exists (select 1 from jsonb_array_elements(photos) as p where (p->>'url') is null)` as { id: number; photos: any[] }[];
+    const updated: { id: number; updatedCount: number }[] = [];
+    for (const r of rows) {
+      const photos = r.photos as any[];
+      let changed = false;
+      for (let i = 0; i < photos.length; i++) {
+        const p = photos[i];
+        if (!p.url && p.pathname) {
+          try {
+            const meta = await head(p.pathname, { token });
+            if (meta && meta.url) {
+              photos[i] = { ...p, url: meta.url };
+              changed = true;
+            }
+          } catch (err) {
+            console.warn('syncPhotoUrls head failed for', p.pathname, err);
+          }
+        }
+      }
+      if (changed) {
+        await sql`update pod set photos = ${JSON.stringify(photos)}::jsonb where id = ${r.id}`;
+        updated.push({ id: r.id, updatedCount: photos.filter(p => p.url).length });
+      }
+    }
+    return Response.json({ ok: true, updated });
+  } catch (err) {
+    console.error('syncPhotoUrls error', err);
+    return Response.json({ error: 'Sync failed', detail: String(err) }, { status: 500 });
   }
 }

@@ -21,11 +21,15 @@ export type CompanyConfig = {
 };
 
 export function getCompanyConfig(): CompanyConfig {
-  return {
+  const base = {
     name: process.env.COMPANY_NAME || 'SUMBER TRANS EXPRESS',
-    address: process.env.COMPANY_ADDRESS || 'Jl. Contoh No. 123, Jakarta',
-    phone: process.env.COMPANY_PHONE,
-    email: process.env.COMPANY_EMAIL,
-    website: process.env.COMPANY_WEBSITE
+    address: process.env.COMPANY_ADDRESS || 'Jl. Contoh No. 123, Jakarta'
   };
+  const cfg: CompanyConfig = {
+    ...base,
+    ...(process.env.COMPANY_PHONE ? { phone: process.env.COMPANY_PHONE } : {}),
+    ...(process.env.COMPANY_EMAIL ? { email: process.env.COMPANY_EMAIL } : {}),
+    ...(process.env.COMPANY_WEBSITE ? { website: process.env.COMPANY_WEBSITE } : {})
+  };
+  return cfg;
 }

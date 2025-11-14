@@ -21,8 +21,18 @@ type SubmitPodBody = {
   photos: Photo[];
 };
 
+function safeUrl(req: Request): URL {
+  try {
+    return new URL(req.url);
+  } catch {
+    const host = req.headers.get('host') || 'localhost';
+    const proto = req.headers.get('x-forwarded-proto') || 'http';
+    return new URL(`${proto}://${host}${req.url}`);
+  }
+}
+
 export default async function handler(req: Request): Promise<Response> {
-  const url = new URL(req.url);
+  const url = safeUrl(req);
   const endpoint = url.searchParams.get('endpoint');
 
   if (endpoint === 'list' && req.method === 'GET') {
@@ -56,10 +66,10 @@ export default async function handler(req: Request): Promise<Response> {
 
     // If token provided, validate token and obtain shipment
     if (body.token) {
-      const token = body.token as string;
+      const token = body.token;
       const tokenRow = await sql`select id, shipment_id, expires_at, used_at from delivery_tokens where token = ${token}` as { id: number; shipment_id: number; expires_at: string | null; used_at: string | null }[];
-      if (tokenRow.length === 0) return Response.json({ error: 'Token tidak ditemukan' }, { status: 404 });
       const t = tokenRow[0];
+      if (!t) return Response.json({ error: 'Token tidak ditemukan' }, { status: 404 });
       if (t.used_at) return Response.json({ error: 'Token sudah dipakai' }, { status: 400 });
       if (t.expires_at && new Date(t.expires_at) < new Date()) return Response.json({ error: 'Token kadaluarsa' }, { status: 400 });
       shipmentId = t.shipment_id;
@@ -68,10 +78,11 @@ export default async function handler(req: Request): Promise<Response> {
 
     // If public_code provided (manual flow), find shipment by public_code
     if (body.public_code && !shipmentId) {
-      const code = body.public_code as string;
-      const row = await sql`select id from shipments where public_code = ${code} limit 1` as [{ id: number }][];
-      if (!row || row.length === 0) return Response.json({ error: 'Resi tidak ditemukan' }, { status: 404 });
-      shipmentId = row[0].id;
+      const code = body.public_code;
+      const row = await sql`select id from shipments where public_code = ${code} limit 1` as { id: number }[];
+      const r0 = row[0];
+      if (!r0) return Response.json({ error: 'Resi tidak ditemukan' }, { status: 404 });
+      shipmentId = r0.id;
     }
 
     if (!shipmentId) return Response.json({ error: 'Missing token or public_code' }, { status: 400 });
@@ -90,16 +101,14 @@ export default async function handler(req: Request): Promise<Response> {
         if (!blobToken) return Response.json({ error: 'Missing BLOB_READ_WRITE_TOKEN' }, { status: 500 });
         const m = String(p.dataUrl).match(/^data:(.+);base64,(.+)$/);
         if (!m) return Response.json({ error: 'Invalid dataUrl' }, { status: 400 });
-        const contentType = m[1];
-        const b64 = m[2];
+        const [, contentType, b64] = m;
         const buffer = Buffer.from(b64, 'base64');
         const now = new Date();
         const keyDate = now.toISOString().slice(0, 7).replace('-', '/');
         const uuid = `${now.getTime()}-${Math.random().toString(16).slice(2)}`;
         const ext = contentType.includes('png') ? 'png' : contentType.includes('jpeg') ? 'jpg' : 'bin';
         const key = `erp/${keyDate}/${uuid}.${ext}`;
-        const uploadOpts: any = { access: 'public', token: blobToken, contentType };
-        const blob = await put(key, buffer, uploadOpts);
+        const blob = await put(key, buffer, { access: 'public', token: blobToken, contentType });
         normalizedPhotos.push({ pathname: blob.pathname, url: blob.url, size: buffer.length, type: contentType });
         continue;
       }

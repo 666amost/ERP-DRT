@@ -6,8 +6,33 @@ import { findUserByEmail, verifyPassword, createSession, revokeSession, requireS
 
 type LoginBody = { email: string; password: string };
 
-export default async function handler(req: Request): Promise<Response> {
-  const url = new URL(req.url, `https://${req.headers.get('host') || 'localhost'}`);
+type NodeLikeHeaders = Record<string, string | string[] | undefined>;
+function headerGetLike(headers: unknown, name: string): string | null {
+  const n = name.toLowerCase();
+  const h = headers as unknown as { get?: (key: string) => string | null } & NodeLikeHeaders | undefined;
+  if (h && typeof h.get === 'function') return h.get(name);
+  if (!h) return null;
+  const v = (h as NodeLikeHeaders)[n] ?? (h as NodeLikeHeaders)[name];
+  if (Array.isArray(v)) return v[0] ?? null;
+  if (typeof v === 'string') return v;
+  return v != null ? String(v) : null;
+}
+
+async function readJsonBody<T>(req: unknown): Promise<T> {
+  const r = req as { json?: () => Promise<unknown>; body?: unknown };
+  if (typeof r?.json === 'function') return (await r.json()) as T;
+  if (r && 'body' in (r as object)) {
+    const b = r.body as unknown;
+    if (typeof b === 'string') return JSON.parse(b) as T;
+    return b as T;
+  }
+  throw new Error('No JSON body');
+}
+
+export default async function handler(req: unknown): Promise<Response> {
+  const urlStr: string = (req as { url?: string }).url ?? '/api/auth';
+  const host = headerGetLike((req as { headers?: unknown }).headers, 'host') || 'localhost';
+  const url = new URL(urlStr, `https://${host}`);
   const endpoint = url.searchParams.get('endpoint');
 
   if (endpoint === 'login' && req.method === 'POST') {
@@ -15,7 +40,7 @@ export default async function handler(req: Request): Promise<Response> {
       const sql = getSql();
       let body: LoginBody;
       try {
-        body = (await req.json()) as LoginBody;
+        body = await readJsonBody<LoginBody>(req);
       } catch (parseErr) {
         console.error('JSON parse error:', parseErr);
         return Response.json({ error: 'Invalid JSON' }, { status: 400 });
@@ -47,8 +72,8 @@ export default async function handler(req: Request): Promise<Response> {
       }
 
       const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-      const ip = req.headers.get('x-forwarded-for') || null;
-      const ua = req.headers.get('user-agent') || null;
+      const ip = headerGetLike((req as { headers?: unknown }).headers, 'x-forwarded-for') || null;
+      const ua = headerGetLike((req as { headers?: unknown }).headers, 'user-agent') || null;
       const session = await createSession(sql, user.id, expires, ip, ua);
 
       const secure = (process.env.NODE_ENV === 'production');
@@ -73,9 +98,9 @@ export default async function handler(req: Request): Promise<Response> {
         details: process.env.NODE_ENV === 'development' ? String(e) : undefined 
       }, { status: 500 });
     }
-  } else if (endpoint === 'logout' && req.method === 'POST') {
+  } else if (endpoint === 'logout' && (req as { method?: string }).method === 'POST') {
     try {
-      const cookies = parseCookies(req.headers.get('cookie'));
+      const cookies = parseCookies(headerGetLike((req as { headers?: unknown }).headers, 'cookie'));
       const sid = cookies['sid'];
       const sql = getSql();
       if (sid) {
@@ -94,9 +119,13 @@ export default async function handler(req: Request): Promise<Response> {
       console.error('Logout error:', e);
       return Response.json({ error: 'Server error' }, { status: 500 });
     }
-  } else if (endpoint === 'me' && req.method === 'GET') {
+  } else if (endpoint === 'me' && (req as { method?: string }).method === 'GET') {
     try {
-      const { user } = await requireSession(req);
+      const cookie = headerGetLike((req as { headers?: unknown }).headers, 'cookie');
+      const headers = new Headers();
+      if (cookie) headers.set('cookie', cookie);
+      const fetchReq = new Request(url.toString(), { headers });
+      const { user } = await requireSession(fetchReq);
       return Response.json({ user });
     } catch (e) {
       if (e instanceof Response) return e;

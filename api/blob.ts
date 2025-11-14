@@ -26,28 +26,76 @@ export default async function handler(req: Request): Promise<Response> {
     
     try {
       if (type === 'barcode') {
-        const png = await bwipjs.toBuffer({
-          bcid: 'code128',
-          text: code,
-          scale: 4,
-          height: 15,
-          includetext: true,
-          textxalign: 'center'
-        });
-        return new Response(new Uint8Array(png), {
+        try {
+          const png = await (bwipjs as any).toBuffer({
+            bcid: 'code128',
+            text: code,
+            scale: 4,
+            height: 15,
+            includetext: true,
+            textxalign: 'center'
+          });
+          return new Response(new Uint8Array(png), {
+            headers: {
+              'Content-Type': 'image/png',
+              'Cache-Control': 'public, max-age=31536000, immutable'
+            }
+          });
+        } catch (be) {
+          console.warn('bwip-js PNG generation failed, attempting SVG fallback', be);
+          try {
+            const svg = await (bwipjs as any).toBuffer({
+              bcid: 'code128',
+              text: code,
+              scale: 3,
+              includetext: true,
+              textxalign: 'center',
+              format: 'svg'
+            });
+            // `svg` may be a Buffer or string
+            const body = typeof svg === 'string' ? new TextEncoder().encode(svg) : new Uint8Array(svg);
+            return new Response(body, {
+              headers: {
+                'Content-Type': 'image/svg+xml',
+                'Cache-Control': 'public, max-age=31536000, immutable'
+              }
+            });
+          } catch (se) {
+            console.error('bwip-js SVG fallback also failed:', se);
+            throw se;
+          }
+        }
+      }
+
+      // Primary QR path: try binary buffer first, then fallback to DataURL
+      try {
+        const qrBuffer = await (QRCode as any).toBuffer(code, { width: 300, margin: 2 });
+        return new Response(new Uint8Array(qrBuffer), {
           headers: {
             'Content-Type': 'image/png',
             'Cache-Control': 'public, max-age=31536000, immutable'
           }
         });
-      }
-      const qrBuffer = await QRCode.toBuffer(code, { width: 300, margin: 2 });
-      return new Response(new Uint8Array(qrBuffer), {
-        headers: {
-          'Content-Type': 'image/png',
-          'Cache-Control': 'public, max-age=31536000, immutable'
+      } catch (qe) {
+        console.warn('QRCode.toBuffer failed, falling back to toDataURL', qe);
+        try {
+          const dataUrl = await (QRCode as any).toDataURL(code, { width: 300, margin: 2 });
+          // data:[<mediatype>][;base64],<data>
+          const m = dataUrl.match(/^data:(.+);base64,(.+)$/);
+          if (!m) throw new Error('Invalid DataURL from QRCode');
+          const b64 = m[2];
+          const binary = Buffer.from(b64, 'base64');
+          return new Response(new Uint8Array(binary), {
+            headers: {
+              'Content-Type': m[1] || 'image/png',
+              'Cache-Control': 'public, max-age=31536000, immutable'
+            }
+          });
+        } catch (fe) {
+          console.error('QR fallback failed:', fe);
+          throw fe;
         }
-      });
+      }
     } catch (e) {
       console.error('Barcode generation error:', e);
       // Provide more details to help debugging on deployed environment.

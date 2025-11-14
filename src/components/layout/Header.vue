@@ -1,12 +1,23 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue';
 import { useTheme } from '../../composables/useTheme';
+import { useRouter } from 'vue-router';
 
 const { theme, toggle } = useTheme();
+const router = useRouter();
 
 defineEmits<{
   toggleSidebar: [];
 }>();
+
+async function handleLogout() {
+  try {
+    await fetch('/api/auth?endpoint=logout', { method: 'POST', credentials: 'include' });
+  } catch (e) {
+    // ignore errors client-side
+  }
+  router.push('/login');
+}
 </script>
 
 <template>
@@ -33,14 +44,11 @@ defineEmits<{
         />
       </div>
     </div>
-    <button class="h-10 w-10 grid place-items-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200">
-      <Icon
-        icon="mdi:bell-outline"
-        class="text-[20px] dark:text-gray-200 transition-transform hover:scale-110"
-      />
-    </button>
     <button class="h-10 w-10 grid place-items-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200 ml-2" @click="toggle()" :title="theme.value === 'dark' ? 'Light mode' : 'Dark mode'">
       <Icon :icon="theme.value === 'dark' ? 'mdi:weather-sunny' : 'mdi:moon-waning-crescent'" class="text-[18px] dark:text-gray-200 transition-transform hover:scale-110" />
+    </button>
+    <button @click="handleLogout" class="h-10 w-10 grid place-items-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200 ml-2" title="Logout">
+      <Icon icon="mdi:logout" class="text-[18px] dark:text-gray-200" />
     </button>
   </header>
 </template>

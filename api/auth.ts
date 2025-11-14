@@ -7,7 +7,7 @@ import { findUserByEmail, verifyPassword, createSession, revokeSession, requireS
 type LoginBody = { email: string; password: string };
 
 export default async function handler(req: Request): Promise<Response> {
-  const url = new URL(req.url);
+  const url = new URL(req.url, `https://${req.headers.get('host') || 'localhost'}`);
   const endpoint = url.searchParams.get('endpoint');
 
   if (endpoint === 'login' && req.method === 'POST') {

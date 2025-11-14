@@ -1,6 +1,6 @@
 import { getSql, type Sql } from './db.js';
 import { parseCookies, serializeCookie } from './cookies.js';
-import * as bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs';
 
 export type User = {
   id: number;

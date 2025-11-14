@@ -1,4 +1,4 @@
-export const config = { runtime: 'nodejs' };
+export const config = { runtime: 'edge' };
 
 import { getSql } from './_lib/db.js';
 
@@ -38,11 +38,30 @@ type UpdateShipmentBody = {
   vehicle_plate_region?: string;
 };
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Credentials': 'true'
+};
+
+function jsonResponse(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...corsHeaders }
+  });
+}
+
 export default async function handler(req: Request): Promise<Response> {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
   const url = new URL(req.url);
   const endpoint = url.searchParams.get('endpoint');
 
-  const sql = getSql();
+  try {
+    const sql = getSql();
 
   if (endpoint === 'list' && req.method === 'GET') {
     const page = parseInt(url.searchParams.get('page') || '1');
@@ -88,7 +107,7 @@ export default async function handler(req: Request): Promise<Response> {
       total = countResult[0]?.count || 0;
     }
     
-    return Response.json({
+    return jsonResponse({
       items: shipments,
       pagination: {
         page,
@@ -103,18 +122,18 @@ export default async function handler(req: Request): Promise<Response> {
     try {
       body = await req.json() as CreateShipmentBody;
     } catch {
-      return Response.json({ error: 'Invalid JSON' }, { status: 400 });
+      return jsonResponse({ error: 'Invalid JSON' }, 400);
     }
     
     if (!body.origin || !body.destination || !body.total_colli) {
-      return Response.json({ error: 'Missing required fields' }, { status: 400 });
+      return jsonResponse({ error: 'Missing required fields' }, 400);
     }
     
     let customerId = body.customer_id || null;
     let customerName = body.customer_name || null;
     if (!customerName && customerId) {
       const c = await sql`select name from customers where id = ${customerId}` as [{ name: string }];
-      if (!c.length) return Response.json({ error: 'Invalid customer_id' }, { status: 400 });
+      if (!c.length) return jsonResponse({ error: 'Invalid customer_id' }, 400);
       customerName = c[0].name;
     }
     
@@ -135,25 +154,25 @@ export default async function handler(req: Request): Promise<Response> {
       returning id
     ` as [{ id: number }];
     
-    return Response.json({ id: result[0].id }, { status: 201 });
+    return jsonResponse({ id: result[0].id }, 201);
   } else if (endpoint === 'update' && req.method === 'PUT') {
     let body: UpdateShipmentBody;
     
     try {
       body = await req.json() as UpdateShipmentBody;
     } catch {
-      return Response.json({ error: 'Invalid JSON' }, { status: 400 });
+      return jsonResponse({ error: 'Invalid JSON' }, 400);
     }
     
     if (!body.id) {
-      return Response.json({ error: 'Missing id' }, { status: 400 });
+      return jsonResponse({ error: 'Missing id' }, 400);
     }
     
     let customerName = body.customer_name;
     let customerId = body.customer_id;
     if (!customerName && customerId) {
       const c = await sql`select name from customers where id = ${customerId}` as [{ name: string }];
-      if (!c.length) return Response.json({ error: 'Invalid customer_id' }, { status: 400 });
+      if (!c.length) return jsonResponse({ error: 'Invalid customer_id' }, 400);
       customerName = c[0].name;
     }
 
@@ -167,23 +186,27 @@ export default async function handler(req: Request): Promise<Response> {
     if (body.status) { sets.push(`status = $${sets.length + 1}`); params.push(body.status); }
     if (body.total_colli !== undefined) { sets.push(`total_colli = $${sets.length + 1}`); params.push(body.total_colli); }
     if (body.vehicle_plate_region !== undefined) { sets.push(`vehicle_plate_region = $${sets.length + 1}`); params.push(body.vehicle_plate_region); }
-    if (!sets.length) return Response.json({ error: 'No fields to update' }, { status: 400 });
+    if (!sets.length) return jsonResponse({ error: 'No fields to update' }, 400);
     const updateSql = `update shipments set ${sets.join(', ')} where id = $${sets.length + 1}`;
     params.push(body.id);
     await sql(updateSql, params);
     
-    return Response.json({ success: true });
+    return jsonResponse({ success: true });
   } else if (endpoint === 'delete' && req.method === 'DELETE') {
     const id = url.searchParams.get('id');
     
     if (!id) {
-      return Response.json({ error: 'Missing id' }, { status: 400 });
+      return jsonResponse({ error: 'Missing id' }, 400);
     }
     
     await sql`delete from shipments where id = ${parseInt(id)}`;
     
-    return Response.json({ success: true });
+    return jsonResponse({ success: true });
   } else {
-    return new Response(null, { status: 404 });
+    return new Response(null, { status: 404, headers: corsHeaders });
+  }
+  } catch (error) {
+    console.error('Shipments API error:', error);
+    return jsonResponse({ error: 'Internal server error' }, 500);
   }
 }

@@ -1,4 +1,4 @@
-export const config = { runtime: 'nodejs' };
+export const config = { runtime: 'edge' };
 
 import { getSql } from './_lib/db.js';
 
@@ -30,11 +30,30 @@ type UpdateInvoiceBody = {
   status?: string;
 };
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Credentials': 'true'
+};
+
+function jsonResponse(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...corsHeaders }
+  });
+}
+
 export default async function handler(req: Request): Promise<Response> {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
   const url = new URL(req.url);
   const endpoint = url.searchParams.get('endpoint');
 
-  const sql = getSql();
+  try {
+    const sql = getSql();
 
   if (endpoint === 'list' && req.method === 'GET') {
     const page = parseInt(url.searchParams.get('page') || '1');
@@ -79,7 +98,7 @@ export default async function handler(req: Request): Promise<Response> {
       total = countResult[0]?.count || 0;
     }
     
-    return Response.json({
+    return jsonResponse({
       items: invoices,
       pagination: {
         page,
@@ -94,11 +113,11 @@ export default async function handler(req: Request): Promise<Response> {
     try {
       body = await req.json() as CreateInvoiceBody;
     } catch {
-      return Response.json({ error: 'Invalid JSON' }, { status: 400 });
+      return jsonResponse({ error: 'Invalid JSON' }, 400);
     }
     
     if ((!body.customer_name && !body.customer_id) || !body.amount) {
-      return Response.json({ error: 'Missing required fields' }, { status: 400 });
+      return jsonResponse({ error: 'Missing required fields' }, 400);
     }
     
     const year = new Date().getFullYear();
@@ -114,7 +133,7 @@ export default async function handler(req: Request): Promise<Response> {
     let customerId = body.customer_id || null;
     if (!customerName && customerId) {
       const c = await sql`select name from customers where id = ${customerId}` as [{ name: string }];
-      if (!c.length) return Response.json({ error: 'Invalid customer_id' }, { status: 400 });
+      if (!c.length) return jsonResponse({ error: 'Invalid customer_id' }, 400);
       customerName = c[0].name;
     }
     const result = await sql`
@@ -132,26 +151,25 @@ export default async function handler(req: Request): Promise<Response> {
       returning id
     ` as [{ id: number }];
     
-    return Response.json({ id: result[0].id, invoice_number: invoiceNumber }, { status: 201 });
+    return jsonResponse({ id: result[0].id, invoice_number: invoiceNumber }, 201);
   } else if (endpoint === 'update' && req.method === 'PUT') {
     let body: UpdateInvoiceBody;
     
     try {
       body = await req.json() as UpdateInvoiceBody;
     } catch {
-      return Response.json({ error: 'Invalid JSON' }, { status: 400 });
+      return jsonResponse({ error: 'Invalid JSON' }, 400);
     }
     
     if (!body.id) {
-      return Response.json({ error: 'Missing id' }, { status: 400 });
+      return jsonResponse({ error: 'Missing id' }, 400);
     }
     
-    // resolve customer_name if only customer_id provided
     let customerName = body.customer_name;
     let customerId = body.customer_id;
     if (!customerName && customerId) {
       const c = await sql`select name from customers where id = ${customerId}` as [{ name: string }];
-      if (!c.length) return Response.json({ error: 'Invalid customer_id' }, { status: 400 });
+      if (!c.length) return jsonResponse({ error: 'Invalid customer_id' }, 400);
       customerName = c[0].name;
     }
 
@@ -163,7 +181,7 @@ export default async function handler(req: Request): Promise<Response> {
       sets.push(`status = $${sets.length + 1}`);
       if (body.status === 'paid') sets.push('paid_at = now()');
     }
-    if (!sets.length) return Response.json({ error: 'No fields to update' }, { status: 400 });
+    if (!sets.length) return jsonResponse({ error: 'No fields to update' }, 400);
     const params: unknown[] = [];
     if (customerName) params.push(customerName);
     if (customerId !== undefined) params.push(customerId);
@@ -173,18 +191,22 @@ export default async function handler(req: Request): Promise<Response> {
     params.push(body.id);
     await sql(updateSql, params);
     
-    return Response.json({ success: true });
+    return jsonResponse({ success: true });
   } else if (endpoint === 'delete' && req.method === 'DELETE') {
     const id = url.searchParams.get('id');
     
     if (!id) {
-      return Response.json({ error: 'Missing id' }, { status: 400 });
+      return jsonResponse({ error: 'Missing id' }, 400);
     }
     
     await sql`delete from invoices where id = ${parseInt(id)}`;
     
-    return Response.json({ success: true });
+    return jsonResponse({ success: true });
   } else {
-    return new Response(null, { status: 404 });
+    return new Response(null, { status: 404, headers: corsHeaders });
+  }
+  } catch (error) {
+    console.error('Invoices API error:', error);
+    return jsonResponse({ error: 'Internal server error' }, 500);
   }
 }

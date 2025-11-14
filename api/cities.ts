@@ -1,4 +1,4 @@
-export const config = { runtime: 'nodejs' };
+export const config = { runtime: 'edge' };
 
 import { getSql } from './_lib/db.js';
 
@@ -15,10 +15,30 @@ type CreateCityBody = {
   province?: string;
 };
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Credentials': 'true'
+};
+
+function jsonResponse(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...corsHeaders }
+  });
+}
+
 export default async function handler(req: Request): Promise<Response> {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
   const url = new URL(req.url);
   const endpoint = url.searchParams.get('endpoint');
-  const sql = getSql();
+
+  try {
+    const sql = getSql();
 
   if (endpoint === 'list' && req.method === 'GET') {
     const search = url.searchParams.get('search');
@@ -41,18 +61,18 @@ export default async function handler(req: Request): Promise<Response> {
       ` as City[];
     }
     
-    return Response.json({ items: cities });
+    return jsonResponse({ items: cities });
   } else if (endpoint === 'create' && req.method === 'POST') {
     let body: CreateCityBody;
     
     try {
       body = await req.json() as CreateCityBody;
     } catch {
-      return Response.json({ error: 'Invalid JSON' }, { status: 400 });
+      return jsonResponse({ error: 'Invalid JSON' }, 400);
     }
     
     if (!body.name || body.name.trim().length === 0 || !body.code || body.code.trim().length === 0) {
-      return Response.json({ error: 'City name and code required' }, { status: 400 });
+      return jsonResponse({ error: 'City name and code required' }, 400);
     }
     
     try {
@@ -62,14 +82,18 @@ export default async function handler(req: Request): Promise<Response> {
         returning id, name, code, province
       ` as [{ id: number; name: string; code: string; province: string | null }];
       
-      return Response.json(result[0], { status: 201 });
+      return jsonResponse(result[0], 201);
     } catch (e) {
       if ((e as Error).message.includes('duplicate key')) {
-        return Response.json({ error: 'City already exists' }, { status: 409 });
+        return jsonResponse({ error: 'City already exists' }, 409);
       }
       throw e;
     }
   } else {
-    return new Response(null, { status: 404 });
+    return new Response(null, { status: 404, headers: corsHeaders });
+  }
+  } catch (error) {
+    console.error('Cities API error:', error);
+    return jsonResponse({ error: 'Internal server error' }, 500);
   }
 }

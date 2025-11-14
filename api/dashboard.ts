@@ -1,6 +1,6 @@
 export const config = { runtime: 'nodejs' };
 
-import { getSql } from '../lib/db';
+import { getSql } from './_lib/db.js';
 
 type Stats = {
   outgoingToday: number;

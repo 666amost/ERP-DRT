@@ -1,6 +1,6 @@
 export const config = { runtime: 'nodejs' };
 
-import { getSql } from '../lib/db';
+import { getSql } from './_lib/db.js';
 import bcrypt from 'bcryptjs';
 
 export default async function handler(req: Request): Promise<Response> {

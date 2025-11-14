@@ -1,8 +1,8 @@
 export const config = { runtime: 'nodejs' };
 
-import { getSql } from '../lib/db';
-import { serializeCookie, parseCookies } from '../lib/cookies';
-import { findUserByEmail, verifyPassword, createSession, revokeSession, requireSession } from '../lib/auth';
+import { getSql } from './_lib/db.js';
+import { serializeCookie, parseCookies } from './_lib/cookies.js';
+import { findUserByEmail, verifyPassword, createSession, revokeSession, requireSession } from './_lib/auth.js';
 
 type LoginBody = { email: string; password: string };
 

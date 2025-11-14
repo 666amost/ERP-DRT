@@ -1,6 +1,6 @@
 export const config = { runtime: 'nodejs' };
 
-import { getSql } from '../lib/db';
+import { getSql } from './_lib/db.js';
 
 type Customer = { id: number; name: string; phone: string | null };
 type CreateCustomerBody = { name: string; phone?: string; address?: string };

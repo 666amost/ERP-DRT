@@ -13,7 +13,16 @@ function getExtFromName(name: string | null): string {
 }
 
 export default async function handler(req: Request): Promise<Response> {
-  const url = new URL(req.url);
+  // `req.url` can be a relative path in some server runtimes (e.g. Vercel).
+  // Ensure we always create an absolute URL to parse search params.
+  let url: URL;
+  try {
+    url = new URL(req.url);
+  } catch {
+    const host = req.headers.get('host') || process.env.VERCEL_URL || 'localhost';
+    const proto = (req.headers.get('x-forwarded-proto') || 'https').split(',')[0];
+    url = new URL(req.url, `${proto}://${host}`);
+  }
   const endpoint = url.searchParams.get('endpoint');
 
   if (endpoint === 'generate' && req.method === 'GET') {

@@ -101,7 +101,8 @@ export default async function handler(req: Request): Promise<Response> {
     signed_at timestamptz,
     gps_lat double precision,
     gps_lng double precision,
-    photos jsonb default '[]'::jsonb
+    photos jsonb default '[]'::jsonb,
+    note text
   )`;
 
   await sql`

@@ -79,7 +79,7 @@ export default async function handler(req: Request): Promise<Response> {
     return Response.json({ url: blob.url, pathname: blob.pathname, size: buffer.byteLength });
   } else if (endpoint === 'proxy' && req.method === 'GET') {
     try {
-      const { requireSession } = await import('lib/auth');
+      const { requireSession } = await import('../lib/auth');
       const { setCookieHeader } = await requireSession(req);
       const pathname = url.searchParams.get('pathname');
       const token = process.env.BLOB_READ_WRITE_TOKEN;

@@ -1,7 +1,7 @@
 export const config = { runtime: 'nodejs' };
 
-import { getSql } from 'lib/db';
-import { requireSession } from 'lib/auth';
+import { getSql } from '../lib/db';
+import { requireSession } from '../lib/auth';
 
 type Photo = { pathname: string; size: number; type: string };
 

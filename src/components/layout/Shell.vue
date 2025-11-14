@@ -2,12 +2,13 @@
 import { ref } from 'vue';
 import Sidebar from './Sidebar.vue';
 import Header from './Header.vue';
+import BottomNav from './BottomNav.vue';
 
 const sidebarOpen = ref(false);
 </script>
 
 <template>
-  <div class="min-h-screen grid lg:grid-cols-[16rem_1fr] bg-gray-50">
+  <div class="min-h-screen grid lg:grid-cols-[16rem_1fr] bg-gray-50 dark:bg-gray-900">
     <!-- Mobile overlay -->
     <div
       v-if="sidebarOpen"
@@ -23,11 +24,12 @@ const sidebarOpen = ref(false);
       <Sidebar @close="sidebarOpen = false" />
     </div>
 
-    <div class="flex flex-col">
+    <div class="flex flex-col min-h-screen lg:min-h-0">
       <Header @toggle-sidebar="sidebarOpen = !sidebarOpen" />
-      <main class="p-4 lg:p-6">
+      <main class="p-4 lg:p-6 flex-1 overflow-auto">
         <router-view />
       </main>
+      <BottomNav />
     </div>
   </div>
 </template>

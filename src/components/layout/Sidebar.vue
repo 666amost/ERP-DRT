@@ -32,10 +32,10 @@ function handleClick() {
 </script>
 
 <template>
-  <aside class="h-screen w-64 bg-white border-r border-gray-200 flex flex-col">
+  <aside class="h-screen w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
     <div class="h-16 flex items-center justify-between px-4 gap-3">
       <div class="flex items-center gap-3">
-        <div class="h-9 w-9 rounded-md bg-blue-600 text-white flex items-center justify-center font-semibold">EP</div>
+        <div class="h-9 w-9 rounded-md bg-primary text-white flex items-center justify-center font-semibold">EP</div>
         <div class="leading-tight">
           <div class="text-sm font-semibold">Enterprise ERP</div>
           <div class="text-xs text-gray-500">Operations</div>
@@ -56,8 +56,8 @@ function handleClick() {
         v-for="it in items"
         :key="it.to"
         :to="it.to"
-        class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm"
-        :class="active(it.to).value ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'"
+        class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 hover:translate-x-1"
+        :class="active(it.to).value ? 'bg-primary-light text-primary-dark shadow-sm' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
         @click="handleClick"
       >
         <Icon

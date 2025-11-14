@@ -33,50 +33,29 @@ function pickFiles(e: Event) {
   files.value.push(...selected);
 }
 
-async function compressToTarget(input: File, maxWidth = 1280, maxHeight = 1280, targetKB = 400) {
-  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const url = URL.createObjectURL(input);
-    const i = new Image();
-    i.onload = () => resolve(i);
-    i.onerror = (e) => reject(e);
-    i.src = url;
-  });
-  const ratio = Math.min(1, maxWidth / img.width, maxHeight / img.height);
-  const w = Math.max(1, Math.round(img.width * ratio));
-  const h = Math.max(1, Math.round(img.height * ratio));
+import imageCompression from 'browser-image-compression';
 
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('No 2d context');
-  ctx.drawImage(img, 0, 0, w, h);
-
-  let qMin = 0.4;
-  let qMax = 0.9;
-  let best: Blob | null = null;
-  for (let i = 0; i < 8; i++) {
-    const q = (qMin + qMax) / 2;
-    const b = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', q));
-    if (!b) break;
-    if (b.size / 1024 > targetKB) {
-      qMax = q; // too large → lower quality
-    } else {
-      best = b;
-      qMin = q; // can try higher
-    }
+async function compressToTarget(input: File, maxWidth = 1280, maxHeight = 1280, targetKB = 200) {
+  const options = {
+    maxWidthOrHeight: Math.max(maxWidth, maxHeight),
+    maxSizeMB: targetKB / 1024,
+    useWebWorker: true,
+    initialQuality: 0.7,
+    fileType: 'image/jpeg',
+  };
+  const compressed = await imageCompression(input, options);
+  if (compressed.size > targetKB * 1024) {
+    throw new Error('Gambar terlalu besar setelah kompresi');
   }
-  if (best) return best;
-  const fallback = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.75));
-  if (!fallback) throw new Error('Compression failed');
-  return fallback;
+  return compressed;
 }
 
 async function uploadOne(blob: Blob, name: string, index: number) {
   return await new Promise<{ url: string; pathname: string; size: number; type: string }>((resolve, reject) => {
     const ext = (name.split('.').pop() || 'jpg').toLowerCase();
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `/api/blob?endpoint=upload&ext=${encodeURIComponent(ext)}`);
+    const q = new URLSearchParams({ ext, token: token.value });
+    xhr.open('POST', `/api/blob?endpoint=upload&${q.toString()}`);
     xhr.setRequestHeader('Content-Type', blob.type || 'application/octet-stream');
     xhr.upload.onprogress = (ev) => {
       if (ev.lengthComputable) {

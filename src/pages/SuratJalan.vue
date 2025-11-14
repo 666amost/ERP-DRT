@@ -217,41 +217,41 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div class="space-y-4 pb-20 lg:pb-0">
     <div class="text-xl font-semibold">Surat Jalan</div>
 
     <div v-if="loading" class="flex items-center justify-center h-64">
       <div class="text-gray-500">Loading...</div>
     </div>
 
-    <div v-else class="bg-white border border-gray-200 rounded-xl overflow-hidden">
+    <div v-else class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden card">
       <table class="w-full">
-        <thead class="bg-gray-50 border-b border-gray-200">
+        <thead class="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
           <tr>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">Kode</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">Customer</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">Rute</th>
-            <th class="px-4 py-3 text-center text-xs font-medium text-gray-600">Colli</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">Status</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">Tanggal</th>
-            <th class="px-4 py-3 text-right text-xs font-medium text-gray-600">Actions</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Kode</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Customer</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Rute</th>
+            <th class="px-4 py-3 text-center text-xs font-medium text-gray-600 dark:text-gray-300">Colli</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Status</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Tanggal</th>
+            <th class="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Actions</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-200">
+        <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
           <tr v-if="shipments.length === 0">
-            <td colspan="7" class="px-4 py-8 text-center text-sm text-gray-500">
+            <td colspan="7" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
               Belum ada surat jalan
             </td>
           </tr>
-          <tr v-for="ship in shipments" :key="ship.id" class="hover:bg-gray-50">
-            <td class="px-4 py-3 text-sm font-medium">{{ ship.public_code }}</td>
-            <td class="px-4 py-3 text-sm">{{ ship.customer_name || '-' }}</td>
-            <td class="px-4 py-3 text-sm">{{ ship.origin }} → {{ ship.destination }}</td>
-            <td class="px-4 py-3 text-sm text-center">{{ ship.total_colli }}</td>
+          <tr v-for="ship in shipments" :key="ship.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+            <td class="px-4 py-3 text-sm font-medium dark:text-gray-100">{{ ship.public_code }}</td>
+            <td class="px-4 py-3 text-sm dark:text-gray-100">{{ ship.customer_name || '-' }}</td>
+            <td class="px-4 py-3 text-sm dark:text-gray-100">{{ ship.origin }} → {{ ship.destination }}</td>
+            <td class="px-4 py-3 text-sm text-center dark:text-gray-100">{{ ship.total_colli }}</td>
             <td class="px-4 py-3">
               <Badge variant="info">{{ ship.status }}</Badge>
             </td>
-            <td class="px-4 py-3 text-sm text-gray-600">{{ formatDate(ship.created_at) }}</td>
+            <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">{{ formatDate(ship.created_at) }}</td>
             <td class="px-4 py-3 text-right">
               <Button variant="primary" @click="printDeliveryNote(ship)">
                 Print

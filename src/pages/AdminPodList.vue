@@ -41,7 +41,7 @@ onMounted(load);
     <div v-if="errorMsg" class="text-sm text-red-600">{{ errorMsg }}</div>
     <div v-if="loading" class="text-sm text-gray-500">Memuat...</div>
 
-    <div v-if="items.length" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <div v-if="items.length" class="bg-white rounded-xl border border-gray-200 overflow-hidden card">
       <table class="w-full text-sm">
         <thead class="bg-gray-50 text-gray-600">
           <tr>
@@ -62,7 +62,7 @@ onMounted(load);
             </td>
             <td class="px-4 py-3">
               <div class="flex gap-2">
-                <a v-for="(p,i) in it.photos" :key="i" :href="viewUrl(p)" target="_blank" class="text-blue-600 underline">Lihat {{ i+1 }}</a>
+                <a v-for="(p,i) in it.photos" :key="i" :href="viewUrl(p)" target="_blank" class="text-primary underline">Lihat {{ i+1 }}</a>
               </div>
             </td>
           </tr>

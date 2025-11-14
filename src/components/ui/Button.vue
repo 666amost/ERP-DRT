@@ -10,10 +10,10 @@ const p = withDefaults(defineProps<Props>(), {
   disabled: false
 });
 const classes: Record<string, string> = {
-  default: 'bg-gray-800 text-white hover:bg-gray-700',
-  primary: 'bg-blue-600 text-white hover:bg-blue-700',
-  success: 'bg-emerald-600 text-white hover:bg-emerald-700',
-  warning: 'bg-amber-500 text-white hover:bg-amber-600'
+  default: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600',
+  primary: 'bg-primary text-white hover:bg-primary-dark dark:bg-gray-700 dark:hover:bg-gray-600',
+  success: 'bg-green-600 text-white hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600',
+  warning: 'bg-amber-500 text-white hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-500'
 };
 </script>
 
@@ -21,7 +21,7 @@ const classes: Record<string, string> = {
   <button
     :type="p.type"
     :disabled="p.disabled"
-    class="inline-flex items-center justify-center h-10 px-4 rounded-lg text-sm font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+    class="inline-flex items-center justify-center h-10 px-4 rounded-lg text-sm font-medium transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed hover:shadow-md active:scale-95"
     :class="classes[p.variant]"
   >
     <slot />

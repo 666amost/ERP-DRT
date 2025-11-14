@@ -65,10 +65,10 @@ onMounted(() => {
 </script>
 
 <template>
-  <div v-if="loading" class="flex items-center justify-center h-64">
+  <div v-if="loading" class="flex items-center justify-center h-64 pb-20 lg:pb-0">
     <div class="text-gray-500">Loading...</div>
   </div>
-  <div v-else class="space-y-6">
+  <div v-else class="space-y-6 pb-20 lg:pb-0">
     <div class="text-xl font-semibold">Dashboard</div>
     <div class="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
       <OverviewCard
@@ -98,41 +98,53 @@ onMounted(() => {
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div class="bg-white rounded-xl border border-gray-200 p-4">
-        <div class="font-medium mb-3">Tracking Pengiriman Terkini</div>
-        <div v-if="tracking.length === 0" class="text-sm text-gray-500">Belum ada pengiriman aktif</div>
-        <div v-else class="space-y-4">
-          <div v-for="item in tracking" :key="item.id">
-            <div class="text-sm font-medium">{{ item.public_code }}</div>
-            <div class="text-xs text-gray-500">
-              {{ item.driver_name || 'Driver' }} • {{ item.origin }} - {{ item.destination }}
+      <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 card">
+        <div class="font-medium mb-3 dark:text-gray-100">POD (Proof of Delivery)</div>
+        <div class="space-y-2">
+          <Button variant="primary" @click="$router.push({ name: 'pod-upload', params: { token: 'manual' } })">Upload POD</Button>
+          <Button variant="default" @click="$router.push({ name: 'admin-pod' })">Daftar POD Admin</Button>
+        </div>
+        <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">Upload foto POD, lihat status, dan kelola dokumen pengiriman.</div>
+      </div>
+      <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 card">
+        <div class="font-medium mb-3 dark:text-gray-100">Tracking Pengiriman Terkini</div>
+        <div class="tracking-panel smooth-scroll overflow-auto max-h-[50vh] pr-2">
+          <div v-if="tracking.length === 0" class="text-sm text-gray-500 dark:text-gray-400">Belum ada pengiriman aktif</div>
+          <div v-else class="space-y-4">
+            <div v-for="item in tracking" :key="item.id">
+              <div class="text-sm font-medium dark:text-gray-100">{{ item.public_code }}</div>
+              <div class="text-xs text-gray-500 dark:text-gray-400">
+                {{ item.driver_name || 'Driver' }} • {{ item.origin }} - {{ item.destination }}
+              </div>
+              <div class="mt-2"><ProgressBar :value="66" /></div>
+              <div class="mt-2"><Badge variant="info">Dalam Perjalanan</Badge></div>
             </div>
-            <div class="mt-2"><ProgressBar :value="66" /></div>
-            <div class="mt-2"><Badge variant="info">Dalam Perjalanan</Badge></div>
           </div>
         </div>
       </div>
-      <div class="bg-white rounded-xl border border-gray-200 p-4">
-        <div class="font-medium mb-3">Invoice Terbaru</div>
-        <div v-if="invoices.length === 0" class="text-sm text-gray-500">Belum ada invoice</div>
-        <ul v-else class="divide-y">
+      <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 card">
+        <div class="font-medium mb-3 dark:text-gray-100">Invoice Terbaru</div>
+        <div class="max-h-[50vh] overflow-auto smooth-scroll pr-2">
+        <div v-if="invoices.length === 0" class="text-sm text-gray-500 dark:text-gray-400">Belum ada invoice</div>
+        <ul v-else class="divide-y dark:divide-gray-700">
           <li
             v-for="inv in invoices"
             :key="inv.id"
             class="py-3 flex items-center justify-between"
           >
             <div>
-              <div class="text-sm font-medium">{{ inv.invoice_number }}</div>
-              <div class="text-xs text-gray-500">{{ inv.customer_name }} • {{ formatDate(inv.issued_at) }}</div>
+              <div class="text-sm font-medium dark:text-gray-100">{{ inv.invoice_number }}</div>
+              <div class="text-xs text-gray-500 dark:text-gray-400">{{ inv.customer_name }} • {{ formatDate(inv.issued_at) }}</div>
             </div>
             <div class="flex items-center gap-3">
-              <div class="text-sm font-semibold">{{ formatRupiah(inv.amount) }}</div>
+              <div class="text-sm font-semibold dark:text-gray-100">{{ formatRupiah(inv.amount) }}</div>
               <Badge :variant="inv.status === 'paid' ? 'success' : 'warning'">
                 {{ inv.status === 'paid' ? 'Paid' : 'Pending' }}
               </Badge>
             </div>
           </li>
         </ul>
+        </div>
         <div class="mt-4 flex gap-2">
           <Button variant="primary">Tambah Invoice</Button>
           <Button variant="default">Lihat Semua</Button>

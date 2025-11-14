@@ -123,7 +123,7 @@ loadCities();
       <button
         type="button"
         @click="showAddModal = true"
-        class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-blue-600 hover:text-blue-700 font-medium"
+        class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-primary hover:text-primary-dark font-medium"
       >
         + Tambah
       </button>
@@ -150,7 +150,7 @@ loadCities();
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
       @click.self="showAddModal = false"
     >
-      <div class="bg-white rounded-xl p-6 w-full max-w-sm space-y-4">
+      <div class="bg-white rounded-xl p-6 w-full max-w-sm space-y-4 card">
         <div class="text-lg font-semibold">Tambah Kota Baru</div>
         <div>
           <label class="block text-sm font-medium mb-1">Nama Kota</label>
@@ -192,7 +192,7 @@ loadCities();
             type="button"
             @click="addNewCity"
             :disabled="loading || !newCityName.trim() || !newCityCode.trim()"
-            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark disabled:opacity-50"
           >
             {{ loading ? 'Loading...' : 'Simpan' }}
           </button>

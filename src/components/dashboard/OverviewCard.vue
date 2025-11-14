@@ -7,8 +7,8 @@ const p = defineProps<Props>();
 </script>
 
 <template>
-  <div class="bg-white rounded-xl border border-gray-200 p-4 flex items-start gap-4">
-    <div class="h-9 w-9 rounded-lg grid place-items-center" :class="'bg-blue-50 text-blue-600'">
+  <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex items-start gap-4 card">
+    <div class="h-9 w-9 rounded-lg grid place-items-center" :class="'bg-primary-light text-primary-dark'">
       <Icon :icon="p.icon" class="text-[18px]" />
     </div>
     <div class="flex-1">

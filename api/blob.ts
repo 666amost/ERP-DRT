@@ -56,7 +56,38 @@ export default async function handler(req: Request): Promise<Response> {
     const ext = url.searchParams.get('ext') || getExtFromName(null);
     const contentType = req.headers.get('content-type') || 'application/octet-stream';
 
+    const allowMime = new Set(['image/jpeg', 'image/png', 'application/pdf']);
+    if (!allowMime.has(contentType)) {
+      return Response.json({ error: 'Invalid content type' }, { status: 415 });
+    }
+
+    // Access control: admin session OR valid delivery token
+    let allowed = false;
+    try {
+      const { requireSession } = await import('../lib/auth');
+      await requireSession(req);
+      allowed = true;
+    } catch {
+      const podToken = url.searchParams.get('token');
+      if (podToken) {
+        const dbUrl = process.env.DATABASE_URL;
+        if (!dbUrl) return Response.json({ error: 'Missing DATABASE_URL' }, { status: 500 });
+        const { neon } = await import('@neondatabase/serverless');
+        const sql = neon(dbUrl);
+        const rows = await sql`select id, expires_at, used_at from delivery_tokens where token = ${podToken} limit 1` as { id: number; expires_at: string | null; used_at: string | null }[];
+        const t = rows[0];
+        if (t && !t.used_at && (!t.expires_at || new Date(t.expires_at) > new Date())) {
+          allowed = true;
+        }
+      }
+    }
+    if (!allowed) return new Response(null, { status: 401 });
+
     const buffer = await req.arrayBuffer();
+    const maxBytes = 5 * 1024 * 1024;
+    if (buffer.byteLength > maxBytes) {
+      return Response.json({ error: 'File too large (max 5MB)' }, { status: 413 });
+    }
 
     const now = new Date();
     const keyDate = now.toISOString().slice(0, 7).replace('-', '/');
@@ -71,12 +102,12 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     const blob = await put(key, buffer, {
-      access: 'public',
+      access: 'private',
       token,
       contentType
     });
 
-    return Response.json({ url: blob.url, pathname: blob.pathname, size: buffer.byteLength });
+    return Response.json({ url: blob.url, pathname: blob.pathname, size: buffer.byteLength, type: contentType });
   } else if (endpoint === 'proxy' && req.method === 'GET') {
     try {
       const { requireSession } = await import('../lib/auth');

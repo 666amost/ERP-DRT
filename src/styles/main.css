@@ -2,8 +2,55 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Smooth scroll behavior globally */
+* { scroll-behavior: smooth; }
+
 :root {
   --card-bg: #ffffff;
 }
 
-body { @apply bg-gray-50 text-gray-900; }
+/* color system */
+:root {
+  --bg: #f6f7f8;
+  --text: #0f1724;
+  --muted: #6b7280;
+  --card-bg: #ffffff;
+}
+
+/* dark mode variables */
+.dark {
+  --bg: #0b1220;
+  --text: #e6eef7;
+  --muted: #9aa3b2;
+  --card-bg: #0f1724;
+}
+
+/* smooth scroll for panels */
+.smooth-scroll { -webkit-overflow-scrolling: touch; }
+
+/* card utility for a premium subtle elevation */
+.card {
+  background: var(--card-bg);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+/* Smooth transitions for body */
+body {
+  transition: background-color 0.3s ease, color 0.3s ease;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Ensure basic elements inherit the global text color in dark mode */
+body, p, a, span, input, button, th, td, label, div {
+  color: inherit;
+}
+
+/* Table specifics */
+table th, table td {
+  color: inherit;
+  border-color: rgba(255,255,255,0.04);
+}
+

@@ -49,10 +49,10 @@ async function handleLogin() {
 <template>
   <div class="min-h-screen bg-gray-50 flex items-center justify-center p-4">
     <div class="w-full max-w-md">
-      <div class="bg-white rounded-xl border border-gray-200 p-8 shadow-sm">
+      <div class="bg-white rounded-xl border border-gray-200 p-8 shadow-sm card">
         <div class="mb-6 text-center">
           <div
-            class="h-12 w-12 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xl mx-auto mb-3"
+            class="h-12 w-12 rounded-lg bg-primary text-white flex items-center justify-center font-bold text-xl mx-auto mb-3"
           >
             EP
           </div>

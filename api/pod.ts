@@ -1,4 +1,4 @@
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'nodejs' };
 
 import { getSql } from './_lib/db.js';
 import { requireSession } from './_lib/auth.js';
@@ -115,17 +115,13 @@ export default async function handler(req: Request): Promise<Response> {
         if (typeof contentType !== 'string' || typeof b64 !== 'string') {
           return Response.json({ error: 'Invalid dataUrl' }, { status: 400 });
         }
-        const binaryString = atob(b64);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
+        const buffer = Buffer.from(b64, 'base64');
         if (!blobToken) {
           const MAX_INLINE_BYTES = 2 * 1024 * 1024;
-          if (bytes.length > MAX_INLINE_BYTES) {
+          if (buffer.length > MAX_INLINE_BYTES) {
             return Response.json({ error: 'File too large to store inline; BLOB_READ_WRITE_TOKEN required' }, { status: 400 });
           }
-          normalizedPhotos.push({ url: p.dataUrl, size: bytes.length, type: contentType });
+          normalizedPhotos.push({ url: p.dataUrl, size: buffer.length, type: contentType });
           continue;
         }
         const now = new Date();
@@ -136,13 +132,12 @@ export default async function handler(req: Request): Promise<Response> {
         let blob;
         try {
           const { put } = await import('@vercel/blob');
-          const file = new Blob([bytes], { type: contentType });
-          blob = await put(key, file, { access: 'public', token: blobToken });
+          blob = await put(key, buffer, { access: 'public', token: blobToken, contentType });
         } catch (err) {
           console.error('submitPOD: blob upload failed', String(err));
           return Response.json({ error: 'Blob upload failed' }, { status: 502 });
         }
-        normalizedPhotos.push({ pathname: blob.pathname, url: blob.url, size: bytes.length, type: contentType });
+        normalizedPhotos.push({ pathname: blob.pathname, url: blob.url, size: buffer.length, type: contentType });
         continue;
       }
       return Response.json({ error: 'Invalid photo payload' }, { status: 400 });

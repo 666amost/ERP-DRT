@@ -9,6 +9,8 @@ interface PodItem { id: number; shipment_id: number; signed_at: string | null; p
 const items = ref<PodItem[]>([]);
 const loading = ref(false);
 const errorMsg = ref('');
+const syncing = ref(false);
+const syncProgress = ref('');
 
 async function load() {
   loading.value = true;
@@ -19,8 +21,38 @@ async function load() {
     errorMsg.value = data.error || 'Gagal memuat POD';
   } else {
     items.value = data.items || [];
+    const missingUrls = items.value.some(it => it.photos.some(p => !p.url));
+    if (missingUrls) {
+      syncProgress.value = 'Ada foto yang belum tersinkronisasi';
+    }
   }
   loading.value = false;
+}
+
+async function syncUrls() {
+  syncing.value = true;
+  errorMsg.value = '';
+  syncProgress.value = 'Memproses...';
+  let totalProcessed = 0;
+  let hasMore = true;
+  
+  while (hasMore && totalProcessed < 50) {
+    const res = await fetch('/api/pod?endpoint=sync-urls&limit=5', { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      errorMsg.value = data.error || 'Gagal sinkronisasi';
+      break;
+    }
+    totalProcessed += data.processed || 0;
+    syncProgress.value = `Diproses: ${totalProcessed} POD`;
+    if ((data.processed || 0) < 5) {
+      hasMore = false;
+    }
+  }
+  
+  syncProgress.value = hasMore ? `Selesai (masih ada yang belum): ${totalProcessed} POD` : `Selesai: ${totalProcessed} POD`;
+  syncing.value = false;
+  await load();
 }
 
 function viewUrl(p: Photo) {
@@ -47,12 +79,29 @@ onMounted(load);
       <div class="text-xl font-semibold">
         POD Terbaru
       </div>
-      <Button
-        variant="default"
-        @click="load"
-      >
-        Muat Ulang
-      </Button>
+      <div class="flex gap-2">
+        <Button
+          v-if="syncProgress"
+          variant="secondary"
+          :disabled="syncing"
+          @click="syncUrls"
+        >
+          {{ syncing ? 'Sinkronisasi...' : 'Sinkronkan URL' }}
+        </Button>
+        <Button
+          variant="default"
+          @click="load"
+        >
+          Muat Ulang
+        </Button>
+      </div>
+    </div>
+
+    <div
+      v-if="syncProgress"
+      class="text-sm text-blue-600"
+    >
+      {{ syncProgress }}
     </div>
 
     <div

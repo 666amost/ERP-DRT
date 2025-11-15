@@ -46,34 +46,6 @@ export default async function handler(req: Request): Promise<Response> {
     try {
       const { setCookieHeader } = await requireSession(req);
       const rows = await sql`select id, shipment_id, signed_at, photos from pod order by id desc limit 50` as Row[];
-      
-      const token = process.env.BLOB_READ_WRITE_TOKEN;
-      if (token) {
-        const { head } = await import('@vercel/blob');
-        for (const row of rows) {
-          let changed = false;
-          for (let i = 0; i < row.photos.length; i++) {
-            const p = row.photos[i];
-            if (p && !p.url && p.pathname) {
-              try {
-                const meta = await head(p.pathname, { token });
-                if (meta?.url) {
-                  row.photos[i] = { pathname: p.pathname, url: meta.url, size: p.size, type: p.type };
-                  changed = true;
-                }
-              } catch (err) {
-                console.warn('list: failed to get url for', p.pathname);
-              }
-            }
-          }
-          if (changed) {
-            await sql`update pod set photos = ${JSON.stringify(row.photos)}::jsonb where id = ${row.id}`.catch(err => {
-              console.warn('list: failed to update pod', row.id, err);
-            });
-          }
-        }
-      }
-      
       const res = Response.json({ items: rows });
       if (setCookieHeader) {
         res.headers.set('set-cookie', setCookieHeader);
@@ -229,7 +201,6 @@ export async function syncPhotoUrls(req: any): Promise<Response> {
   const endpoint = url.searchParams.get('endpoint');
   if (endpoint !== 'sync-urls' || req.method !== 'POST') return new Response(null, { status: 404 });
   try {
-    // Require session (admin), reuse existing requireSession helper
     await requireSession(req);
   } catch (e) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
@@ -242,19 +213,19 @@ export async function syncPhotoUrls(req: any): Promise<Response> {
   if (!token) return Response.json({ error: 'Missing BLOB_READ_WRITE_TOKEN' }, { status: 500 });
   const { head } = await import('@vercel/blob');
   try {
-    // Fetch pods with photos that have missing url
-    const rows = await sql`select id, photos from pod where exists (select 1 from jsonb_array_elements(photos) as p where (p->>'url') is null)` as { id: number; photos: any[] }[];
+    const limit = parseInt(url.searchParams.get('limit') || '10');
+    const rows = await sql`select id, photos from pod where exists (select 1 from jsonb_array_elements(photos) as p where (p->>'url') is null) order by id desc limit ${limit}` as { id: number; photos: any[] }[];
     const updated: { id: number; updatedCount: number }[] = [];
     for (const r of rows) {
       const photos = r.photos as any[];
       let changed = false;
       for (let i = 0; i < photos.length; i++) {
         const p = photos[i];
-        if (!p.url && p.pathname) {
+        if (p && !p.url && p.pathname) {
           try {
             const meta = await head(p.pathname, { token });
-            if (meta && meta.url) {
-              photos[i] = { ...p, url: meta.url };
+            if (meta?.url) {
+              photos[i] = { pathname: p.pathname, url: meta.url, size: p.size, type: p.type };
               changed = true;
             }
           } catch (err) {
@@ -264,10 +235,10 @@ export async function syncPhotoUrls(req: any): Promise<Response> {
       }
       if (changed) {
         await sql`update pod set photos = ${JSON.stringify(photos)}::jsonb where id = ${r.id}`;
-        updated.push({ id: r.id, updatedCount: photos.filter(p => p.url).length });
+        updated.push({ id: r.id, updatedCount: photos.filter(p => p?.url).length });
       }
     }
-    return Response.json({ ok: true, updated });
+    return Response.json({ ok: true, updated, processed: rows.length });
   } catch (err) {
     console.error('syncPhotoUrls error', err);
     return Response.json({ error: 'Sync failed', detail: String(err) }, { status: 500 });

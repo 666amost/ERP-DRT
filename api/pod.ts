@@ -1,7 +1,9 @@
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'nodejs' };
 
 import { getSql } from './_lib/db.js';
 import { requireSession } from './_lib/auth.js';
+import type { IncomingMessage, ServerResponse } from 'http';
+import { readJsonNode, writeJson } from './_lib/http.js';
 
 type Photo = { pathname?: string; url?: string; size: number; type: string };
 
@@ -36,7 +38,7 @@ function safeUrl(req: any): URL {
   }
 }
 
-export default async function handler(req: Request): Promise<Response> {
+export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = safeUrl(req);
   const endpoint = url.searchParams.get('endpoint');
 
@@ -45,27 +47,26 @@ export default async function handler(req: Request): Promise<Response> {
       const sql = getSql();
       const { setCookieHeader } = await requireSession(req);
       const rows = await sql`select id, shipment_id, signed_at, photos from pod order by id desc limit 50` as Row[];
-      const res = Response.json({ items: rows });
-      if (setCookieHeader) {
-        res.headers.set('set-cookie', setCookieHeader);
-      }
-      return res;
+      if (setCookieHeader) res.setHeader('set-cookie', setCookieHeader);
+      writeJson(res, { items: rows });
+      return;
     } catch (e) {
-      if (e instanceof Response) return e;
       console.error('list endpoint error:', e);
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      writeJson(res, { error: 'Unauthorized' }, 401);
+      return;
     }
   } else if (endpoint === 'submit' && req.method === 'POST') {
     const dbUrl = process.env.DATABASE_URL;
-    if (!dbUrl) return Response.json({ error: 'Missing DATABASE_URL' }, { status: 500 });
+    if (!dbUrl) { writeJson(res, { error: 'Missing DATABASE_URL' }, 500); return; }
 
     // Wrap submit handling so any unexpected error returns a safe JSON response
     try {
-        const body = await readJson(req) as SubmitPodBody | null;
+        const body = await readJsonNode(req) as SubmitPodBody | null;
       // Safe debug log: number of photos and flow (token/public_code) - do not log token values
       try { console.debug('submitPOD: photos', Array.isArray(body?.photos) ? (body?.photos as any[]).length : 0, 'hasToken', !!body?.token, 'hasPublicCode', !!body?.public_code); } catch {}
       if (!body || !Array.isArray(body.photos) || body.photos.length === 0) {
-        return Response.json({ error: 'Invalid payload' }, { status: 400 });
+        writeJson(res, { error: 'Invalid payload' }, 400);
+        return;
       }
 
       const { neon } = await import('@neondatabase/serverless');
@@ -79,9 +80,9 @@ export default async function handler(req: Request): Promise<Response> {
       const token = body.token;
       const tokenRow = await sql`select id, shipment_id, expires_at, used_at from delivery_tokens where token = ${token}` as { id: number; shipment_id: number; expires_at: string | null; used_at: string | null }[];
       const t = tokenRow[0];
-      if (!t) return Response.json({ error: 'Token tidak ditemukan' }, { status: 404 });
-      if (t.used_at) return Response.json({ error: 'Token sudah dipakai' }, { status: 400 });
-      if (t.expires_at && new Date(t.expires_at) < new Date()) return Response.json({ error: 'Token kadaluarsa' }, { status: 400 });
+      if (!t) { writeJson(res, { error: 'Token tidak ditemukan' }, 404); return; }
+      if (t.used_at) { writeJson(res, { error: 'Token sudah dipakai' }, 400); return; }
+      if (t.expires_at && new Date(t.expires_at) < new Date()) { writeJson(res, { error: 'Token kadaluarsa' }, 400); return; }
       shipmentId = t.shipment_id;
       tokenId = t.id;
     }
@@ -91,11 +92,11 @@ export default async function handler(req: Request): Promise<Response> {
       const code = body.public_code;
       const row = await sql`select id from shipments where public_code = ${code} limit 1` as { id: number }[];
       const r0 = row[0];
-      if (!r0) return Response.json({ error: 'Resi tidak ditemukan' }, { status: 404 });
+      if (!r0) { writeJson(res, { error: 'Resi tidak ditemukan' }, 404); return; }
       shipmentId = r0.id;
     }
 
-    if (!shipmentId) return Response.json({ error: 'Missing token or public_code' }, { status: 400 });
+    if (!shipmentId) { writeJson(res, { error: 'Missing token or public_code' }, 400); return; }
 
     // Normalize photos: accept either { pathname, size, type } or { dataUrl, size, type }
     const photosInput = body.photos as any[];
@@ -109,25 +110,39 @@ export default async function handler(req: Request): Promise<Response> {
       }
       if (p.dataUrl) {
         const m = String(p.dataUrl).match(/^data:(.+);base64,(.+)$/);
-        if (!m) return Response.json({ error: 'Invalid dataUrl' }, { status: 400 });
+        if (!m) { writeJson(res, { error: 'Invalid dataUrl' }, 400); return; }
         const contentType = m[1];
         const b64 = m[2];
-        if (typeof contentType !== 'string' || typeof b64 !== 'string') {
-          return Response.json({ error: 'Invalid dataUrl' }, { status: 400 });
+        if (typeof contentType !== 'string' || typeof b64 !== 'string') { writeJson(res, { error: 'Invalid dataUrl' }, 400); return; }
+
+        // Convert base64 to bytes. On Node, atob may not exist so prefer Buffer if available.
+        let bytes: Uint8Array;
+        try {
+          if (typeof atob === 'function') {
+            const binaryString = atob(b64);
+            bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+          } else if (typeof Buffer !== 'undefined') {
+            const buf = Buffer.from(b64, 'base64');
+            bytes = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+          } else {
+            writeJson(res, { error: 'Base64 decode not supported in this runtime' }, 500);
+            return;
+          }
+        } catch (err) {
+          writeJson(res, { error: 'Invalid base64 data' }, 400);
+          return;
         }
-        const binaryString = atob(b64);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
+
         if (!blobToken) {
           const MAX_INLINE_BYTES = 2 * 1024 * 1024;
-          if (bytes.length > MAX_INLINE_BYTES) {
-            return Response.json({ error: 'File too large to store inline; BLOB_READ_WRITE_TOKEN required' }, { status: 400 });
-          }
+          if (bytes.length > MAX_INLINE_BYTES) { writeJson(res, { error: 'File too large to store inline; BLOB_READ_WRITE_TOKEN required' }, 400); return; }
           normalizedPhotos.push({ url: p.dataUrl, size: bytes.length, type: contentType });
           continue;
         }
+
         const now = new Date();
         const keyDate = now.toISOString().slice(0, 7).replace('-', '/');
         const uuid = `${now.getTime()}-${Math.random().toString(16).slice(2)}`;
@@ -136,16 +151,18 @@ export default async function handler(req: Request): Promise<Response> {
         let blob;
         try {
           const { put } = await import('@vercel/blob');
-          const file = new Blob([bytes], { type: contentType });
+          const file = new Blob([bytes.buffer as ArrayBuffer], { type: contentType });
           blob = await put(key, file, { access: 'public', token: blobToken });
         } catch (err) {
           console.error('submitPOD: blob upload failed', String(err));
-          return Response.json({ error: 'Blob upload failed' }, { status: 502 });
+          writeJson(res, { error: 'Blob upload failed' }, 502);
+          return;
         }
         normalizedPhotos.push({ pathname: blob.pathname, url: blob.url, size: bytes.length, type: contentType });
         continue;
       }
-      return Response.json({ error: 'Invalid photo payload' }, { status: 400 });
+      writeJson(res, { error: 'Invalid photo payload' }, 400);
+      return;
     }
 
     const photos = normalizedPhotos;
@@ -162,11 +179,12 @@ export default async function handler(req: Request): Promise<Response> {
       ` as { id: number }[];
     } catch (err) {
       console.error('submitPOD: db insert failed', String(err));
-      return Response.json({ error: 'Failed to create POD', detail: String(err) }, { status: 500 });
+      writeJson(res, { error: 'Failed to create POD', detail: String(err) }, 500);
+      return;
     }
 
     const podId = podInsert[0]?.id;
-    if (!podId) return Response.json({ error: 'Failed to create POD' }, { status: 500 });
+    if (!podId) { writeJson(res, { error: 'Failed to create POD' }, 500); return; }
 
     // mark token used if applicable
     if (tokenId) {
@@ -183,38 +201,44 @@ export default async function handler(req: Request): Promise<Response> {
     } catch (err) {
       console.warn('submitPOD: warning: failed to update shipment status', String(err));
     }
-    return Response.json({ ok: true, pod_id: podId });
+    writeJson(res, { ok: true, pod_id: podId });
+    return;
     } catch (err) {
       // Top level catch for unexpected errors — log minimal detail but don't leak secrets
       console.error('submitPOD unexpected error', String(err));
-      return Response.json({ error: 'A server error has occurred' }, { status: 500 });
+      writeJson(res, { error: 'A server error has occurred' }, 500);
+      return;
     }
   } else {
     // Try sync endpoint (admin-only)
     if (endpoint === 'sync-urls' && req.method === 'POST') {
-      return await syncPhotoUrls(req);
+      await syncPhotoUrls(req, res);
+      return;
     }
-    return new Response(null, { status: 404 });
+    res.writeHead(404);
+    res.end();
+    return;
   }
 }
 
 // Admin-only: synchronize photo `url` fields for legacy POD entries that only stored pathname
 // POST /api/pod?endpoint=sync-urls
-export async function syncPhotoUrls(req: any): Promise<Response> {
+export async function syncPhotoUrls(req: any, res?: ServerResponse): Promise<Response | void> {
   const url = safeUrl(req);
   const endpoint = url.searchParams.get('endpoint');
-  if (endpoint !== 'sync-urls' || req.method !== 'POST') return new Response(null, { status: 404 });
+  if (endpoint !== 'sync-urls' || req.method !== 'POST') { if (res) { res.writeHead(404); res.end(); return; } return new Response(null, { status: 404 }); }
   try {
     await requireSession(req);
   } catch (e) {
+    if (res) { writeJson(res, { error: 'Unauthorized' }, 401); return; }
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
   const dbUrl = process.env.DATABASE_URL;
-  if (!dbUrl) return Response.json({ error: 'Missing DATABASE_URL' }, { status: 500 });
+  if (!dbUrl) { if (res) { writeJson(res, { error: 'Missing DATABASE_URL' }, 500); return; } return Response.json({ error: 'Missing DATABASE_URL' }, { status: 500 }); }
   const { neon } = await import('@neondatabase/serverless');
   const sql = neon(dbUrl);
   const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) return Response.json({ error: 'Missing BLOB_READ_WRITE_TOKEN' }, { status: 500 });
+  if (!token) { if (res) { writeJson(res, { error: 'Missing BLOB_READ_WRITE_TOKEN' }, 500); return; } return Response.json({ error: 'Missing BLOB_READ_WRITE_TOKEN' }, { status: 500 }); }
   const { head } = await import('@vercel/blob');
   try {
     const limit = parseInt(url.searchParams.get('limit') || '10');
@@ -242,17 +266,13 @@ export async function syncPhotoUrls(req: any): Promise<Response> {
         updated.push({ id: r.id, updatedCount: photos.filter(p => p?.url).length });
       }
     }
+    if (res) { writeJson(res, { ok: true, updated, processed: rows.length }); return; }
     return Response.json({ ok: true, updated, processed: rows.length });
   } catch (err) {
     console.error('syncPhotoUrls error', err);
+    if (res) { writeJson(res, { error: 'Sync failed', detail: String(err) }, 500); return; }
     return Response.json({ error: 'Sync failed', detail: String(err) }, { status: 500 });
   }
 }
 
-async function readJson(req: Request): Promise<any> {
-  try {
-    return await req.json();
-  } catch {
-    return null;
-  }
-}
+// edge helper removed; use readJsonNode from _lib/http

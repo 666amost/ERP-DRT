@@ -1,6 +1,8 @@
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'nodejs' };
 
 import { getSql } from './_lib/db.js';
+import type { IncomingMessage, ServerResponse } from 'http';
+import { readJsonNode, writeJson } from './_lib/http.js';
 
 type Customer = { id: number; name: string; phone: string | null };
 type CreateCustomerBody = { name: string; phone?: string; address?: string };
@@ -14,19 +16,12 @@ const corsHeaders = {
   'Access-Control-Allow-Credentials': 'true'
 };
 
-function jsonResponse(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders }
-  });
-}
+// replaced by writeJson helper
 
-export default async function handler(req: Request): Promise<Response> {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders });
-  }
+export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (req.method === 'OPTIONS') { res.writeHead(204, corsHeaders); res.end(); return; }
 
-  const url = new URL(req.url);
+  const url = new URL(req.url || '/', 'http://localhost');
   const endpoint = url.searchParams.get('endpoint');
 
   try {
@@ -40,32 +35,31 @@ export default async function handler(req: Request): Promise<Response> {
     } else {
       rows = await sql`select id, name, phone from customers order by name limit 200` as Customer[];
     }
-    return jsonResponse({ items: rows });
+    writeJson(res, { items: rows });
+    return;
   } else if (endpoint === 'create' && req.method === 'POST') {
     let body: CreateCustomerBody;
-    try {
-      body = await req.json() as CreateCustomerBody;
-    } catch {
-      return jsonResponse({ error: 'Invalid JSON' }, 400);
-    }
-    if (!body.name || body.name.trim().length < 2) {
-      return jsonResponse({ error: 'Nama customer wajib', code: ErrorCode.Validation }, 400);
-    }
+    try { body = (await readJsonNode(req)) as CreateCustomerBody; } catch { body = null as any; }
+    if (!body) { writeJson(res, { error: 'Invalid JSON' }, 400); return; }
+    if (!body.name || body.name.trim().length < 2) { writeJson(res, { error: 'Nama customer wajib', code: ErrorCode.Validation }, 400); return; }
     const name = body.name.trim();
     try {
       const rows = await sql`insert into customers (name, phone, address) values (${name}, ${body.phone || null}, ${body.address || null}) returning id, name, phone` as [{ id: number; name: string; phone: string | null }];
-      return jsonResponse(rows[0], 201);
+      writeJson(res, rows[0], 201);
+      return;
     } catch (e: any) {
-      if (e.code === '23505') {
-        return jsonResponse({ error: 'Customer sudah ada', code: ErrorCode.Duplicate }, 409);
-      }
-      return jsonResponse({ error: 'Gagal create customer' }, 500);
+      if (e.code === '23505') { writeJson(res, { error: 'Customer sudah ada', code: ErrorCode.Duplicate }, 409); return; }
+      writeJson(res, { error: 'Gagal create customer' }, 500);
+      return;
     }
   } else {
-    return new Response(null, { status: 404, headers: corsHeaders });
+    res.writeHead(404, corsHeaders);
+    res.end();
+    return;
   }
   } catch (error) {
     console.error('Customers API error:', error);
-    return jsonResponse({ error: 'Internal server error' }, 500);
+    writeJson(res, { error: 'Internal server error' }, 500);
+    return;
   }
 }

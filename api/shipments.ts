@@ -1,6 +1,8 @@
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'nodejs' };
 
 import { getSql } from './_lib/db.js';
+import type { IncomingMessage, ServerResponse } from 'http';
+import { readJsonNode, writeJson } from './_lib/http.js';
 
 type Shipment = {
   id: number;
@@ -47,19 +49,12 @@ const corsHeaders = {
   'Access-Control-Allow-Credentials': 'true'
 };
 
-function jsonResponse(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders }
-  });
-}
+// use writeJson helper
 
-export default async function handler(req: Request): Promise<Response> {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders });
-  }
+export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (req.method === 'OPTIONS') { res.writeHead(204, corsHeaders); res.end(); return; }
 
-  const url = new URL(req.url);
+  const url = new URL(req.url || '/', 'http://localhost');
   const endpoint = url.searchParams.get('endpoint');
 
   try {
@@ -109,7 +104,7 @@ export default async function handler(req: Request): Promise<Response> {
       total = countResult[0]?.count || 0;
     }
     
-    return jsonResponse({
+    writeJson(res, {
       items: shipments,
       pagination: {
         page,
@@ -118,24 +113,20 @@ export default async function handler(req: Request): Promise<Response> {
         pages: Math.ceil(total / limit)
       }
     });
+    return;
   } else if (endpoint === 'create' && req.method === 'POST') {
     let body: CreateShipmentBody;
     
-    try {
-      body = await req.json() as CreateShipmentBody;
-    } catch {
-      return jsonResponse({ error: 'Invalid JSON' }, 400);
-    }
+    try { body = await readJsonNode(req) as CreateShipmentBody; } catch { body = null as any; }
+    if (!body) { writeJson(res, { error: 'Invalid JSON' }, 400); return; }
     
-    if (!body.origin || !body.destination || !body.total_colli) {
-      return jsonResponse({ error: 'Missing required fields' }, 400);
-    }
+    if (!body.origin || !body.destination || !body.total_colli) { writeJson(res, { error: 'Missing required fields' }, 400); return; }
     
     let customerId = body.customer_id || null;
     let customerName = body.customer_name || null;
     if (!customerName && customerId) {
       const c = await sql`select name from customers where id = ${customerId}` as [{ name: string }];
-      if (!c.length) return jsonResponse({ error: 'Invalid customer_id' }, 400);
+      if (!c.length) { writeJson(res, { error: 'Invalid customer_id' }, 400); return; }
       customerName = c[0].name;
     }
     
@@ -177,25 +168,21 @@ export default async function handler(req: Request): Promise<Response> {
       returning id
     ` as [{ id: number }];
     
-    return jsonResponse({ id: result[0].id }, 201);
+    writeJson(res, { id: result[0].id }, 201);
+    return;
   } else if (endpoint === 'update' && req.method === 'PUT') {
     let body: UpdateShipmentBody;
     
-    try {
-      body = await req.json() as UpdateShipmentBody;
-    } catch {
-      return jsonResponse({ error: 'Invalid JSON' }, 400);
-    }
+    try { body = await readJsonNode(req) as UpdateShipmentBody; } catch { body = null as any; }
+    if (!body) { writeJson(res, { error: 'Invalid JSON' }, 400); return; }
     
-    if (!body.id) {
-      return jsonResponse({ error: 'Missing id' }, 400);
-    }
+    if (!body.id) { writeJson(res, { error: 'Missing id' }, 400); return; }
     
     let customerName = body.customer_name;
     let customerId = body.customer_id;
     if (!customerName && customerId) {
       const c = await sql`select name from customers where id = ${customerId}` as [{ name: string }];
-      if (!c.length) return jsonResponse({ error: 'Invalid customer_id' }, 400);
+      if (!c.length) { writeJson(res, { error: 'Invalid customer_id' }, 400); return; }
       customerName = c[0].name;
     }
 
@@ -242,7 +229,7 @@ export default async function handler(req: Request): Promise<Response> {
         params.push(`TRK-${String(nextNum).padStart(3, '0')}`);
       }
     }
-    if (!sets.length) return jsonResponse({ error: 'No fields to update' }, 400);
+    if (!sets.length) { writeJson(res, { error: 'No fields to update' }, 400); return; }
     params.push(body.id);
     
     const setClauses: string[] = [];
@@ -260,22 +247,25 @@ export default async function handler(req: Request): Promise<Response> {
     const updateQuery = `UPDATE shipments SET ${setClauses.join(', ')} WHERE id = ${body.id}`;
     await sql(updateQuery as any);
     
-    return jsonResponse({ success: true });
+    writeJson(res, { success: true });
+    return;
   } else if (endpoint === 'delete' && req.method === 'DELETE') {
     const id = url.searchParams.get('id');
     
-    if (!id) {
-      return jsonResponse({ error: 'Missing id' }, 400);
-    }
+    if (!id) { writeJson(res, { error: 'Missing id' }, 400); return; }
     
     await sql`delete from shipments where id = ${parseInt(id)}`;
     
-    return jsonResponse({ success: true });
+    writeJson(res, { success: true });
+    return;
   } else {
-    return new Response(null, { status: 404, headers: corsHeaders });
+    res.writeHead(404, corsHeaders);
+    res.end();
+    return;
   }
   } catch (error) {
     console.error('Shipments API error:', error);
-    return jsonResponse({ error: 'Internal server error' }, 500);
+    writeJson(res, { error: 'Internal server error' }, 500);
+    return;
   }
 }

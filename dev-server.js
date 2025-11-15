@@ -47,13 +47,19 @@ const server = createServer(async (req, res) => {
         const module = await import(`./api/${apiPath}.ts?t=${Date.now()}`);
         const handler = module.default;
         
+        // If handler expects Node-style (req, res), call directly
+        if (typeof handler === 'function' && handler.length >= 2) {
+          await handler(req, res);
+          return;
+        }
+
         let body = '';
         if (req.method === 'POST' || req.method === 'PUT') {
           for await (const chunk of req) {
             body += chunk.toString();
           }
         }
-        
+
         const request = new Request(`http://localhost:3000${req.url}`, {
           method: req.method,
           headers: Object.fromEntries(
@@ -61,7 +67,7 @@ const server = createServer(async (req, res) => {
           ),
           body: body || undefined
         });
-        
+
         const response = await handler(request);
         
         const headers = Object.fromEntries(response.headers.entries());

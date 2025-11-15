@@ -88,9 +88,14 @@ export type RequireSessionResult = {
 const SESSION_TTL_DAYS = 7;
 const ROTATE_AFTER_HOURS = 24;
 
-export async function requireSession(req: Request): Promise<RequireSessionResult> {
+export async function requireSession(req: any): Promise<RequireSessionResult> {
   const sql = getSql();
-  const cookies = parseCookies(req.headers.get('cookie'));
+  const getHeader = (request: any, name: string): string | null => {
+    const headers = request.headers || {};
+    if (typeof headers.get === 'function') return headers.get(name);
+    return headers[name.toLowerCase()] || null;
+  };
+  const cookies = parseCookies(getHeader(req, 'cookie'));
   const sid = cookies['sid'];
   if (!sid) throw new Response(null, { status: 401 });
 

@@ -1,7 +1,9 @@
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'nodejs' };
 
 import { getSql } from './_lib/db.js';
 import { requireSession } from './_lib/auth.js';
+import type { IncomingMessage, ServerResponse } from 'http';
+import { writeJson } from './_lib/http.js';
 
 type Stats = {
   outgoingToday: number;
@@ -36,32 +38,15 @@ const corsHeaders = {
   'Access-Control-Allow-Credentials': 'true'
 };
 
-function jsonResponse(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      ...corsHeaders
-    }
-  });
-}
+// use writeJson helper
 
-export default async function handler(req: Request): Promise<Response> {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders });
-  }
-  
-  if (req.method !== 'GET') {
-    return new Response(null, { status: 405, headers: corsHeaders });
-  }
+export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (req.method === 'OPTIONS') { res.writeHead(204, corsHeaders); res.end(); return; }
+  if (req.method !== 'GET') { res.writeHead(405, corsHeaders); res.end(); return; }
 
-  try {
-    await requireSession(req);
-  } catch (e) {
-    return new Response(null, { status: 401, headers: corsHeaders });
-  }
+  try { await requireSession(req); } catch (e) { res.writeHead(401, corsHeaders); res.end(); return; }
 
-  const url = new URL(req.url);
+  const url = new URL(req.url || '/', 'http://localhost');
   const endpoint = url.searchParams.get('endpoint');
 
   try {
@@ -94,7 +79,8 @@ export default async function handler(req: Request): Promise<Response> {
         deliveryNotes: notes[0]?.count || 0
       };
       
-      return jsonResponse(stats);
+      writeJson(res, stats);
+      return;
     } else if (endpoint === 'invoices') {
       const invoices = await sql`
         select 
@@ -104,7 +90,8 @@ export default async function handler(req: Request): Promise<Response> {
         limit 10
       ` as Invoice[];
       
-      return jsonResponse({ items: invoices });
+      writeJson(res, { items: invoices });
+      return;
     } else if (endpoint === 'tracking') {
       const shipments = await sql`
         select 
@@ -118,15 +105,19 @@ export default async function handler(req: Request): Promise<Response> {
         limit 10
       ` as Shipment[];
       
-      return jsonResponse({ items: shipments });
+      writeJson(res, { items: shipments });
+      return;
     } else {
-      return new Response(null, { status: 404, headers: corsHeaders });
+      res.writeHead(404, corsHeaders);
+      res.end();
+      return;
     }
   } catch (error) {
     console.error('Dashboard API error:', error);
-    return jsonResponse({ 
+    writeJson(res, { 
       error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error'
     }, 500);
+    return;
   }
 }

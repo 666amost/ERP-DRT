@@ -1,6 +1,7 @@
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'nodejs' };
 
 import { getSql } from './_lib/db.js';
+import type { IncomingMessage, ServerResponse } from 'http';
 
 type City = {
   id: number;
@@ -22,19 +23,30 @@ const corsHeaders = {
   'Access-Control-Allow-Credentials': 'true'
 };
 
-function jsonResponse(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders }
+function writeJson(res: ServerResponse, data: unknown, status = 200): void {
+  res.writeHead(status, { 'Content-Type': 'application/json', ...corsHeaders });
+  res.end(JSON.stringify(data));
+}
+
+async function readJsonNode(req: IncomingMessage): Promise<any> {
+  return await new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    req.on('data', c => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+    req.on('end', () => {
+      try { const s = Buffer.concat(chunks).toString('utf8'); if (!s) return resolve(null); resolve(JSON.parse(s)); } catch { resolve(null); }
+    });
+    req.on('error', () => resolve(null));
   });
 }
 
-export default async function handler(req: Request): Promise<Response> {
+export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    res.writeHead(204, corsHeaders);
+    res.end();
+    return;
   }
 
-  const url = new URL(req.url);
+  const url = new URL(req.url || '/', 'http://localhost');
   const endpoint = url.searchParams.get('endpoint');
 
   try {
@@ -61,18 +73,17 @@ export default async function handler(req: Request): Promise<Response> {
       ` as City[];
     }
     
-    return jsonResponse({ items: cities });
+    writeJson(res, { items: cities });
+    return;
   } else if (endpoint === 'create' && req.method === 'POST') {
-    let body: CreateCityBody;
-    
-    try {
-      body = await req.json() as CreateCityBody;
-    } catch {
-      return jsonResponse({ error: 'Invalid JSON' }, 400);
-    }
+    let body: CreateCityBody | null;
+
+    try { body = await readJsonNode(req) as CreateCityBody; } catch { body = null; }
+    if (!body) { writeJson(res, { error: 'Invalid JSON' }, 400); return; }
     
     if (!body.name || body.name.trim().length === 0 || !body.code || body.code.trim().length === 0) {
-      return jsonResponse({ error: 'City name and code required' }, 400);
+      writeJson(res, { error: 'City name and code required' }, 400);
+      return;
     }
     
     try {
@@ -82,18 +93,23 @@ export default async function handler(req: Request): Promise<Response> {
         returning id, name, code, province
       ` as [{ id: number; name: string; code: string; province: string | null }];
       
-      return jsonResponse(result[0], 201);
+      writeJson(res, result[0], 201);
+      return;
     } catch (e) {
       if ((e as Error).message.includes('duplicate key')) {
-        return jsonResponse({ error: 'City already exists' }, 409);
+        writeJson(res, { error: 'City already exists' }, 409);
+        return;
       }
       throw e;
     }
   } else {
-    return new Response(null, { status: 404, headers: corsHeaders });
+    res.writeHead(404, corsHeaders);
+    res.end();
+    return;
   }
   } catch (error) {
     console.error('Cities API error:', error);
-    return jsonResponse({ error: 'Internal server error' }, 500);
+    writeJson(res, { error: 'Internal server error' }, 500);
+    return;
   }
 }

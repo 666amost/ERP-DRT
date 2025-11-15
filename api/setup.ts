@@ -1,9 +1,11 @@
 export const config = { runtime: 'nodejs' };
 
 import { getSql } from './_lib/db.js';
+import type { IncomingMessage, ServerResponse } from 'http';
+import { writeJson } from './_lib/http.js';
 
-export default async function handler(req: Request): Promise<Response> {
-  if (req.method !== 'POST') return new Response(null, { status: 405 });
+export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (req.method !== 'POST') { res.writeHead(405); res.end(); return; }
   
   try {
     const sql = getSql();
@@ -157,16 +159,11 @@ export default async function handler(req: Request): Promise<Response> {
       returning id
     ` as { id: number }[];
 
-    return Response.json({ 
-      ok: true, 
-      message: 'Database setup complete',
-      admin: { email, id: rows[0]?.id }
-    });
+    writeJson(res, { ok: true, message: 'Database setup complete', admin: { email, id: rows[0]?.id } });
+    return;
   } catch (error: unknown) {
     console.error('Setup error:', error);
-    return Response.json({ 
-      error: 'Setup failed', 
-      message: error instanceof Error ? error.message : 'Unknown error' 
-    }, { status: 500 });
+    writeJson(res, { error: 'Setup failed', message: error instanceof Error ? error.message : 'Unknown error' }, 500);
+    return;
   }
 }

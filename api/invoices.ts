@@ -1,6 +1,8 @@
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'nodejs' };
 
 import { getSql } from './_lib/db.js';
+import type { IncomingMessage, ServerResponse } from 'http';
+import { readJsonNode, writeJson } from './_lib/http.js';
 
 type Invoice = {
   id: number;
@@ -56,19 +58,12 @@ const corsHeaders = {
   'Access-Control-Allow-Credentials': 'true'
 };
 
-function jsonResponse(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders }
-  });
-}
+// use writeJson helper
 
-export default async function handler(req: Request): Promise<Response> {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders });
-  }
+export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (req.method === 'OPTIONS') { res.writeHead(204, corsHeaders); res.end(); return; }
 
-  const url = new URL(req.url);
+  const url = new URL(req.url || '/', 'http://localhost');
   const endpoint = url.searchParams.get('endpoint');
 
   try {
@@ -117,7 +112,7 @@ export default async function handler(req: Request): Promise<Response> {
       total = countResult[0]?.count || 0;
     }
     
-    return jsonResponse({
+    writeJson(res, {
       items: invoices,
       pagination: {
         page,
@@ -129,15 +124,10 @@ export default async function handler(req: Request): Promise<Response> {
   } else if (endpoint === 'create' && req.method === 'POST') {
     let body: CreateInvoiceBody;
     
-    try {
-      body = await req.json() as CreateInvoiceBody;
-    } catch {
-      return jsonResponse({ error: 'Invalid JSON' }, 400);
-    }
+    try { body = await readJsonNode(req) as CreateInvoiceBody; } catch { body = null as any; }
+    if (!body) { writeJson(res, { error: 'Invalid JSON' }, 400); return; }
     
-    if ((!body.customer_name && !body.customer_id) || !body.amount) {
-      return jsonResponse({ error: 'Missing required fields' }, 400);
-    }
+    if ((!body.customer_name && !body.customer_id) || !body.amount) { writeJson(res, { error: 'Missing required fields' }, 400); return; }
     
     const year = new Date().getFullYear();
     const countResult = await sql`
@@ -152,7 +142,7 @@ export default async function handler(req: Request): Promise<Response> {
     let customerId = body.customer_id || null;
     if (!customerName && customerId) {
       const c = await sql`select name from customers where id = ${customerId}` as [{ name: string }];
-      if (!c.length) return jsonResponse({ error: 'Invalid customer_id' }, 400);
+      if (!c.length) { writeJson(res, { error: 'Invalid customer_id' }, 400); return; }
       customerName = c[0].name;
     }
     const result = await sql`
@@ -173,25 +163,21 @@ export default async function handler(req: Request): Promise<Response> {
       returning id
     ` as [{ id: number }];
     
-    return jsonResponse({ id: result[0].id, invoice_number: invoiceNumber }, 201);
+    writeJson(res, { id: result[0].id, invoice_number: invoiceNumber }, 201);
+    return;
   } else if (endpoint === 'update' && req.method === 'PUT') {
     let body: UpdateInvoiceBody;
     
-    try {
-      body = await req.json() as UpdateInvoiceBody;
-    } catch {
-      return jsonResponse({ error: 'Invalid JSON' }, 400);
-    }
+    try { body = await readJsonNode(req) as UpdateInvoiceBody; } catch { body = null as any; }
+    if (!body) { writeJson(res, { error: 'Invalid JSON' }, 400); return; }
     
-    if (!body.id) {
-      return jsonResponse({ error: 'Missing id' }, 400);
-    }
+    if (!body.id) { writeJson(res, { error: 'Missing id' }, 400); return; }
     
     let customerName = body.customer_name;
     let customerId = body.customer_id;
     if (!customerName && customerId) {
       const c = await sql`select name from customers where id = ${customerId}` as [{ name: string }];
-      if (!c.length) return jsonResponse({ error: 'Invalid customer_id' }, 400);
+      if (!c.length) { writeJson(res, { error: 'Invalid customer_id' }, 400); return; }
       customerName = c[0].name;
     }
 
@@ -206,7 +192,7 @@ export default async function handler(req: Request): Promise<Response> {
       sets.push(`status = $${sets.length + 1}`);
       if (body.status === 'paid') sets.push('paid_at = now()');
     }
-    if (!sets.length) return jsonResponse({ error: 'No fields to update' }, 400);
+    if (!sets.length) { writeJson(res, { error: 'No fields to update' }, 400); return; }
     const params: unknown[] = [];
     if (customerName) params.push(customerName);
     if (customerId !== undefined) params.push(customerId);
@@ -233,16 +219,18 @@ export default async function handler(req: Request): Promise<Response> {
     const updateQuery = `UPDATE invoices SET ${setClauses.join(', ')} WHERE id = ${body.id}`;
     await sql(updateQuery as any);
     
-    return jsonResponse({ success: true });
+    writeJson(res, { success: true });
+    return;
   } else if (endpoint === 'items' && req.method === 'GET') {
     const invoiceId = parseInt(url.searchParams.get('invoice_id') || '0');
-    if (!invoiceId) return jsonResponse({ error: 'Missing invoice_id' }, 400);
+    if (!invoiceId) { writeJson(res, { error: 'Missing invoice_id' }, 400); return; }
     const items = await sql`select id, invoice_id, description, quantity::float as quantity, unit_price::float as unit_price, tax_type, item_discount::float as item_discount from invoice_items where invoice_id = ${invoiceId} order by id` as InvoiceItem[];
-    return jsonResponse({ items });
+    writeJson(res, { items });
+    return;
   } else if (endpoint === 'set-items' && req.method === 'POST') {
     let body: { invoice_id: number; items: InvoiceItem[]; tax_percent?: number; discount_amount?: number; notes?: string };
-    try { body = await req.json() as { invoice_id: number; items: InvoiceItem[]; tax_percent?: number; discount_amount?: number; notes?: string }; } catch { return jsonResponse({ error: 'Invalid JSON' }, 400); }
-    if (!body.invoice_id) return jsonResponse({ error: 'Missing invoice_id' }, 400);
+    try { body = await readJsonNode(req) as { invoice_id: number; items: InvoiceItem[]; tax_percent?: number; discount_amount?: number; notes?: string }; } catch { body = null as any; }
+    if (!body || !body.invoice_id) { writeJson(res, { error: 'Missing invoice_id' }, 400); return; }
 
     await sql`delete from invoice_items where invoice_id = ${body.invoice_id}`;
     for (const it of body.items || []) {
@@ -254,22 +242,25 @@ export default async function handler(req: Request): Promise<Response> {
     const tax = (body.tax_percent || 0) * subtotal / 100;
     const total = subtotal + tax - (body.discount_amount || 0);
     await sql`update invoices set amount = ${total}, tax_percent = ${body.tax_percent || 0}, discount_amount = ${body.discount_amount || 0}, notes = ${body.notes || null} where id = ${body.invoice_id}`;
-    return jsonResponse({ success: true, subtotal, total });
+    writeJson(res, { success: true, subtotal, total });
+    return;
   } else if (endpoint === 'delete' && req.method === 'DELETE') {
     const id = url.searchParams.get('id');
     
-    if (!id) {
-      return jsonResponse({ error: 'Missing id' }, 400);
-    }
+    if (!id) { writeJson(res, { error: 'Missing id' }, 400); return; }
     
     await sql`delete from invoices where id = ${parseInt(id)}`;
     
-    return jsonResponse({ success: true });
+    writeJson(res, { success: true });
+    return;
   } else {
-    return new Response(null, { status: 404, headers: corsHeaders });
+    res.writeHead(404, corsHeaders);
+    res.end();
+    return;
   }
   } catch (error) {
     console.error('Invoices API error:', error);
-    return jsonResponse({ error: 'Internal server error' }, 500);
+    writeJson(res, { error: 'Internal server error' }, 500);
+    return;
   }
 }

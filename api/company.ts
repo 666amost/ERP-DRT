@@ -1,6 +1,8 @@
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'nodejs' };
 
 import { getCompanyConfig, getSql } from './_lib/db.js';
+import type { IncomingMessage, ServerResponse } from 'http';
+import { readJsonNode, writeJson } from './_lib/http.js';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,40 +11,36 @@ const corsHeaders = {
   'Access-Control-Allow-Credentials': 'true'
 };
 
-function jsonResponse(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders }
-  });
-}
+// use writeJson helper for Node handlers
 
-export default async function handler(req: Request): Promise<Response> {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders });
-  }
+export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (req.method === 'OPTIONS') { res.writeHead(204, corsHeaders); res.end(); return; }
 
   if (req.method === 'GET') {
     try {
       const sql = getSql();
       const rows = await sql`select id, name, address, phone, email, website, notes from company_config order by id desc limit 1` as Array<any>;
       if (rows && rows.length) {
-        return jsonResponse({ company: rows[0] });
+        writeJson(res, { company: rows[0] });
+        return;
       }
     } catch (e) {
       // ignore DB error and fallback to env
       console.error('company GET DB error:', e);
     }
     const company = getCompanyConfig();
-    return jsonResponse({ company });
+    writeJson(res, { company });
+    return;
   }
 
   if (req.method === 'PUT') {
     // Accept JSON body and persist to DB (upsert)
     let body: any;
     try {
-      body = await req.json();
+      body = await readJsonNode(req);
     } catch {
-      return jsonResponse({ error: 'Invalid JSON' }, 400);
+      writeJson(res, { error: 'Invalid JSON' }, 400);
+      return;
     }
     const allowed = ['name', 'address', 'phone', 'email', 'website', 'notes'];
     const payload: any = {};
@@ -66,19 +64,23 @@ export default async function handler(req: Request): Promise<Response> {
           where id = ${id}
         `;
         const rows = await sql`select id, name, address, phone, email, website, notes from company_config where id = ${id} limit 1` as Array<any>;
-        return jsonResponse({ company: rows[0] });
+        writeJson(res, { company: rows[0] });
+        return;
       }
       const insert = await sql`
         insert into company_config (name, address, phone, email, website, notes) values (
           ${payload.name || null}, ${payload.address || null}, ${payload.phone || null}, ${payload.email || null}, ${payload.website || null}, ${payload.notes || null}
         ) returning id, name, address, phone, email, website, notes
       ` as Array<any>;
-      return jsonResponse({ company: insert[0] }, 201);
+      writeJson(res, { company: insert[0] }, 201);
+      return;
     } catch (e) {
       console.error('company PUT DB error', e);
-      return jsonResponse({ error: 'Failed to save' }, 500);
+      writeJson(res, { error: 'Failed to save' }, 500);
+      return;
     }
   }
-
-  return new Response(null, { status: 404, headers: corsHeaders });
+  res.writeHead(404, corsHeaders);
+  res.end();
+  return;
 }

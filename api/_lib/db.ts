@@ -8,7 +8,7 @@ export function getSql(): Sql {
     console.error('DATABASE_URL is missing in environment');
     throw new Error('Missing DATABASE_URL');
   }
-  console.log('Database URL configured:', dbUrl.substring(0, 30) + '...');
+  // Don't log DATABASE_URL in production/deployed environments to avoid exposing sensitive info
   return neon(dbUrl);
 }
 

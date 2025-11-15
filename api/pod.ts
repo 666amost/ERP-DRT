@@ -21,13 +21,19 @@ type SubmitPodBody = {
   photos: Photo[];
 };
 
-function safeUrl(req: Request): URL {
+function safeUrl(req: any): URL {
   try {
     return new URL(req.url);
   } catch {
-    const host = req.headers.get('host') || 'localhost';
-    const proto = req.headers.get('x-forwarded-proto') || 'http';
-    return new URL(`${proto}://${host}${req.url}`);
+    // Support both Fetch `Request` (headers.get) and Node-style `IncomingMessage` (headers object)
+    const headers = req.headers || {};
+    const getHeader = typeof headers.get === 'function'
+      ? (k: string) => headers.get(k)
+      : (k: string) => headers[k.toLowerCase()] || headers[k];
+    const host = getHeader('host') || 'localhost';
+    const proto = getHeader('x-forwarded-proto') || getHeader('x-forwarded-protocol') || 'http';
+    const path = typeof req.url === 'string' ? req.url : '/';
+    return new URL(`${proto}://${host}${path}`);
   }
 }
 
@@ -101,7 +107,11 @@ export default async function handler(req: Request): Promise<Response> {
         if (!blobToken) return Response.json({ error: 'Missing BLOB_READ_WRITE_TOKEN' }, { status: 500 });
         const m = String(p.dataUrl).match(/^data:(.+);base64,(.+)$/);
         if (!m) return Response.json({ error: 'Invalid dataUrl' }, { status: 400 });
-        const [, contentType, b64] = m;
+        const contentType = m[1];
+        const b64 = m[2];
+        if (typeof contentType !== 'string' || typeof b64 !== 'string') {
+          return Response.json({ error: 'Invalid dataUrl' }, { status: 400 });
+        }
         const buffer = Buffer.from(b64, 'base64');
         const now = new Date();
         const keyDate = now.toISOString().slice(0, 7).replace('-', '/');
@@ -149,8 +159,8 @@ export default async function handler(req: Request): Promise<Response> {
 
 // Admin-only: synchronize photo `url` fields for legacy POD entries that only stored pathname
 // POST /api/pod?endpoint=sync-urls
-export async function syncPhotoUrls(req: Request): Promise<Response> {
-  const url = new URL(req.url);
+export async function syncPhotoUrls(req: any): Promise<Response> {
+  const url = safeUrl(req);
   const endpoint = url.searchParams.get('endpoint');
   if (endpoint !== 'sync-urls' || req.method !== 'POST') return new Response(null, { status: 404 });
   try {

@@ -141,8 +141,8 @@ async function printDeliveryNote(shipment: Shipment) {
 
       <div class="barcode-right" style="margin:12px 0 24px;">
         <div style="font-size:12px;color:#374151;margin-bottom:4px;">Barcode</div>
-        <!-- Use code128 explicitly for surat jalan -->
-        <img src="/api/blob?endpoint=generate&code=${shipment.public_code || ''}&type=code128" alt="Barcode" />
+        <!-- Use Code 128 barcode for surat jalan (precision for labels) -->
+        <img src="/api/blob?endpoint=generate&code=${shipment.public_code || ''}&type=barcode" alt="Barcode (Code 128)" />
       </div>
 
       <div class="info-grid">

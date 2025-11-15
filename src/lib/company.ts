@@ -9,12 +9,12 @@ export type CompanyProfile = {
 let cachedCompany: CompanyProfile | null = null;
 
 export async function getCompany(): Promise<CompanyProfile> {
-  if (cachedCompany) return cachedCompany;
+  if (cachedCompany) return cachedCompany!;
   try {
     const res = await fetch('/api/company');
     const data = await res.json();
     cachedCompany = data.company;
-    return cachedCompany;
+    return cachedCompany!;
   } catch {
     return {
       name: 'SUMBER TRANS EXPRESS',

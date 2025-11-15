@@ -17,9 +17,9 @@
         <Icon icon="mdi:receipt-text-outline" class="text-[20px]" />
         <span>Invoice</span>
       </button>
-      <button @click="$router.push({ name: 'pod-upload', params: { token: 'manual' } })" class="flex flex-col items-center text-xs text-gray-700 dark:text-gray-300 transition-all duration-200 hover:scale-110 active:scale-95" aria-label="POD">
-        <Icon icon="mdi:camera-outline" class="text-[20px]" />
-        <span>POD</span>
+      <button @click="$router.push({ name: 'surat-jalan' })" class="flex flex-col items-center text-xs text-gray-700 dark:text-gray-300 transition-all duration-200 hover:scale-110 active:scale-95" aria-label="Surat Jalan">
+        <Icon icon="mdi:file-document-outline" class="text-[20px]" />
+        <span>Surat Jalan</span>
       </button>
     </div>
   </nav>

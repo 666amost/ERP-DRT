@@ -215,9 +215,22 @@ export default async function handler(req: Request): Promise<Response> {
     if (body.discount_amount !== undefined) params.push(body.discount_amount);
     if (body.notes !== undefined) params.push(body.notes);
     if (body.status) params.push(body.status);
-    const updateSql = `update invoices set ${sets.join(', ')} where id = $${sets.length + 1}`;
     params.push(body.id);
-    await sql(updateSql, params);
+    
+    const setClauses: string[] = [];
+    let paramIndex = 0;
+    if (customerName) setClauses.push(`customer_name = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    if (customerId !== undefined) setClauses.push(`customer_id = ${params[paramIndex++]}`);
+    if (body.amount !== undefined) setClauses.push(`amount = ${params[paramIndex++]}`);
+    if (body.tax_percent !== undefined) setClauses.push(`tax_percent = ${params[paramIndex++]}`);
+    if (body.discount_amount !== undefined) setClauses.push(`discount_amount = ${params[paramIndex++]}`);
+    if (body.notes !== undefined) setClauses.push(`notes = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    if (body.status) {
+      setClauses.push(`status = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+      if (body.status === 'paid') setClauses.push('paid_at = now()');
+    }
+    
+    await sql`UPDATE invoices SET ${sql.unsafe(setClauses.join(', '))} WHERE id = ${body.id}`;
     
     return jsonResponse({ success: true });
   } else if (endpoint === 'items' && req.method === 'GET') {

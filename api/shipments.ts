@@ -243,9 +243,21 @@ export default async function handler(req: Request): Promise<Response> {
       }
     }
     if (!sets.length) return jsonResponse({ error: 'No fields to update' }, 400);
-    const updateSql = `update shipments set ${sets.join(', ')} where id = $${sets.length + 1}`;
     params.push(body.id);
-    await sql(updateSql, params);
+    
+    const setClauses: string[] = [];
+    let paramIndex = 0;
+    if (customerId !== undefined) setClauses.push(`customer_id = ${params[paramIndex++]}`);
+    if (customerName !== undefined) setClauses.push(`customer_name = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    if (body.origin) setClauses.push(`origin = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    if (body.destination) setClauses.push(`destination = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    if (body.eta !== undefined) setClauses.push(`eta = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    if (body.status) setClauses.push(`status = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    if (body.total_colli !== undefined) setClauses.push(`total_colli = ${params[paramIndex++]}`);
+    if (body.vehicle_plate_region !== undefined) setClauses.push(`vehicle_plate_region = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    if (body.regenerate_code) setClauses.push(`public_code = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    
+    await sql`UPDATE shipments SET ${sql.unsafe(setClauses.join(', '))} WHERE id = ${body.id}`;
     
     return jsonResponse({ success: true });
   } else if (endpoint === 'delete' && req.method === 'DELETE') {

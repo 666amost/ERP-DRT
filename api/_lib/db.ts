@@ -11,7 +11,8 @@ export function getSql(): Sql {
   return neon(dbUrl, {
     fetchOptions: {
       cache: 'no-store'
-    }
+    },
+    fullResults: false
   });
 }
 

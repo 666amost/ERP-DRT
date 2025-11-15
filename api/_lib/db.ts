@@ -8,8 +8,11 @@ export function getSql(): Sql {
     console.error('DATABASE_URL is missing in environment');
     throw new Error('Missing DATABASE_URL');
   }
-  // Don't log DATABASE_URL in production/deployed environments to avoid exposing sensitive info
-  return neon(dbUrl);
+  return neon(dbUrl, {
+    fetchOptions: {
+      cache: 'no-store'
+    }
+  });
 }
 
 export type CompanyConfig = {

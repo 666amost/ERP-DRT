@@ -9,12 +9,24 @@ const p = defineProps<Props>();
 <template>
   <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex items-start gap-4 card">
     <div class="h-9 w-9 rounded-lg grid place-items-center bg-primary-light text-primary-dark dark:bg-primary-dark dark:text-primary-light">
-      <Icon :icon="p.icon" class="text-[18px]" />
+      <Icon
+        :icon="p.icon"
+        class="text-[18px]"
+      />
     </div>
     <div class="flex-1">
-      <div class="text-sm text-gray-500 dark:text-gray-300">{{ p.title }}</div>
-      <div class="text-2xl font-semibold mt-1 text-gray-900 dark:text-gray-100">{{ p.value }}</div>
-      <div v-if="p.delta" class="text-xs text-emerald-600 dark:text-emerald-400 mt-1">{{ p.delta }}</div>
+      <div class="text-sm text-gray-500 dark:text-gray-300">
+        {{ p.title }}
+      </div>
+      <div class="text-2xl font-semibold mt-1 text-gray-900 dark:text-gray-100">
+        {{ p.value }}
+      </div>
+      <div
+        v-if="p.delta"
+        class="text-xs text-emerald-600 dark:text-emerald-400 mt-1"
+      >
+        {{ p.delta }}
+      </div>
     </div>
   </div>
 </template>

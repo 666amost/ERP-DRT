@@ -44,35 +44,83 @@ onMounted(load);
 <template>
   <div class="space-y-6">
     <div class="flex items-center justify-between">
-      <div class="text-xl font-semibold">POD Terbaru</div>
-      <Button variant="default" @click="load">Muat Ulang</Button>
+      <div class="text-xl font-semibold">
+        POD Terbaru
+      </div>
+      <Button
+        variant="default"
+        @click="load"
+      >
+        Muat Ulang
+      </Button>
     </div>
 
-    <div v-if="errorMsg" class="text-sm text-red-600">{{ errorMsg }}</div>
-    <div v-if="loading" class="text-sm text-gray-500">Memuat...</div>
+    <div
+      v-if="errorMsg"
+      class="text-sm text-red-600"
+    >
+      {{ errorMsg }}
+    </div>
+    <div
+      v-if="loading"
+      class="text-sm text-gray-500"
+    >
+      Memuat...
+    </div>
 
-    <div v-if="items.length" class="bg-white rounded-xl border border-gray-200 overflow-hidden card">
+    <div
+      v-if="items.length"
+      class="bg-white rounded-xl border border-gray-200 overflow-hidden card"
+    >
       <table class="w-full text-sm">
         <thead class="bg-gray-50 text-gray-600">
           <tr>
-            <th class="text-left px-4 py-3">POD ID</th>
-            <th class="text-left px-4 py-3">Shipment</th>
-            <th class="text-left px-4 py-3">Tanggal</th>
-            <th class="text-left px-4 py-3">Foto</th>
-            <th class="text-left px-4 py-3">Aksi</th>
+            <th class="text-left px-4 py-3">
+              POD ID
+            </th>
+            <th class="text-left px-4 py-3">
+              Shipment
+            </th>
+            <th class="text-left px-4 py-3">
+              Tanggal
+            </th>
+            <th class="text-left px-4 py-3">
+              Foto
+            </th>
+            <th class="text-left px-4 py-3">
+              Aksi
+            </th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="it in items" :key="it.id" class="border-t">
-            <td class="px-4 py-3 font-medium">#{{ it.id }}</td>
-            <td class="px-4 py-3">{{ it.shipment_id }}</td>
-            <td class="px-4 py-3">{{ it.signed_at || '-' }}</td>
+          <tr
+            v-for="it in items"
+            :key="it.id"
+            class="border-t"
+          >
+            <td class="px-4 py-3 font-medium">
+              #{{ it.id }}
+            </td>
             <td class="px-4 py-3">
-              <Badge variant="info">{{ it.photos.length }} foto</Badge>
+              {{ it.shipment_id }}
+            </td>
+            <td class="px-4 py-3">
+              {{ it.signed_at || '-' }}
+            </td>
+            <td class="px-4 py-3">
+              <Badge variant="info">
+                {{ it.photos.length }} foto
+              </Badge>
             </td>
             <td class="px-4 py-3">
               <div class="flex gap-2">
-                <a v-for="(p,i) in it.photos" :key="i" :href="viewUrl(p)" target="_blank" class="text-primary underline">Lihat {{ i+1 }}</a>
+                <a
+                  v-for="(p,i) in it.photos"
+                  :key="i"
+                  :href="viewUrl(p)"
+                  target="_blank"
+                  class="text-primary underline"
+                >Lihat {{ i+1 }}</a>
               </div>
             </td>
           </tr>

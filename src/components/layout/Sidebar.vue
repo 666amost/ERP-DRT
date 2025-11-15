@@ -36,10 +36,18 @@ function handleClick() {
   <aside class="h-screen w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
     <div class="h-16 flex items-center justify-between px-4 gap-3">
       <div class="flex items-center gap-3">
-        <img src="/brand/logo.png" alt="Logo" class="h-9 w-9 rounded-md object-contain border border-gray-200" />
+        <img
+          src="/brand/logo.png"
+          alt="Logo"
+          class="h-9 w-9 rounded-md object-contain border border-gray-200"
+        >
         <div class="leading-tight">
-          <div class="text-sm font-semibold">SUMBER TRANS EXPRESS</div>
-          <div class="text-xs text-gray-500">Operations</div>
+          <div class="text-sm font-semibold">
+            SUMBER TRANS EXPRESS
+          </div>
+          <div class="text-xs text-gray-500">
+            Operations
+          </div>
         </div>
       </div>
       <button
@@ -70,15 +78,21 @@ function handleClick() {
     </nav>
     <div class="mt-auto p-3">
       <div class="flex items-center gap-3 p-3 rounded-lg bg-gray-50">
-        <div class="h-8 w-8 rounded-full bg-violet-500 text-white grid place-items-center text-xs">AD</div>
+        <div class="h-8 w-8 rounded-full bg-violet-500 text-white grid place-items-center text-xs">
+          AD
+        </div>
         <div class="flex-1 text-xs">
-          <div class="font-medium">Admin User</div>
-          <div class="text-gray-500">admin@company.com</div>
+          <div class="font-medium">
+            Admin User
+          </div>
+          <div class="text-gray-500">
+            admin@company.com
+          </div>
         </div>
         <button
-          @click="handleLogout"
           class="h-8 w-8 rounded-lg hover:bg-gray-200 grid place-items-center text-gray-600"
           title="Logout"
+          @click="handleLogout"
         >
           <Icon
             icon="mdi:logout"

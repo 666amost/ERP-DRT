@@ -26,5 +26,4 @@ const classes: Record<string, string> = {
   >
     <slot />
   </button>
-  
 </template>

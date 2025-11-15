@@ -266,34 +266,74 @@ onBeforeUnmount(() => {
   <section class="max-w-lg mx-auto p-4 sm:p-6">
     <div class="flex items-center justify-between mb-4">
       <div>
-        <h2 class="text-lg font-semibold">POD Upload</h2>
-        <p class="text-xs text-gray-500">Token: <span class="font-medium text-gray-700">{{ token || '(tanpa token di route)' }}</span></p>
+        <h2 class="text-lg font-semibold">
+          POD Upload
+        </h2>
+        <p class="text-xs text-gray-500">
+          Token: <span class="font-medium text-gray-700">{{ token || '(tanpa token di route)' }}</span>
+        </p>
       </div>
       <div class="flex gap-2">
-        <button @click="startScanner" :disabled="scanning" class="px-3 py-2 bg-indigo-600 text-white rounded-md text-sm disabled:opacity-60">Scan Resi</button>
-        <button @click="resetScan" class="px-3 py-2 bg-gray-100 text-gray-700 rounded-md text-sm">Reset</button>
+        <button
+          :disabled="scanning"
+          class="px-3 py-2 bg-indigo-600 text-white rounded-md text-sm disabled:opacity-60"
+          @click="startScanner"
+        >
+          Scan Resi
+        </button>
+        <button
+          class="px-3 py-2 bg-gray-100 text-gray-700 rounded-md text-sm"
+          @click="resetScan"
+        >
+          Reset
+        </button>
       </div>
     </div>
 
-    <div v-if="scanning" class="mb-3">
+    <div
+      v-if="scanning"
+      class="mb-3"
+    >
       <div class="w-full rounded-md overflow-hidden border border-gray-200">
-        <video ref="videoRef" autoplay muted playsinline class="w-full h-56 object-cover bg-black"></video>
+        <video
+          ref="videoRef"
+          autoplay
+          muted
+          playsinline
+          class="w-full h-56 object-cover bg-black"
+        />
       </div>
       <div class="mt-2 flex justify-end">
-        <button @click="stopScanner" class="px-3 py-1 bg-red-600 text-white rounded-md text-sm">Stop Scanner</button>
+        <button
+          class="px-3 py-1 bg-red-600 text-white rounded-md text-sm"
+          @click="stopScanner"
+        >
+          Stop Scanner
+        </button>
       </div>
     </div>
 
     <div class="space-y-3 mb-4">
       <div>
         <label class="block text-sm font-medium mb-1">Resi (kode)</label>
-        <input v-model="scannedCode" placeholder="Scan atau masukkan kode resi" class="w-full px-3 py-2 border rounded-md" />
-        <div class="text-xs text-gray-500 mt-1">Scanned at: <span class="font-mono">{{ scannedAt || '-' }}</span></div>
+        <input
+          v-model="scannedCode"
+          placeholder="Scan atau masukkan kode resi"
+          class="w-full px-3 py-2 border rounded-md"
+        >
+        <div class="text-xs text-gray-500 mt-1">
+          Scanned at: <span class="font-mono">{{ scannedAt || '-' }}</span>
+        </div>
       </div>
 
       <div>
         <label class="block text-sm font-medium mb-1">Note (opsional)</label>
-        <textarea v-model="note" rows="3" class="w-full px-3 py-2 border rounded-md" placeholder="Catatan untuk POD (mis. kondisi paket)"></textarea>
+        <textarea
+          v-model="note"
+          rows="3"
+          class="w-full px-3 py-2 border rounded-md"
+          placeholder="Catatan untuk POD (mis. kondisi paket)"
+        />
       </div>
     </div>
 
@@ -301,35 +341,88 @@ onBeforeUnmount(() => {
       <label class="block text-sm font-medium mb-2">Foto POD (max {{ MAX_COUNT }})</label>
       <div class="flex gap-2">
         <label class="inline-flex items-center px-3 py-2 bg-white border rounded-md cursor-pointer text-sm shadow-sm">
-          <input type="file" accept="image/*" capture="environment" multiple :disabled="uploading" class="hidden" @change="pickFiles" />
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            multiple
+            :disabled="uploading"
+            class="hidden"
+            @change="pickFiles"
+          >
           <span class="text-sm">Pick from camera / gallery</span>
         </label>
-        <button @click="startUpload" :disabled="uploading || files.length===0" class="px-3 py-2 bg-emerald-600 text-white rounded-md text-sm disabled:opacity-60">Compress & Upload</button>
+        <button
+          :disabled="uploading || files.length===0"
+          class="px-3 py-2 bg-emerald-600 text-white rounded-md text-sm disabled:opacity-60"
+          @click="startUpload"
+        >
+          Compress & Upload
+        </button>
       </div>
-      <div v-if="files.length" class="mt-3 grid grid-cols-3 gap-2">
-        <div v-for="(f, i) in files" :key="i" class="relative">
-          <img :src="filePreviews[i] || ''" class="w-full h-24 object-cover rounded-md border" />
-          <button @click="removeFile(i)" class="absolute top-1 right-1 bg-white/80 rounded-full p-1 text-xs">✕</button>
+      <div
+        v-if="files.length"
+        class="mt-3 grid grid-cols-3 gap-2"
+      >
+        <div
+          v-for="(f, i) in files"
+          :key="i"
+          class="relative"
+        >
+          <img
+            :src="filePreviews[i] || ''"
+            class="w-full h-24 object-cover rounded-md border"
+          >
+          <button
+            class="absolute top-1 right-1 bg-white/80 rounded-full p-1 text-xs"
+            @click="removeFile(i)"
+          >
+            ✕
+          </button>
         </div>
       </div>
     </div>
 
-    <div v-if="progress.length" class="mb-4">
-      <div v-for="(p, i) in progress" :key="i" class="mb-2">
-        <div class="text-xs">File {{ i + 1 }}: {{ p || 0 }}%</div>
+    <div
+      v-if="progress.length"
+      class="mb-4"
+    >
+      <div
+        v-for="(p, i) in progress"
+        :key="i"
+        class="mb-2"
+      >
+        <div class="text-xs">
+          File {{ i + 1 }}: {{ p || 0 }}%
+        </div>
         <div class="w-full h-2 bg-gray-200 rounded overflow-hidden">
-          <div :style="{ width: (p||0)+ '%' }" class="h-full bg-emerald-500"></div>
+          <div
+            :style="{ width: (p||0)+ '%' }"
+            class="h-full bg-emerald-500"
+          />
         </div>
       </div>
     </div>
 
-      <div v-if="uploads.length" class="mb-6">
-      <h3 class="text-sm font-medium mb-2">Uploaded</h3>
+    <div
+      v-if="uploads.length"
+      class="mb-6"
+    >
+      <h3 class="text-sm font-medium mb-2">
+        Uploaded
+      </h3>
       <ul class="text-sm space-y-1">
-        <li v-for="(u, i) in uploads" :key="i">
+        <li
+          v-for="(u, i) in uploads"
+          :key="i"
+        >
           <span class="font-mono">
             <template v-if="u.url">
-              <a :href="u.url" target="_blank" rel="noopener noreferrer">{{ u.url }}</a>
+              <a
+                :href="u.url"
+                target="_blank"
+                rel="noopener noreferrer"
+              >{{ u.url }}</a>
             </template>
             <template v-else-if="u.pathname">{{ u.pathname }}</template>
             <template v-else-if="u.dataUrl">local:dataUrl</template>
@@ -341,9 +434,17 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="flex items-center justify-between">
-      <div class="text-sm text-red-600"> <span v-if="errorMsg">{{ errorMsg }}</span> </div>
+      <div class="text-sm text-red-600">
+        <span v-if="errorMsg">{{ errorMsg }}</span>
+      </div>
       <div class="flex gap-2">
-        <button @click="submitPOD" :disabled="(token==='manual' && !scannedCode) || uploads.length===0" class="px-4 py-2 bg-indigo-600 text-white rounded-md disabled:opacity-60">Kirim POD</button>
+        <button
+          :disabled="(token==='manual' && !scannedCode) || uploads.length===0"
+          class="px-4 py-2 bg-indigo-600 text-white rounded-md disabled:opacity-60"
+          @click="submitPOD"
+        >
+          Kirim POD
+        </button>
       </div>
     </div>
   </section>

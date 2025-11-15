@@ -10,7 +10,10 @@ const classes: Record<string, string> = {
 </script>
 
 <template>
-  <span class="text-xs px-2.5 py-1 rounded-full font-medium transition-all duration-150" :class="classes[p.variant]">
+  <span
+    class="text-xs px-2.5 py-1 rounded-full font-medium transition-all duration-150"
+    :class="classes[p.variant]"
+  >
     <slot />
   </span>
 </template>

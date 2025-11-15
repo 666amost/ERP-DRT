@@ -65,8 +65,8 @@ async function handleLogin() {
         </div>
 
         <form
-          @submit.prevent="handleLogin"
           class="space-y-4"
+          @submit.prevent="handleLogin"
         >
           <div>
             <label

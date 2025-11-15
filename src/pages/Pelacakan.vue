@@ -98,7 +98,9 @@ watch(statusFilter, () => {
 
 <template>
   <div class="space-y-4 pb-20 lg:pb-0">
-    <div class="text-xl font-semibold">Pelacakan Pengiriman</div>
+    <div class="text-xl font-semibold">
+      Pelacakan Pengiriman
+    </div>
 
     <div class="flex gap-3">
       <input
@@ -106,23 +108,38 @@ watch(statusFilter, () => {
         type="text"
         placeholder="Cari kode tracking, kota, driver..."
         class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 dark:border-gray-600"
-      />
+      >
       <select
         v-model="statusFilter"
         class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 dark:border-gray-600"
       >
-        <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">
+        <option
+          v-for="opt in statusOptions"
+          :key="opt.value"
+          :value="opt.value"
+        >
           {{ opt.label }}
         </option>
       </select>
     </div>
 
-    <div v-if="loading" class="flex items-center justify-center h-64">
-      <div class="text-gray-500 dark:text-gray-400">Loading...</div>
+    <div
+      v-if="loading"
+      class="flex items-center justify-center h-64"
+    >
+      <div class="text-gray-500 dark:text-gray-400">
+        Loading...
+      </div>
     </div>
 
-    <div v-else class="space-y-3">
-      <div v-if="filteredShipments.length === 0" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-8 text-center text-gray-500 dark:text-gray-300 card">
+    <div
+      v-else
+      class="space-y-3"
+    >
+      <div
+        v-if="filteredShipments.length === 0"
+        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-8 text-center text-gray-500 dark:text-gray-300 card"
+      >
         Tidak ada shipment yang sesuai
       </div>
 
@@ -133,7 +150,9 @@ watch(statusFilter, () => {
       >
         <div class="flex items-start justify-between">
           <div>
-            <div class="font-semibold text-lg">{{ ship.public_code }}</div>
+            <div class="font-semibold text-lg">
+              {{ ship.public_code }}
+            </div>
             <div class="text-sm text-gray-600 dark:text-gray-300">
               {{ ship.driver_name || 'Driver' }} 
               <span v-if="ship.driver_phone">• {{ ship.driver_phone }}</span>
@@ -146,22 +165,34 @@ watch(statusFilter, () => {
 
         <div class="flex items-center gap-4 text-sm">
           <div class="flex-1">
-            <div class="text-gray-500">Origin</div>
-            <div class="font-medium">{{ ship.origin }}</div>
+            <div class="text-gray-500">
+              Origin
+            </div>
+            <div class="font-medium">
+              {{ ship.origin }}
+            </div>
           </div>
-          <div class="text-gray-400 dark:text-gray-500">→</div>
+          <div class="text-gray-400 dark:text-gray-500">
+            →
+          </div>
           <div class="flex-1">
-            <div class="text-gray-500">Destination</div>
-            <div class="font-medium">{{ ship.destination }}</div>
+            <div class="text-gray-500">
+              Destination
+            </div>
+            <div class="font-medium">
+              {{ ship.destination }}
+            </div>
           </div>
         </div>
 
         <div>
-            <div class="text-sm text-gray-500 dark:text-gray-400 mb-2">Progress</div>
+          <div class="text-sm text-gray-500 dark:text-gray-400 mb-2">
+            Progress
+          </div>
           <ProgressBar :value="getProgress(ship.status)" />
         </div>
 
-          <div class="flex items-center justify-between text-sm">
+        <div class="flex items-center justify-between text-sm">
           <div>
             <span class="text-gray-500 dark:text-gray-400">Customer:</span>
             <span class="font-medium ml-1 dark:text-gray-100">{{ ship.customer_name || '-' }}</span>

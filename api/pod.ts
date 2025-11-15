@@ -59,16 +59,20 @@ export default async function handler(req: Request): Promise<Response> {
     const dbUrl = process.env.DATABASE_URL;
     if (!dbUrl) return Response.json({ error: 'Missing DATABASE_URL' }, { status: 500 });
 
-    const body = await req.json().catch(() => null) as SubmitPodBody | null;
-    if (!body || !Array.isArray(body.photos) || body.photos.length === 0) {
-      return Response.json({ error: 'Invalid payload' }, { status: 400 });
-    }
+    // Wrap submit handling so any unexpected error returns a safe JSON response
+    try {
+      const body = await req.json().catch(() => null) as SubmitPodBody | null;
+      // Safe debug log: number of photos and flow (token/public_code) - do not log token values
+      try { console.debug('submitPOD: photos', Array.isArray(body?.photos) ? (body?.photos as any[]).length : 0, 'hasToken', !!body?.token, 'hasPublicCode', !!body?.public_code); } catch {}
+      if (!body || !Array.isArray(body.photos) || body.photos.length === 0) {
+        return Response.json({ error: 'Invalid payload' }, { status: 400 });
+      }
 
-    const { neon } = await import('@neondatabase/serverless');
-    const sql = neon(dbUrl);
+      const { neon } = await import('@neondatabase/serverless');
+      const sql = neon(dbUrl);
 
-    let shipmentId: number | null = null;
-    let tokenId: number | null = null;
+      let shipmentId: number | null = null;
+      let tokenId: number | null = null;
 
     // If token provided, validate token and obtain shipment
     if (body.token) {
@@ -104,7 +108,6 @@ export default async function handler(req: Request): Promise<Response> {
         continue;
       }
       if (p.dataUrl) {
-        if (!blobToken) return Response.json({ error: 'Missing BLOB_READ_WRITE_TOKEN' }, { status: 500 });
         const m = String(p.dataUrl).match(/^data:(.+);base64,(.+)$/);
         if (!m) return Response.json({ error: 'Invalid dataUrl' }, { status: 400 });
         const contentType = m[1];
@@ -113,12 +116,28 @@ export default async function handler(req: Request): Promise<Response> {
           return Response.json({ error: 'Invalid dataUrl' }, { status: 400 });
         }
         const buffer = Buffer.from(b64, 'base64');
+        // If we don't have a blob token, fallback to storing the dataUrl inline (but don't allow huge files)
+        if (!blobToken) {
+          const MAX_INLINE_BYTES = 2 * 1024 * 1024; // 2MB limit for inline storage
+          if (buffer.length > MAX_INLINE_BYTES) {
+            return Response.json({ error: 'File too large to store inline; BLOB_READ_WRITE_TOKEN required' }, { status: 400 });
+          }
+          // Save the original dataUrl as photo url; DB will contain the base64 URL in photos
+          normalizedPhotos.push({ url: p.dataUrl, size: buffer.length, type: contentType });
+          continue;
+        }
         const now = new Date();
         const keyDate = now.toISOString().slice(0, 7).replace('-', '/');
         const uuid = `${now.getTime()}-${Math.random().toString(16).slice(2)}`;
         const ext = contentType.includes('png') ? 'png' : contentType.includes('jpeg') ? 'jpg' : 'bin';
         const key = `erp/${keyDate}/${uuid}.${ext}`;
-        const blob = await put(key, buffer, { access: 'public', token: blobToken, contentType });
+        let blob;
+        try {
+          blob = await put(key, buffer, { access: 'public', token: blobToken, contentType });
+        } catch (err) {
+          console.error('submitPOD: blob upload failed', String(err));
+          return Response.json({ error: 'Blob upload failed' }, { status: 502 });
+        }
         normalizedPhotos.push({ pathname: blob.pathname, url: blob.url, size: buffer.length, type: contentType });
         continue;
       }
@@ -130,24 +149,42 @@ export default async function handler(req: Request): Promise<Response> {
     const signedAtValue = body.scanned_at || new Date().toISOString();
     const noteValue = (body as any).note || null;
 
-    const podInsert = await sql`
-      insert into pod (shipment_id, method, signed_at, photos, note)
-      values (${shipmentId}, 'photo_only', ${signedAtValue}, ${JSON.stringify(photos)}::jsonb, ${noteValue})
-      returning id;
-    ` as { id: number }[];
+    let podInsert;
+    try {
+      podInsert = await sql`
+        insert into pod (shipment_id, method, signed_at, photos, note)
+        values (${shipmentId}, 'photo_only', ${signedAtValue}, ${JSON.stringify(photos)}::jsonb, ${noteValue})
+        returning id;
+      ` as { id: number }[];
+    } catch (err) {
+      console.error('submitPOD: db insert failed', String(err));
+      return Response.json({ error: 'Failed to create POD', detail: String(err) }, { status: 500 });
+    }
 
     const podId = podInsert[0]?.id;
     if (!podId) return Response.json({ error: 'Failed to create POD' }, { status: 500 });
 
     // mark token used if applicable
     if (tokenId) {
-      await sql`update delivery_tokens set used_at = now() where id = ${tokenId}`;
+      try {
+        await sql`update delivery_tokens set used_at = now() where id = ${tokenId}`;
+      } catch (err) {
+        console.warn('submitPOD: warning: failed to mark token used', String(err));
+      }
     }
 
     // Mark shipment as DELIVERED on POD submission (manual delivery confirmation)
-    await sql`update shipments set status = 'DELIVERED' where id = ${shipmentId}`;
-
+    try {
+      await sql`update shipments set status = 'DELIVERED' where id = ${shipmentId}`;
+    } catch (err) {
+      console.warn('submitPOD: warning: failed to update shipment status', String(err));
+    }
     return Response.json({ ok: true, pod_id: podId });
+    } catch (err) {
+      // Top level catch for unexpected errors — log minimal detail but don't leak secrets
+      console.error('submitPOD unexpected error', String(err));
+      return Response.json({ error: 'A server error has occurred' }, { status: 500 });
+    }
   } else {
     // Try sync endpoint (admin-only)
     if (endpoint === 'sync-urls' && req.method === 'POST') {

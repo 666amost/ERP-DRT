@@ -119,11 +119,11 @@ loadCities();
         class="w-full px-3 py-2 border border-gray-300 rounded-lg pr-20"
         @focus="showDropdown = true"
         @blur="setTimeout(() => showDropdown = false, 200)"
-      />
+      >
       <button
         type="button"
-        @click="showAddModal = true"
         class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-primary hover:text-primary-dark font-medium"
+        @click="showAddModal = true"
       >
         + Tambah
       </button>
@@ -137,11 +137,18 @@ loadCities();
         v-for="city in filteredCities"
         :key="city.id"
         type="button"
-        @click="selectCity(city.name)"
         class="w-full px-3 py-2 text-left hover:bg-gray-100 text-sm"
+        @click="selectCity(city.name)"
       >
-        <div class="font-medium">{{ city.name }}</div>
-        <div v-if="city.province" class="text-xs text-gray-500">{{ city.province }}</div>
+        <div class="font-medium">
+          {{ city.name }}
+        </div>
+        <div
+          v-if="city.province"
+          class="text-xs text-gray-500"
+        >
+          {{ city.province }}
+        </div>
       </button>
     </div>
 
@@ -151,7 +158,9 @@ loadCities();
       @click.self="showAddModal = false"
     >
       <div class="bg-white rounded-xl p-6 w-full max-w-sm space-y-4 card">
-        <div class="text-lg font-semibold">Tambah Kota Baru</div>
+        <div class="text-lg font-semibold">
+          Tambah Kota Baru
+        </div>
         <div>
           <label class="block text-sm font-medium mb-1">Nama Kota</label>
           <input
@@ -159,7 +168,7 @@ loadCities();
             type="text"
             class="w-full px-3 py-2 border border-gray-300 rounded-lg"
             placeholder="Nama kota"
-          />
+          >
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">Kode (3 huruf)</label>
@@ -169,7 +178,7 @@ loadCities();
             maxlength="3"
             class="w-full px-3 py-2 border border-gray-300 rounded-lg"
             placeholder="JKT, SBY, BTM"
-          />
+          >
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">Provinsi (optional)</label>
@@ -178,21 +187,21 @@ loadCities();
             type="text"
             class="w-full px-3 py-2 border border-gray-300 rounded-lg"
             placeholder="Provinsi"
-          />
+          >
         </div>
         <div class="flex gap-2 justify-end">
           <button
             type="button"
-            @click="showAddModal = false"
             class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            @click="showAddModal = false"
           >
             Batal
           </button>
           <button
             type="button"
-            @click="addNewCity"
             :disabled="loading || !newCityName.trim() || !newCityCode.trim()"
             class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark disabled:opacity-50"
+            @click="addNewCity"
           >
             {{ loading ? 'Loading...' : 'Simpan' }}
           </button>

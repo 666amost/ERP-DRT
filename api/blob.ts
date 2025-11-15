@@ -176,6 +176,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       });
 
       const buffer = await readBody(req);
+      console.debug('blob upload: podToken=', !!podToken, 'bufferSizeBytes=', buffer.byteLength, 'contentType=', contentType);
       const maxBytes = 5 * 1024 * 1024;
       if (buffer.byteLength > maxBytes) {
         res.writeHead(413, corsBase);
@@ -199,10 +200,17 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       }
 
       const uploadOpts: any = { access: 'public', token, contentType };
-      const blob = await put(key, buffer, uploadOpts);
+      let blob;
+      try {
+        blob = await put(key, buffer, uploadOpts);
+      } catch (err) {
+        console.error('put() failed:', String(err), { key, size: buffer.byteLength, contentType });
+        throw err;
+      }
 
-      // Mark token as used
+      // Mark token as used (best effort)
       await sql`update delivery_tokens set used_at = now() where id = ${t.id}`;
+      console.debug('blob upload: success', { podTokenId: t.id, pathname: blob.pathname, size: buffer.byteLength });
 
       res.writeHead(200, corsBase);
       res.end(JSON.stringify({ url: blob.url, pathname: blob.pathname, size: buffer.byteLength, type: contentType }));

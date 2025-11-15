@@ -339,59 +339,101 @@ watch([items, taxPercent, discountAmount], () => {
 <template>
   <div class="space-y-4 pb-20 lg:pb-0">
     <div class="flex items-center justify-between">
-      <div class="text-xl font-semibold">Invoice</div>
-      <Button variant="primary" @click="openCreateModal">+ Tambah Invoice</Button>
+      <div class="text-xl font-semibold">
+        Invoice
+      </div>
+      <Button
+        variant="primary"
+        @click="openCreateModal"
+      >
+        + Tambah Invoice
+      </Button>
     </div>
 
-    <div v-if="loading" class="flex items-center justify-center h-64">
-      <div class="text-gray-500">Loading...</div>
+    <div
+      v-if="loading"
+      class="flex items-center justify-center h-64"
+    >
+      <div class="text-gray-500">
+        Loading...
+      </div>
     </div>
 
     <!-- Desktop Table View -->
-    <div v-else class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden card hidden lg:block transition-all duration-200">
+    <div
+      v-else
+      class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden card hidden lg:block transition-all duration-200"
+    >
       <table class="w-full">
         <thead class="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
           <tr>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">No. Invoice</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">Customer</th>
-            <th class="px-4 py-3 text-right text-xs font-medium text-gray-600">Amount</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">Status</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">Tanggal</th>
-            <th class="px-4 py-3 text-right text-xs font-medium text-gray-600">Actions</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">
+              No. Invoice
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">
+              Customer
+            </th>
+            <th class="px-4 py-3 text-right text-xs font-medium text-gray-600">
+              Amount
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">
+              Status
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">
+              Tanggal
+            </th>
+            <th class="px-4 py-3 text-right text-xs font-medium text-gray-600">
+              Actions
+            </th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
           <tr v-if="invoices.length === 0">
-            <td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+            <td
+              colspan="6"
+              class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"
+            >
               Belum ada invoice
             </td>
           </tr>
-          <tr v-for="inv in invoices" :key="inv.id" class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
-            <td class="px-4 py-3 text-sm font-medium dark:text-gray-200">{{ inv.invoice_number }}</td>
-            <td class="px-4 py-3 text-sm dark:text-gray-300">{{ inv.customer_name }}</td>
-            <td class="px-4 py-3 text-sm text-right font-semibold dark:text-gray-100">{{ formatRupiah(inv.amount) }}</td>
+          <tr
+            v-for="inv in invoices"
+            :key="inv.id"
+            class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150"
+          >
+            <td class="px-4 py-3 text-sm font-medium dark:text-gray-200">
+              {{ inv.invoice_number }}
+            </td>
+            <td class="px-4 py-3 text-sm dark:text-gray-300">
+              {{ inv.customer_name }}
+            </td>
+            <td class="px-4 py-3 text-sm text-right font-semibold dark:text-gray-100">
+              {{ formatRupiah(inv.amount) }}
+            </td>
             <td class="px-4 py-3">
               <Badge :variant="inv.status === 'paid' ? 'success' : 'warning'">
                 {{ inv.status === 'paid' ? 'Paid' : 'Pending' }}
               </Badge>
             </td>
-            <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ formatDate(inv.issued_at) }}</td>
+            <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+              {{ formatDate(inv.issued_at) }}
+            </td>
             <td class="px-4 py-3 text-right space-x-2">
               <button
-                @click="openEditModal(inv)"
                 class="text-primary hover:text-primary-dark dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium transition-colors"
+                @click="openEditModal(inv)"
               >
                 Edit
               </button>
               <button
-                @click="printInvoice(inv)"
                 class="text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 text-sm font-medium transition-colors"
+                @click="printInvoice(inv)"
               >
                 Print
               </button>
               <button
-                @click="deleteInvoice(inv.id)"
                 class="text-red-600 hover:text-red-700 text-sm font-medium"
+                @click="deleteInvoice(inv.id)"
               >
                 Delete
               </button>
@@ -402,32 +444,73 @@ watch([items, taxPercent, discountAmount], () => {
     </div>
 
     <!-- Mobile Card View -->
-    <div v-if="!loading" class="lg:hidden space-y-3">
-      <div v-if="invoices.length === 0" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 text-center">
-        <p class="text-sm text-gray-500 dark:text-gray-400">Belum ada invoice</p>
+    <div
+      v-if="!loading"
+      class="lg:hidden space-y-3"
+    >
+      <div
+        v-if="invoices.length === 0"
+        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 text-center"
+      >
+        <p class="text-sm text-gray-500 dark:text-gray-400">
+          Belum ada invoice
+        </p>
       </div>
-      <div v-for="inv in invoices" :key="inv.id" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md">
+      <div
+        v-for="inv in invoices"
+        :key="inv.id"
+        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md"
+      >
         <div class="flex items-start justify-between">
           <div>
-            <div class="text-sm font-semibold dark:text-gray-100">{{ inv.invoice_number }}</div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{{ inv.customer_name }}</div>
+            <div class="text-sm font-semibold dark:text-gray-100">
+              {{ inv.invoice_number }}
+            </div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {{ inv.customer_name }}
+            </div>
           </div>
-          <Badge :variant="inv.status === 'paid' ? 'success' : 'warning'">{{ inv.status === 'paid' ? 'Paid' : 'Pending' }}</Badge>
+          <Badge :variant="inv.status === 'paid' ? 'success' : 'warning'">
+            {{ inv.status === 'paid' ? 'Paid' : 'Pending' }}
+          </Badge>
         </div>
         <div class="text-sm dark:text-gray-300">
           <div class="flex items-center gap-2">
-            <Icon icon="mdi:receipt-text-outline" class="text-[18px] text-gray-500 dark:text-gray-400" />
-            <div class="flex-1 text-right font-semibold dark:text-gray-100">{{ formatRupiah(inv.amount) }}</div>
+            <Icon
+              icon="mdi:receipt-text-outline"
+              class="text-[18px] text-gray-500 dark:text-gray-400"
+            />
+            <div class="flex-1 text-right font-semibold dark:text-gray-100">
+              {{ formatRupiah(inv.amount) }}
+            </div>
           </div>
           <div class="flex items-center gap-2 mt-1">
-            <Icon icon="mdi:calendar-outline" class="text-[18px] text-gray-500 dark:text-gray-400" />
+            <Icon
+              icon="mdi:calendar-outline"
+              class="text-[18px] text-gray-500 dark:text-gray-400"
+            />
             <span class="text-sm">{{ formatDate(inv.issued_at) }}</span>
           </div>
         </div>
         <div class="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
-          <button @click="openEditModal(inv)" class="flex-1 py-2 text-xs font-medium text-primary dark:text-blue-400 bg-primary-light dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">Edit</button>
-          <button @click="printInvoice(inv)" class="flex-1 py-2 text-xs font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors">Print</button>
-          <button @click="deleteInvoice(inv.id)" class="flex-1 py-2 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors">Delete</button>
+          <button
+            class="flex-1 py-2 text-xs font-medium text-primary dark:text-blue-400 bg-primary-light dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+            @click="openEditModal(inv)"
+          >
+            Edit
+          </button>
+          <button
+            class="flex-1 py-2 text-xs font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
+            @click="printInvoice(inv)"
+          >
+            Print
+          </button>
+          <button
+            class="flex-1 py-2 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+            @click="deleteInvoice(inv.id)"
+          >
+            Delete
+          </button>
         </div>
       </div>
     </div>
@@ -441,10 +524,14 @@ watch([items, taxPercent, discountAmount], () => {
         <div class="text-lg font-semibold">
           {{ editingId ? 'Edit Invoice' : 'Tambah Invoice' }}
         </div>
-          <div class="space-y-3">
+        <div class="space-y-3">
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
             <div class="sm:col-span-2">
-              <CustomerAutocomplete v-model="form.customer_name" label="Customer" @selected="(c: { id: number; name: string }) => { form.customer_id = c.id; form.customer_name = c.name; }" />
+              <CustomerAutocomplete
+                v-model="form.customer_name"
+                label="Customer"
+                @selected="(c: { id: number; name: string }) => { form.customer_id = c.id; form.customer_name = c.name; }"
+              />
             </div>
             <div class="flex flex-col gap-3">
               <div>
@@ -457,7 +544,7 @@ watch([items, taxPercent, discountAmount], () => {
                   readonly
                   inputmode="numeric"
                   placeholder="1000000"
-                />
+                >
               </div>
               <div>
                 <label class="block text-sm font-medium mb-1">Status</label>
@@ -465,9 +552,15 @@ watch([items, taxPercent, discountAmount], () => {
                   v-model="form.status"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 >
-                  <option value="pending">Pending</option>
-                  <option value="paid">Paid</option>
-                  <option value="cancelled">Cancelled</option>
+                  <option value="pending">
+                    Pending
+                  </option>
+                  <option value="paid">
+                    Paid
+                  </option>
+                  <option value="cancelled">
+                    Cancelled
+                  </option>
                 </select>
               </div>
             </div>
@@ -475,43 +568,119 @@ watch([items, taxPercent, discountAmount], () => {
           <div>
             <label class="block text-sm font-medium mb-1">Item</label>
             <div class="space-y-2">
-              <div v-for="(it, idx) in items" :key="idx" class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
-                <input v-model="it.description" class="col-span-1 sm:col-span-4 px-3 py-2 border border-gray-300 rounded-lg" placeholder="Deskripsi" />
-                <input v-model.number="it.quantity" type="number" min="0" class="col-span-1 sm:col-span-1 px-3 py-2 border border-gray-300 rounded-lg text-right" placeholder="Qty" />
-                <input v-model.number="it.unit_price" type="number" min="0" class="col-span-1 sm:col-span-2 px-3 py-2 border border-gray-300 rounded-lg text-right" placeholder="Harga" />
-                <select v-model="it.tax_type" class="col-span-1 sm:col-span-2 px-3 py-2 border border-gray-300 rounded-lg">
-                  <option value="include">PPN Incl</option>
-                  <option value="exclude">PPN Excl</option>
-                  <option value="exempt">Exempt</option>
+              <div
+                v-for="(it, idx) in items"
+                :key="idx"
+                class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center"
+              >
+                <input
+                  v-model="it.description"
+                  class="col-span-1 sm:col-span-4 px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder="Deskripsi"
+                >
+                <input
+                  v-model.number="it.quantity"
+                  type="number"
+                  min="0"
+                  class="col-span-1 sm:col-span-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
+                  placeholder="Qty"
+                >
+                <input
+                  v-model.number="it.unit_price"
+                  type="number"
+                  min="0"
+                  class="col-span-1 sm:col-span-2 px-3 py-2 border border-gray-300 rounded-lg text-right"
+                  placeholder="Harga"
+                >
+                <select
+                  v-model="it.tax_type"
+                  class="col-span-1 sm:col-span-2 px-3 py-2 border border-gray-300 rounded-lg"
+                >
+                  <option value="include">
+                    PPN Incl
+                  </option>
+                  <option value="exclude">
+                    PPN Excl
+                  </option>
+                  <option value="exempt">
+                    Exempt
+                  </option>
                 </select>
-                <input v-model.number="it.item_discount" type="number" min="0" class="col-span-1 sm:col-span-2 px-3 py-2 border border-gray-300 rounded-lg text-right" placeholder="Diskon" />
-                <button type="button" @click="removeItem(idx)" class="col-span-1 sm:col-span-1 px-3 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100">X</button>
+                <input
+                  v-model.number="it.item_discount"
+                  type="number"
+                  min="0"
+                  class="col-span-1 sm:col-span-2 px-3 py-2 border border-gray-300 rounded-lg text-right"
+                  placeholder="Diskon"
+                >
+                <button
+                  type="button"
+                  class="col-span-1 sm:col-span-1 px-3 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100"
+                  @click="removeItem(idx)"
+                >
+                  X
+                </button>
               </div>
               <div class="flex flex-col sm:flex-row justify-between items-center text-sm gap-2">
-                <button type="button" @click="addItem" class="px-3 py-2 rounded-lg bg-primary-light text-primary hover:bg-blue-100 w-full sm:w-auto">+ Tambah Item</button>
-                <div class="font-semibold">Subtotal: {{ formatRupiah(calcSubtotal()) }} · Total: {{ formatRupiah(calcTotal()) }}</div>
+                <button
+                  type="button"
+                  class="px-3 py-2 rounded-lg bg-primary-light text-primary hover:bg-blue-100 w-full sm:w-auto"
+                  @click="addItem"
+                >
+                  + Tambah Item
+                </button>
+                <div class="font-semibold">
+                  Subtotal: {{ formatRupiah(calcSubtotal()) }} · Total: {{ formatRupiah(calcTotal()) }}
+                </div>
               </div>
             </div>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block text-sm font-medium mb-1">PPN (%)</label>
-              <input v-model.number="taxPercent" type="number" min="0" step="0.01" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-right" placeholder="11" />
+              <input
+                v-model.number="taxPercent"
+                type="number"
+                min="0"
+                step="0.01"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-right"
+                placeholder="11"
+              >
             </div>
             <div>
               <label class="block text-sm font-medium mb-1">Diskon</label>
-              <input v-model.number="discountAmount" type="number" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-right" placeholder="0" />
+              <input
+                v-model.number="discountAmount"
+                type="number"
+                min="0"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-right"
+                placeholder="0"
+              >
             </div>
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">Catatan</label>
-            <textarea v-model="notes" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Catatan tambahan ditampilkan di bagian bawah invoice"></textarea>
+            <textarea
+              v-model="notes"
+              rows="3"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              placeholder="Catatan tambahan ditampilkan di bagian bawah invoice"
+            />
           </div>
-          
         </div>
         <div class="flex gap-2 justify-end">
-          <Button variant="default" @click="showModal = false">Batal</Button>
-          <Button variant="primary" @click="saveInvoice">Simpan</Button>
+          <Button
+            variant="default"
+            @click="showModal = false"
+          >
+            Batal
+          </Button>
+          <Button
+            variant="primary"
+            @click="saveInvoice"
+          >
+            Simpan
+          </Button>
         </div>
       </div>
     </div>

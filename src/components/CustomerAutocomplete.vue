@@ -65,29 +65,87 @@ loadCustomers();
   <div class="relative">
     <label class="block text-sm font-medium mb-1">{{ label }}</label>
     <div class="relative">
-      <input v-model="query" type="text" :placeholder="placeholder||'Pilih atau ketik customer...'" class="w-full px-3 py-2 border border-gray-300 rounded-lg pr-20" @focus="show=true" @blur="setTimeout(()=>show=false,200)" />
-      <button type="button" @click="showModal=true" class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-primary hover:text-primary-dark font-medium">+ Tambah</button>
-    </div>
-    <div v-if="show && filtered.length>0" class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-      <button v-for="c in filtered" :key="c.id" type="button" @click="pick(c)" class="w-full px-3 py-2 text-left hover:bg-gray-100 text-sm">
-        <div class="font-medium">{{ c.name }}</div>
-        <div v-if="c.phone" class="text-xs text-gray-500">{{ c.phone }}</div>
+      <input
+        v-model="query"
+        type="text"
+        :placeholder="placeholder||'Pilih atau ketik customer...'"
+        class="w-full px-3 py-2 border border-gray-300 rounded-lg pr-20"
+        @focus="show=true"
+        @blur="setTimeout(()=>show=false,200)"
+      >
+      <button
+        type="button"
+        class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-primary hover:text-primary-dark font-medium"
+        @click="showModal=true"
+      >
+        + Tambah
       </button>
     </div>
-    <div v-if="showModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @click.self="showModal=false">
+    <div
+      v-if="show && filtered.length>0"
+      class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+    >
+      <button
+        v-for="c in filtered"
+        :key="c.id"
+        type="button"
+        class="w-full px-3 py-2 text-left hover:bg-gray-100 text-sm"
+        @click="pick(c)"
+      >
+        <div class="font-medium">
+          {{ c.name }}
+        </div>
+        <div
+          v-if="c.phone"
+          class="text-xs text-gray-500"
+        >
+          {{ c.phone }}
+        </div>
+      </button>
+    </div>
+    <div
+      v-if="showModal"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      @click.self="showModal=false"
+    >
       <div class="bg-white rounded-xl p-6 w-full max-w-sm space-y-4 card">
-        <div class="text-lg font-semibold">Tambah Customer Baru</div>
+        <div class="text-lg font-semibold">
+          Tambah Customer Baru
+        </div>
         <div>
           <label class="block text-sm font-medium mb-1">Nama</label>
-          <input v-model="newName" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Nama customer" />
+          <input
+            v-model="newName"
+            type="text"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            placeholder="Nama customer"
+          >
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">Telepon (opsional)</label>
-          <input v-model="newPhone" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="0812xxxxx" />
+          <input
+            v-model="newPhone"
+            type="text"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            placeholder="0812xxxxx"
+          >
         </div>
         <div class="flex gap-2 justify-end">
-          <button type="button" @click="showModal=false" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Batal</button>
-          <button type="button" @click="addCustomer" :disabled="loading || !newName.trim()" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark disabled:opacity-50">{{ loading?'Loading...':'Simpan' }}</button>
+          <button
+            type="button"
+            class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            @click="showModal=false"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            :disabled="loading || !newName.trim()"
+            class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark disabled:opacity-50"
+            @click="addCustomer"
+          >
+            {{ loading?'Loading...':'Simpan' }}
+          </button>
         </div>
       </div>
     </div>

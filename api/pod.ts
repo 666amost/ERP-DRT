@@ -61,7 +61,7 @@ export default async function handler(req: Request): Promise<Response> {
 
     // Wrap submit handling so any unexpected error returns a safe JSON response
     try {
-      const body = await req.json().catch(() => null) as SubmitPodBody | null;
+        const body = await readJson(req) as SubmitPodBody | null;
       // Safe debug log: number of photos and flow (token/public_code) - do not log token values
       try { console.debug('submitPOD: photos', Array.isArray(body?.photos) ? (body?.photos as any[]).length : 0, 'hasToken', !!body?.token, 'hasPublicCode', !!body?.public_code); } catch {}
       if (!body || !Array.isArray(body.photos) || body.photos.length === 0) {
@@ -244,4 +244,33 @@ export async function syncPhotoUrls(req: any): Promise<Response> {
     console.error('syncPhotoUrls error', err);
     return Response.json({ error: 'Sync failed', detail: String(err) }, { status: 500 });
   }
+}
+
+async function readJson(req: any): Promise<any> {
+  // If runtime provides Fetch Request with json(), use it
+  if (req && typeof req.json === 'function') {
+    try {
+      return await req.json();
+    } catch {
+      return null;
+    }
+  }
+  // Otherwise assume Node IncomingMessage and read the raw body
+  if (req && typeof req.on === 'function') {
+    return await new Promise((resolve) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (c: any) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+      req.on('end', () => {
+        try {
+          const s = Buffer.concat(chunks).toString('utf8');
+          if (!s) return resolve(null);
+          resolve(JSON.parse(s));
+        } catch {
+          resolve(null);
+        }
+      });
+      req.on('error', () => resolve(null));
+    });
+  }
+  return null;
 }

@@ -13,7 +13,7 @@ const errorMsg = ref('');
 async function load() {
   loading.value = true;
   errorMsg.value = '';
-    const res = await fetch('/api/pod?endpoint=list');
+  const res = await fetch('/api/pod?endpoint=list');
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     errorMsg.value = data.error || 'Gagal memuat POD';

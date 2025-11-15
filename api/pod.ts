@@ -4,13 +4,13 @@ import { getSql } from './_lib/db.js';
 import { requireSession } from './_lib/auth.js';
 import { put } from '@vercel/blob';
 
-type Photo = { pathname: string; size: number; type: string };
+type Photo = { pathname?: string; url?: string; size: number; type: string };
 
 type Row = {
   id: number;
   shipment_id: number;
   signed_at: string | null;
-  photos: Array<{ pathname: string; size: number; type: string }>;
+  photos: Array<{ pathname?: string; url?: string; size: number; type: string }>;
 };
 
 type SubmitPodBody = {
@@ -46,6 +46,34 @@ export default async function handler(req: Request): Promise<Response> {
     try {
       const { setCookieHeader } = await requireSession(req);
       const rows = await sql`select id, shipment_id, signed_at, photos from pod order by id desc limit 50` as Row[];
+      
+      const token = process.env.BLOB_READ_WRITE_TOKEN;
+      if (token) {
+        const { head } = await import('@vercel/blob');
+        for (const row of rows) {
+          let changed = false;
+          for (let i = 0; i < row.photos.length; i++) {
+            const p = row.photos[i];
+            if (p && !p.url && p.pathname) {
+              try {
+                const meta = await head(p.pathname, { token });
+                if (meta?.url) {
+                  row.photos[i] = { pathname: p.pathname, url: meta.url, size: p.size, type: p.type };
+                  changed = true;
+                }
+              } catch (err) {
+                console.warn('list: failed to get url for', p.pathname);
+              }
+            }
+          }
+          if (changed) {
+            await sql`update pod set photos = ${JSON.stringify(row.photos)}::jsonb where id = ${row.id}`.catch(err => {
+              console.warn('list: failed to update pod', row.id, err);
+            });
+          }
+        }
+      }
+      
       const res = Response.json({ items: rows });
       if (setCookieHeader) {
         res.headers.set('set-cookie', setCookieHeader);

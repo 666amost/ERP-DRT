@@ -1,4 +1,4 @@
-export const config = { runtime: 'nodejs' };
+export const config = { runtime: 'edge' };
 
 import { getSql } from './_lib/db.js';
 import { requireSession } from './_lib/auth.js';

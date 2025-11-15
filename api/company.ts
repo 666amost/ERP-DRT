@@ -1,4 +1,4 @@
-export const config = { runtime: 'nodejs' };
+export const config = { runtime: 'edge' };
 
 import { getCompanyConfig, getSql } from './_lib/db.js';
 

@@ -2,7 +2,6 @@ export const config = { runtime: 'edge' };
 
 import { getSql } from './_lib/db.js';
 import { requireSession } from './_lib/auth.js';
-import { put } from '@vercel/blob';
 
 type Photo = { pathname?: string; url?: string; size: number; type: string };
 
@@ -136,7 +135,9 @@ export default async function handler(req: Request): Promise<Response> {
         const key = `erp/${keyDate}/${uuid}.${ext}`;
         let blob;
         try {
-          blob = await put(key, bytes, { access: 'public', token: blobToken, contentType });
+          const { put } = await import('@vercel/blob');
+          const file = new Blob([bytes], { type: contentType });
+          blob = await put(key, file, { access: 'public', token: blobToken });
         } catch (err) {
           console.error('submitPOD: blob upload failed', String(err));
           return Response.json({ error: 'Blob upload failed' }, { status: 502 });

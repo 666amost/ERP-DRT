@@ -230,7 +230,8 @@ export default async function handler(req: Request): Promise<Response> {
       if (body.status === 'paid') setClauses.push('paid_at = now()');
     }
     
-    await sql`UPDATE invoices SET ${sql.unsafe(setClauses.join(', '))} WHERE id = ${body.id}`;
+    const updateQuery = `UPDATE invoices SET ${setClauses.join(', ')} WHERE id = ${body.id}`;
+    await sql(updateQuery as any);
     
     return jsonResponse({ success: true });
   } else if (endpoint === 'items' && req.method === 'GET') {

@@ -257,7 +257,8 @@ export default async function handler(req: Request): Promise<Response> {
     if (body.vehicle_plate_region !== undefined) setClauses.push(`vehicle_plate_region = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (body.regenerate_code) setClauses.push(`public_code = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     
-    await sql`UPDATE shipments SET ${sql.unsafe(setClauses.join(', '))} WHERE id = ${body.id}`;
+    const updateQuery = `UPDATE shipments SET ${setClauses.join(', ')} WHERE id = ${body.id}`;
+    await sql(updateQuery as any);
     
     return jsonResponse({ success: true });
   } else if (endpoint === 'delete' && req.method === 'DELETE') {

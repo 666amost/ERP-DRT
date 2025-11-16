@@ -9,8 +9,10 @@ import DashboardChart from '../components/dashboard/DashboardChart.vue';
 import InvoiceTable from '../components/InvoiceTable.vue';
 import http from '../lib/http';
 import { useFormatters } from '../composables/useFormatters';
+import type { EChartsCoreOption } from 'echarts/core';
 
-const { formatRupiah, formatDate } = useFormatters();
+// Destructuring not used in this page; keep useFormatters available if needed later
+useFormatters();
 
 type Stats = {
   outgoingToday: number;
@@ -29,14 +31,6 @@ type Shipment = {
   driver_name: string | null;
 };
 
-type Invoice = {
-  id: number;
-  invoice_number: string;
-  customer_name: string;
-  amount: number;
-  status: string;
-  issued_at: string;
-};
 
 const stats = ref<Stats>({ outgoingToday: 0, activeShipments: 0, pendingInvoices: 0, deliveryNotes: 0 });
 const tracking = ref<Shipment[]>([]);
@@ -44,7 +38,7 @@ const trend = ref<{ day: string; count: number }[]>([]);
 const loading = ref(true);
 const router = useRouter();
 
-const lineOption = computed(() => {
+const lineOption = computed<EChartsCoreOption>(() => {
   const days = trend.value.length > 0 ? trend.value.map(t => new Date(t.day).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })) : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const base = trend.value.length > 0 ? trend.value.map(t => t.count) : [20, 30, 28, 40, 38, 50, stats.value.outgoingToday || 25];
   return {
@@ -54,7 +48,7 @@ const lineOption = computed(() => {
     series: [
       { name: 'Outgoing', type: 'line', smooth: true, data: base, areaStyle: {} }
     ],
-  } as any;
+  } as EChartsCoreOption;
 });
 
 function viewAllInvoices() {
@@ -140,24 +134,19 @@ onMounted(() => {
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 card">
         <div class="font-medium mb-3 dark:text-gray-100">
-          POD (Proof of Delivery)
+          Invoice Terbaru
         </div>
-        <div class="space-y-2">
-          <Button
-            variant="primary"
-            @click="$router.push({ name: 'pod-upload', params: { token: 'manual' } })"
-          >
-            Upload POD
-          </Button>
-          <Button
-            variant="default"
-            @click="$router.push({ name: 'admin-pod' })"
-          >
-            Daftar POD Admin
-          </Button>
+        <div class="grid gap-4">
+          <DashboardChart :option="lineOption" />
+          <InvoiceTable />
         </div>
-        <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-          Upload foto POD, lihat status, dan kelola dokumen pengiriman.
+        <div class="mt-4 flex gap-2">
+          <Button variant="primary" @click="addInvoice">
+            Tambah Invoice
+          </Button>
+          <Button variant="default" @click="viewAllInvoices">
+            Lihat Semua
+          </Button>
         </div>
       </div>
       <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 card">
@@ -199,19 +188,24 @@ onMounted(() => {
       </div>
       <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 card">
         <div class="font-medium mb-3 dark:text-gray-100">
-          Invoice Terbaru
+          POD (Proof of Delivery)
         </div>
-        <div class="grid gap-4">
-          <DashboardChart :option="lineOption" />
-          <InvoiceTable />
+        <div class="space-y-2">
+          <Button
+            variant="primary"
+            @click="$router.push({ name: 'pod-upload', params: { token: 'manual' } })"
+          >
+            Upload POD
+          </Button>
+          <Button
+            variant="default"
+            @click="$router.push({ name: 'admin-pod' })"
+          >
+            Daftar POD Admin
+          </Button>
         </div>
-        <div class="mt-4 flex gap-2">
-          <Button variant="primary" @click="addInvoice">
-            Tambah Invoice
-          </Button>
-          <Button variant="default" @click="viewAllInvoices">
-            Lihat Semua
-          </Button>
+        <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          Upload foto POD, lihat status, dan kelola dokumen pengiriman.
         </div>
       </div>
     </div>

@@ -117,7 +117,7 @@ async function loadInvoices() {
   try {
     const res = await fetch('/api/invoices?endpoint=list');
     const data = await res.json();
-    invoices.value = (data.items || []).map((x: any) => ({
+    invoices.value = (data.items || []).map((x: Partial<Invoice>) => ({
       ...x,
       tax_percent: Number(x.tax_percent || 0),
       discount_amount: Number(x.discount_amount || 0)
@@ -221,7 +221,9 @@ async function saveInvoice() {
         if (typeof newId === 'number') {
           await saveItemsForInvoice(newId);
         }
-      } catch {
+      } catch (err) {
+        // ignore parse error but log for debug
+        console.warn('Create invoice parse error', err);
       }
     }
     showModal.value = false;
@@ -274,9 +276,9 @@ watch(() => route.query.create, (val) => {
 // Clear create query when modal closed
 watch(() => showModal.value, (val) => {
   if (!val && route.query.create) {
-    const newQuery = { ...route.query } as Record<string, any>;
-    delete newQuery.create;
-    router.replace({ name: 'invoice', query: newQuery as any });
+    const newQuery = { ...route.query } as Record<string, unknown>;
+    delete (newQuery as Record<string, unknown>)['create'];
+    router.replace({ name: 'invoice', query: newQuery as Record<string, unknown> });
   }
 });
 

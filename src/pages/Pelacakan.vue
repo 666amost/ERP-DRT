@@ -92,7 +92,7 @@ onMounted(() => {
   loadShipments();
 });
 
-import { watch } from 'vue';
+// remove duplicate watch import
 watch([shipments, searchQuery], () => {
   filterShipments();
 });

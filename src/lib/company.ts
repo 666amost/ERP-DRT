@@ -15,7 +15,8 @@ export async function getCompany(): Promise<CompanyProfile> {
     const data = await res.json();
     cachedCompany = data.company;
     return cachedCompany!;
-  } catch {
+  } catch (err) {
+    console.warn('getCompany error', err);
     return {
       name: 'SUMBER TRANS EXPRESS',
       address: 'Jl. Contoh No. 123, Jakarta'

@@ -13,6 +13,6 @@ describe('Invoice.vue', () => {
     // Should render root container
     expect(wrapper.exists()).toBe(true);
     // Mobile wrapper exists (lg:hidden), even if empty
-    expect(wrapper.findAll('.lg\:hidden').length).toBeGreaterThanOrEqual(0);
+    expect(wrapper.findAll('[class~="lg:hidden"]').length).toBeGreaterThanOrEqual(0);
   });
 });

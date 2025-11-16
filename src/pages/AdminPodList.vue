@@ -59,7 +59,7 @@ function viewUrl(p: Photo) {
   if (p.url) {
     try {
       // validate URL
-      const _ = new URL(p.url);
+      new URL(p.url);
       return p.url;
     } catch {
       console.warn('Invalid photo url in DB, fallback to proxy for pathname=', p.pathname, p.url);

@@ -9,7 +9,7 @@ const scannedAt = ref('');
 const note = ref('');
 const scanning = ref(false);
 const videoRef = ref<HTMLVideoElement | null>(null);
-let qrScanner: any = null;
+let qrScanner: { start?: () => Promise<void>; stop?: () => void; destroy?: () => void } | null = null;
 
 const files = ref<File[]>([]);
 // cached preview URLs for files; must keep indexes synced with `files`
@@ -46,8 +46,9 @@ function pickFiles(e: Event) {
       } else {
         filePreviews.value.push('');
       }
-    } catch {
+    } catch (err) {
       filePreviews.value.push('');
+      console.warn('createObjectURL failed', err);
     }
   }
 }
@@ -56,8 +57,9 @@ function removeFile(idx: number) {
   try {
     const url = filePreviews.value[idx];
     if (url && typeof URL !== 'undefined') URL.revokeObjectURL(url);
-  } catch {
-    // noop
+  } catch (err) {
+    // noop (best-effort cleanup)
+    console.warn('revokeObjectURL failed', err);
   }
   files.value.splice(idx, 1);
   filePreviews.value.splice(idx, 1);
@@ -71,7 +73,9 @@ function resetScan() {
   // revoke and clear previews
   try {
     filePreviews.value.forEach((u) => { if (u && typeof URL !== 'undefined') URL.revokeObjectURL(u); });
-  } catch {}
+  } catch (err) {
+    console.warn('Revoke object URLs failed', err);
+  }
   filePreviews.value = [];
   files.value = [];
   uploads.value = [];
@@ -101,7 +105,7 @@ async function uploadOne(blob: Blob, name: string, index: number) {
       const reader = new FileReader();
       reader.onload = () => {
         progress.value[index] = 100;
-        resolve({ dataUrl: String(reader.result), size: (blob as any).size || 0, type: blob.type || 'image/jpeg' });
+        resolve({ dataUrl: String(reader.result), size: (blob as Blob).size || 0, type: blob.type || 'image/jpeg' });
       };
       reader.onerror = () => reject(new Error('Failed to read file'));
       reader.readAsDataURL(blob);
@@ -127,7 +131,8 @@ async function uploadOne(blob: Blob, name: string, index: number) {
         } else {
           reject(new Error(data.error || `Upload failed: ${xhr.status}`));
         }
-      } catch {
+      } catch (err) {
+        console.warn('Invalid upload server response', err);
         reject(new Error('Invalid server response'));
       }
     };
@@ -150,9 +155,9 @@ async function startUpload() {
   // Optionally, if you want to clear original file previews after successful upload, revoke them
   // but keeping them allows user to see the images while upload finishes.
 
-    for (let i = 0; i < files.value.length; i++) {
-      const f = files.value[i];
-      const blob = await compressToTarget(f, 1280, 1280, 400); // ~300-500 KB target
+    for (const [i, f] of files.value.entries()) {
+      if (!f) continue;
+      const blob = await compressToTarget(f, 1280, 1280, 400);
       compressedBlobs.value.push(blob);
       const u = await uploadOne(blob, f.name, i);
       uploads.value.push(u);
@@ -167,7 +172,7 @@ async function startUpload() {
 async function submitPOD() {
     try {
       errorMsg.value = '';
-      const payload: any = { photos: uploads.value };
+      const payload: Record<string, unknown> = { photos: uploads.value } as Record<string, unknown>;
       if (token.value === 'manual' || !token.value) {
         if (!scannedCode.value) {
           throw new Error('Masukkan atau scan resi terlebih dahulu');
@@ -199,17 +204,18 @@ async function submitPOD() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      let text = await res.text();
-      let data: any = undefined;
-      try { data = text ? JSON.parse(text) : undefined; } catch {
-        // not JSON
+      const text = await res.text();
+      let data: unknown = undefined;
+      try { data = text ? JSON.parse(text) : undefined; } catch (err) {
+        console.warn('submitPOD parse error', err);
       }
+      const dataObj: { error?: string; pod_id?: number } | undefined = (data && typeof data === 'object') ? (data as { error?: string; pod_id?: number }) : undefined;
       if (!res.ok) {
-        const errMsg = (data && data.error) || text || `Submit failed: ${res.status}`;
+        const errMsg = dataObj?.error || text || `Submit failed: ${res.status}`;
         console.error('submitPOD server error', res.status, errMsg);
         throw new Error(errMsg);
       }
-      alert('POD tersimpan. ID: ' + data.pod_id);
+      alert('POD tersimpan. ID: ' + (dataObj?.pod_id ?? ''));
       // after successful POD submission, redirect to dashboard or close
       window.location.href = '/';
     } catch (e: unknown) {
@@ -225,16 +231,25 @@ async function startScanner() {
     errorMsg.value = '';
     scanning.value = true;
     const mod = await import('qr-scanner');
-    const QrScanner = (mod as any).default || (mod as any);
     // Use unpkg worker path so we don't need to bundle the worker file
-    (QrScanner as any).WORKER_PATH = 'https://unpkg.com/qr-scanner@1.4.2/qr-scanner-worker.min.js';
     if (!videoRef.value) throw new Error('No video element');
-    qrScanner = new (QrScanner as any)(videoRef.value, (result: string) => {
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const modAny = (mod as unknown) as any;
+    const QrScannerAny = modAny.default ?? modAny;
+    // Set WORKER_PATH on the constructor if present
+    try { (QrScannerAny as any).WORKER_PATH = 'https://unpkg.com/qr-scanner@1.4.2/qr-scanner-worker.min.js'; } catch { /* ignore */ }
+    qrScanner = new (QrScannerAny as any)(videoRef.value as HTMLVideoElement, (result: string) => {
+    /* eslint-enable @typescript-eslint/no-explicit-any */
       scannedCode.value = result;
       scannedAt.value = new Date().toISOString();
       stopScanner();
     });
-    await qrScanner.start();
+    {
+      const qs = qrScanner;
+      if (qs && typeof qs.start === 'function') {
+        await qs.start();
+      }
+    }
   } catch (e) {
     scanning.value = false;
     errorMsg.value = 'Scanner gagal: ' + String(e);
@@ -244,8 +259,8 @@ async function startScanner() {
 function stopScanner() {
   try {
     if (qrScanner) {
-      qrScanner.stop();
-      qrScanner.destroy && qrScanner.destroy();
+      if (typeof qrScanner.stop === 'function') qrScanner.stop();
+      if (typeof qrScanner.destroy === 'function') qrScanner.destroy();
       qrScanner = null;
     }
   } finally {
@@ -256,7 +271,9 @@ function stopScanner() {
 onBeforeUnmount(() => {
   try {
     filePreviews.value.forEach((u) => { if (u && typeof URL !== 'undefined') URL.revokeObjectURL(u); });
-  } catch {}
+  } catch (err) {
+    console.warn('onBeforeUnmount revokeObjectURL failed', err);
+  }
   filePreviews.value = [];
   stopScanner();
 });

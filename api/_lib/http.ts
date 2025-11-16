@@ -14,7 +14,8 @@ export async function readJsonNode(req: IncomingMessage) {
         const s = Buffer.concat(chunks).toString('utf8');
         if (!s) return resolve(null);
         resolve(JSON.parse(s));
-      } catch {
+      } catch (err) {
+        console.warn('readJsonNode parse error', err);
         resolve(null);
       }
     });

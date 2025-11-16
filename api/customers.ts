@@ -7,7 +7,7 @@ import { readJsonNode, writeJson } from './_lib/http.js';
 type Customer = { id: number; name: string; phone: string | null; address?: string | null };
 type CreateCustomerBody = { name: string; phone?: string; address?: string };
 
-enum ErrorCode { Validation = 'validation', Duplicate = 'duplicate' }
+const ErrorCode = { Validation: 'validation', Duplicate: 'duplicate' } as const;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

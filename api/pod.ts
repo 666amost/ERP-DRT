@@ -63,7 +63,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     try {
         const body = await readJsonNode(req) as SubmitPodBody | null;
       // Safe debug log: number of photos and flow (token/public_code) - do not log token values
-      try { console.debug('submitPOD: photos', Array.isArray(body?.photos) ? (body?.photos as any[]).length : 0, 'hasToken', !!body?.token, 'hasPublicCode', !!body?.public_code); } catch {}
+      try { console.debug('submitPOD: photos', Array.isArray(body?.photos) ? (body?.photos as any[]).length : 0, 'hasToken', !!body?.token, 'hasPublicCode', !!body?.public_code); } catch (err) { console.warn('submitPOD debug err', err); }
       if (!body || !Array.isArray(body.photos) || body.photos.length === 0) {
         writeJson(res, { error: 'Invalid payload' }, 400);
         return;
@@ -132,6 +132,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             return;
           }
         } catch (err) {
+          console.warn('INVALID_BASE64:', String(err));
           writeJson(res, { error: 'Invalid base64 data' }, 400);
           return;
         }
@@ -229,7 +230,8 @@ export async function syncPhotoUrls(req: any, res?: ServerResponse): Promise<Res
   if (endpoint !== 'sync-urls' || req.method !== 'POST') { if (res) { res.writeHead(404); res.end(); return; } return new Response(null, { status: 404 }); }
   try {
     await requireSession(req);
-  } catch (e) {
+  } catch (err) {
+    console.warn('syncPhotoUrls unauthorized', err);
     if (res) { writeJson(res, { error: 'Unauthorized' }, 401); return; }
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }

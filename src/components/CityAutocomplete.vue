@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, watch } from 'vue';
 
 type City = {
   id: number;
@@ -14,9 +14,8 @@ const props = defineProps<{
   label: string;
 }>();
 
-const emit = defineEmits<{
-  (e: 'update:modelValue', value: string): void;
-}>();
+const emit = defineEmits(['update:modelValue'] as const);
+const updateModelValue = (v: string) => emit('update:modelValue', v);
 
 const cities = ref<City[]>([]);
 const filteredCities = ref<City[]>([]);
@@ -51,7 +50,7 @@ function filterCities() {
 }
 
 function selectCity(cityName: string) {
-  emit('update:modelValue', cityName);
+  updateModelValue(cityName);
   searchQuery.value = cityName;
   showDropdown.value = false;
 }
@@ -91,7 +90,7 @@ async function addNewCity() {
   }
 }
 
-watch(searchQuery, (val, oldVal) => {
+watch(searchQuery, () => {
   filterCities();
   // Only show dropdown when user types (length change due to user input)
   if (document.activeElement && (document.activeElement as HTMLElement).tagName === 'INPUT') {

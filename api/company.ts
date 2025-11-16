@@ -38,7 +38,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     let body: any;
     try {
       body = await readJsonNode(req);
-    } catch {
+    } catch (err) {
+      console.warn('company PUT invalid JSON', err);
       writeJson(res, { error: 'Invalid JSON' }, 400);
       return;
     }

@@ -68,7 +68,6 @@ const statusOptions = [
 
 const selectedShipment = ref<Shipment | null>(null);
 const showBarcodeModal = ref(false);
-const showPreview = ref(false);
 
 function viewBarcode(shipment: Shipment) {
   selectedShipment.value = shipment;
@@ -518,7 +517,7 @@ onMounted(() => {
             v-model="form.customer_name"
             label="Customer"
             @select-id="(id:number|null)=>{ form.customer_id = id; }"
-            @selected="(c: any) => { form.customer_id = c.id; form.customer_name = c.name; form.customer_address = c.address || ''; form.shipping_address = c.address || '' }"
+                @selected="(c: { id: number; name: string; address?: string }) => { form.customer_id = c.id; form.customer_name = c.name; form.customer_address = c.address || ''; form.shipping_address = c.address || '' }"
           />
           <div>
             <label class="block text-sm font-medium mb-1">Alamat Customer</label>

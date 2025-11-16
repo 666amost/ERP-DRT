@@ -43,7 +43,8 @@ router.beforeEach(async (to, _from, next) => {
       } else {
         next('/login');
       }
-    } catch {
+    } catch (err) {
+      console.warn('Auth check failed', err);
       next('/login');
     }
   } else {

@@ -38,7 +38,7 @@ async function handleLogin() {
     }
     
     router.push('/dashboard');
-  } catch (e) {
+  } catch {
     error.value = 'Gagal terhubung ke server';
   } finally {
     loading.value = false;

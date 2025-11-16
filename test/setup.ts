@@ -5,7 +5,6 @@ import '@testing-library/jest-dom';
 // For tests, rewrite relative URLs to use `http://localhost` as base so components can call relative paths without errors.
 // Using `any` here OK for tests/shims; otherwise updating types for fetch overloads is verbose
 const _origFetch: any = globalThis.fetch;
-/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
 (globalThis as any).fetch = async (input: any, init?: any) => {
 	try {
 		// if input is a string and starts with '/', treat it as relative and add base
@@ -14,7 +13,9 @@ const _origFetch: any = globalThis.fetch;
 			return _origFetch?.(url.toString(), init);
 		}
 		return _origFetch?.(input, init);
-	} catch (e) {
-		return _origFetch?.(input as RequestInfo, init);
+	} catch (err) {
+		// fallback to original fetch with any cast and log for debug
+		console.debug('fetch shim error', err);
+		return _origFetch?.(input as any, init);
 	}
 };

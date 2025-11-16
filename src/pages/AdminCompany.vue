@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import Button from '../components/ui/Button.vue';
-import { Icon } from '@iconify/vue';
 
 type Company = {
   id?: number;

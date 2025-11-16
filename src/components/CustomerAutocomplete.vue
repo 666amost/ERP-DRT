@@ -4,7 +4,10 @@ import { ref, watch } from 'vue';
 type Customer = { id:number; name:string; phone:string|null; address?: string | null };
 
 const props = defineProps<{ modelValue:string; label:string; placeholder?:string }>();
-const emit = defineEmits<{ (e:'update:modelValue', v:string):void; (e:'select-id', id:number|null):void; (e:'selected', c:Customer):void }>();
+const emit = defineEmits(['update:modelValue', 'select-id', 'selected'] as const);
+const emitUpdateModelValue = (v: string) => emit('update:modelValue', v);
+const emitSelectId = (id: number | null) => emit('select-id', id);
+const emitSelected = (c: Customer) => emit('selected', c);
 
 const customers = ref<Customer[]>([]);
 const filtered = ref<Customer[]>([]);
@@ -39,9 +42,9 @@ function filter() {
 function pick(c:Customer) {
   query.value = c.name;
   selectedId.value = c.id;
-  emit('update:modelValue', c.name);
-  emit('select-id', c.id);
-  emit('selected', c);
+  emitUpdateModelValue(c.name);
+  emitSelectId(c.id);
+  emitSelected(c);
   show.value = false;
 }
 

@@ -44,7 +44,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   if (req.method === 'OPTIONS') { res.writeHead(204, corsHeaders); res.end(); return; }
   if (req.method !== 'GET') { res.writeHead(405, corsHeaders); res.end(); return; }
 
-  try { await requireSession(req); } catch (e) { res.writeHead(401, corsHeaders); res.end(); return; }
+  try { await requireSession(req); } catch (err) { console.warn('requireSession failed', err); res.writeHead(401, corsHeaders); res.end(); return; }
 
   const url = new URL(req.url || '/', 'http://localhost');
   const endpoint = url.searchParams.get('endpoint');

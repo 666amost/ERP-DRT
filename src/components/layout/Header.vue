@@ -34,7 +34,7 @@ function submitSearch() {
 async function handleLogout() {
   try {
     await fetch('/api/auth?endpoint=logout', { method: 'POST', credentials: 'include' });
-  } catch (e) {
+  } catch {
     // ignore errors client-side
   }
   router.push('/login');

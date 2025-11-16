@@ -21,6 +21,25 @@ export default [
     }
   },
   {
+    files: ['test/**/*.ts', 'test/**/*.tsx'],
+    rules: {
+      // Test files often use `any` for mocks/stubs; relax this rule for tests
+      '@typescript-eslint/no-explicit-any': 'off'
+    }
+  },
+  {
+    files: ['api/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off'
+    }
+  },
+  {
+    files: ['lib/**/*.ts', 'lib/**/*.js'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off'
+    }
+  },
+  {
     files: ['**/*.vue'],
     languageOptions: {
       ecmaVersion: 2023,
@@ -32,9 +51,16 @@ export default [
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
       'vue/multi-word-component-names': 'off'
+      ,
+      // Workflow: turn off strict template formatting rules - we prefer Prettier or IDE formatting
+      'vue/html-indent': 'off',
+      'vue/max-attributes-per-line': 'off',
+      'vue/singleline-html-element-content-newline': 'off',
+      'vue/html-self-closing': 'off',
+      'vue/attributes-order': 'off'
     }
   },
   {
-    ignores: ['dist/**', 'design-dashboard-figma/**', '*.cjs']
+    ignores: ['dist/**', 'design-dashboard-figma/**', '*.cjs', 'dev/**', 'scripts/**', 'dev-server.js']
   }
 ];

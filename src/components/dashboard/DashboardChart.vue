@@ -36,5 +36,8 @@ function handleResize() {
 </script>
 
 <template>
-  <div ref="chartDom" class="w-full h-64" />
+  <div
+    ref="chartDom"
+    class="w-full h-64"
+  />
 </template>

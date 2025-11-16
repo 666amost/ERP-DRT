@@ -1,4 +1,4 @@
-import axios, { AxiosRequestConfig, AxiosResponse, AxiosError, InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosResponse, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import NProgress from 'nprogress';
 import 'nprogress/nprogress.css';
 
@@ -24,11 +24,11 @@ http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 });
 
 http.interceptors.response.use(
-  (res: AxiosResponse<any>) => {
+  (res: AxiosResponse<unknown>) => {
     doneProgress();
     return res;
   },
-  (err: AxiosError<any>) => {
+  (err: AxiosError<unknown>) => {
     doneProgress();
     if (err.response?.status === 401) {
       window.location.href = '/login';

@@ -160,17 +160,17 @@ watch(statusFilter, () => {
         :key="ship.id"
         class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 card break-words"
       >
-        <div class="flex items-start justify-between">
-          <div>
-            <div class="font-semibold text-lg">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold text-base lg:text-lg truncate">
               {{ ship.public_code }}
             </div>
-            <div class="text-sm text-gray-600 dark:text-gray-300">
+            <div class="text-xs sm:text-sm text-gray-600 dark:text-gray-300 truncate">
               {{ ship.driver_name || 'Driver' }} 
-              <span v-if="ship.driver_phone">• {{ ship.driver_phone }}</span>
+              <span v-if="ship.driver_phone" class="hidden sm:inline">• {{ ship.driver_phone }}</span>
             </div>
           </div>
-          <Badge :variant="getStatusVariant(ship.status)">
+          <Badge :variant="getStatusVariant(ship.status)" class="flex-shrink-0">
             {{ statusOptions.find(o => o.value === ship.status)?.label || ship.status }}
           </Badge>
         </div>

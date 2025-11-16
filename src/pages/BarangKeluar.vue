@@ -417,55 +417,63 @@ onMounted(() => {
       <div
         v-for="ship in shipments"
         :key="ship.id"
-        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md break-words"
+        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md"
       >
-        <div class="flex items-start justify-between">
-          <div>
-            <div class="text-sm font-semibold dark:text-gray-100">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-semibold dark:text-gray-100 truncate">
               {{ ship.public_code }}
             </div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
               {{ ship.customer_name || '-' }}
             </div>
             <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">
               {{ ship.customer_address || '' }}
             </div>
-            <div v-if="ship.shipping_address" class="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">Shipping: {{ ship.shipping_address }}</div>
+            <div v-if="ship.shipping_address" class="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">
+              Ship: {{ ship.shipping_address }}
+            </div>
           </div>
-          <Badge :variant="getStatusVariant(ship.status)">
+          <Badge :variant="getStatusVariant(ship.status)" class="flex-shrink-0">
             {{ statusOptions.find(o => o.value === ship.status)?.label || ship.status }}
           </Badge>
         </div>
-        <div class="text-sm dark:text-gray-300">
-          <div class="flex items-center gap-2">
+        <div class="text-xs space-y-1.5">
+          <div class="flex items-start gap-2">
             <Icon
               icon="mdi:map-marker-outline"
-              class="text-[18px] text-gray-500 dark:text-gray-400"
+              class="text-base text-gray-500 dark:text-gray-400 flex-shrink-0 mt-0.5"
             />
-            <span>{{ ship.origin }} → {{ ship.destination }}</span>
+            <span class="dark:text-gray-300 text-xs leading-tight break-all">{{ ship.origin }} → {{ ship.destination }}</span>
           </div>
-          <div class="flex items-center gap-2 mt-1">
+          <div class="flex items-center gap-2">
             <Icon
               icon="mdi:archive-outline"
-              class="text-[18px] text-gray-500 dark:text-gray-400"
+              class="text-base text-gray-500 dark:text-gray-400 flex-shrink-0"
             />
-            <span>{{ ship.total_colli }} colli</span>
+            <span class="dark:text-gray-300 text-xs">{{ ship.total_colli }} colli</span>
           </div>
           <div
             v-if="ship.eta"
-            class="flex items-center gap-2 mt-1"
+            class="flex items-center gap-2"
           >
             <Icon
               icon="mdi:calendar-outline"
-              class="text-[18px] text-gray-500 dark:text-gray-400"
+              class="text-base text-gray-500 dark:text-gray-400 flex-shrink-0"
             />
-            <span>{{ formatDate(ship.eta) }}</span>
+            <span class="dark:text-gray-300 text-xs">{{ formatDate(ship.eta) }}</span>
           </div>
         </div>
-        <div class="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
-          <Button variant="success" class="flex-1 py-2 text-xs" @click="viewBarcode(ship)">Barcode</Button>
-          <Button variant="primary" class="flex-1 py-2 text-xs" @click="openEditModal(ship)">Edit</Button>
-          <Button variant="default" class="flex-1 py-2 text-xs text-red-600 bg-red-50 dark:bg-red-900/20" @click="deleteShipment(ship.id)">Hapus</Button>
+        <div class="grid grid-cols-3 gap-1.5 pt-2 border-t border-gray-100 dark:border-gray-700">
+          <Button variant="success" class="w-full py-2.5" @click="viewBarcode(ship)" title="Barcode">
+            <Icon icon="mdi:barcode" class="text-xl" />
+          </Button>
+          <Button variant="primary" class="w-full py-2.5" @click="openEditModal(ship)" title="Edit">
+            <Icon icon="mdi:pencil" class="text-xl" />
+          </Button>
+          <Button variant="default" class="w-full py-2.5 text-red-600 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30" @click="deleteShipment(ship.id)" title="Hapus">
+            <Icon icon="mdi:delete" class="text-xl" />
+          </Button>
         </div>
       </div>
     </div>

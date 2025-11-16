@@ -388,11 +388,11 @@ watch([items, taxPercent, discountAmount], () => {
 
 <template>
   <div class="space-y-4 pb-20 lg:pb-0">
-    <div class="flex items-center justify-between">
-      <div class="text-xl font-semibold">
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <div class="text-xl font-semibold dark:text-gray-100">
           Invoice
         </div>
-      <div class="flex gap-3">
+      <div class="flex gap-2 flex-1 lg:flex-initial min-w-0">
         <input
           v-model="searchQuery"
           type="text"
@@ -402,9 +402,14 @@ watch([items, taxPercent, discountAmount], () => {
       </div>
       <Button
         variant="primary"
+        class="flex-shrink-0 text-sm px-3 lg:px-4"
         @click="openCreateModal"
       >
-        + Tambah Invoice
+        <Icon
+          icon="mdi:plus"
+          class="text-base lg:text-lg"
+        />
+        <span class="hidden sm:inline">Tambah</span>
       </Button>
     </div>
 

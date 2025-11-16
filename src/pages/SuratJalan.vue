@@ -284,9 +284,10 @@ watch(() => route.query.q, (val) => {
       </div>
     </div>
 
+    <!-- Desktop Table View -->
     <div
       v-else
-      class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden card"
+      class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden card hidden lg:block"
     >
       <div class="overflow-x-auto">
       <table class="w-full">
@@ -360,6 +361,63 @@ watch(() => route.query.q, (val) => {
           </tr>
         </tbody>
       </table>
+      </div>
+    </div>
+
+    <!-- Mobile Card View -->
+    <div
+      v-if="!loading"
+      class="lg:hidden space-y-3"
+    >
+      <div
+        v-if="filteredShipments.length === 0"
+        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 text-center"
+      >
+        <p class="text-sm text-gray-500 dark:text-gray-400">
+          Belum ada surat jalan
+        </p>
+      </div>
+      <div
+        v-for="ship in filteredShipments"
+        :key="ship.id"
+        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md"
+      >
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold text-sm truncate">
+              {{ ship.public_code }}
+            </div>
+            <div class="text-xs text-gray-600 dark:text-gray-400 truncate">
+              {{ ship.customer_name || '-' }}
+            </div>
+          </div>
+          <Badge variant="info" class="flex-shrink-0">
+            {{ ship.status }}
+          </Badge>
+        </div>
+        <div class="text-sm space-y-1">
+          <div class="flex items-start gap-2">
+            <span class="text-gray-500 dark:text-gray-400 text-xs flex-shrink-0">Rute:</span>
+            <span class="dark:text-gray-100 text-xs break-words">{{ ship.origin }} → {{ ship.destination }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-gray-500 dark:text-gray-400 text-xs">Colli:</span>
+            <span class="dark:text-gray-100 text-xs">{{ ship.total_colli }}</span>
+          </div>
+          <div class="flex items-start gap-2">
+            <span class="text-gray-500 dark:text-gray-400 text-xs flex-shrink-0">Tanggal:</span>
+            <span class="dark:text-gray-100 text-xs">{{ formatDate(ship.created_at) }}</span>
+          </div>
+        </div>
+        <div class="pt-2 border-t border-gray-100 dark:border-gray-700">
+          <Button
+            variant="primary"
+            class="w-full text-sm"
+            @click="printDeliveryNote(ship)"
+          >
+            Print Surat Jalan
+          </Button>
+        </div>
       </div>
     </div>
   </div>

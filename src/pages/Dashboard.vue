@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import OverviewCard from '../components/dashboard/OverviewCard.vue';
 import ProgressBar from '../components/ui/ProgressBar.vue';
 import Badge from '../components/ui/Badge.vue';
 import Button from '../components/ui/Button.vue';
+import DashboardChart from '../components/dashboard/DashboardChart.vue';
+import InvoiceTable from '../components/InvoiceTable.vue';
+import http from '../lib/http';
 import { useFormatters } from '../composables/useFormatters';
 
 const { formatRupiah, formatDate } = useFormatters();
@@ -37,9 +40,22 @@ type Invoice = {
 
 const stats = ref<Stats>({ outgoingToday: 0, activeShipments: 0, pendingInvoices: 0, deliveryNotes: 0 });
 const tracking = ref<Shipment[]>([]);
-const invoices = ref<Invoice[]>([]);
+const trend = ref<{ day: string; count: number }[]>([]);
 const loading = ref(true);
 const router = useRouter();
+
+const lineOption = computed(() => {
+  const days = trend.value.length > 0 ? trend.value.map(t => new Date(t.day).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })) : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const base = trend.value.length > 0 ? trend.value.map(t => t.count) : [20, 30, 28, 40, 38, 50, stats.value.outgoingToday || 25];
+  return {
+    tooltip: { trigger: 'axis' },
+    xAxis: { type: 'category', data: days },
+    yAxis: { type: 'value' },
+    series: [
+      { name: 'Outgoing', type: 'line', smooth: true, data: base, areaStyle: {} }
+    ],
+  } as any;
+});
 
 function viewAllInvoices() {
   router.push({ name: 'invoice' });
@@ -51,17 +67,21 @@ function addInvoice() {
 
 async function loadData() {
   try {
-    const [statsRes, trackingRes, invoicesRes] = await Promise.all([
-      fetch('/api/dashboard?endpoint=stats'),
-      fetch('/api/dashboard?endpoint=tracking'),
-      fetch('/api/dashboard?endpoint=invoices')
+    const [s, t] = await Promise.all([
+      http.get('/dashboard?endpoint=stats'),
+      http.get('/dashboard?endpoint=tracking')
     ]);
-    
-    stats.value = await statsRes.json();
-    const trackingData = await trackingRes.json();
+    stats.value = s.data;
+    const trackingData = t.data;
     tracking.value = trackingData.items || [];
-    const invoicesData = await invoicesRes.json();
-    invoices.value = invoicesData.items || [];
+    // invoices will be handled by the InvoiceTable component
+    // fetch trend data for chart
+    try {
+      const trendRes = await http.get('/dashboard?endpoint=trend');
+      trend.value = trendRes.data.items || [];
+    } catch (e) {
+      console.error('Failed to load trend data:', e);
+    }
   } catch (e) {
     console.error('Failed to load dashboard:', e);
   } finally {
@@ -181,40 +201,9 @@ onMounted(() => {
         <div class="font-medium mb-3 dark:text-gray-100">
           Invoice Terbaru
         </div>
-        <div class="max-h-[50vh] overflow-auto smooth-scroll pr-2">
-          <div
-            v-if="invoices.length === 0"
-            class="text-sm text-gray-500 dark:text-gray-400"
-          >
-            Belum ada invoice
-          </div>
-          <ul
-            v-else
-            class="divide-y dark:divide-gray-700"
-          >
-            <li
-              v-for="inv in invoices"
-              :key="inv.id"
-              class="py-3 flex items-center justify-between"
-            >
-              <div>
-                <div class="text-sm font-medium dark:text-gray-100">
-                  {{ inv.invoice_number }}
-                </div>
-                <div class="text-xs text-gray-500 dark:text-gray-400">
-                  {{ inv.customer_name }} • {{ formatDate(inv.issued_at) }}
-                </div>
-              </div>
-              <div class="flex items-center gap-3">
-                <div class="text-sm font-semibold dark:text-gray-100">
-                  {{ formatRupiah(inv.amount) }}
-                </div>
-                <Badge :variant="inv.status === 'paid' ? 'success' : 'warning'">
-                  {{ inv.status === 'paid' ? 'Paid' : 'Pending' }}
-                </Badge>
-              </div>
-            </li>
-          </ul>
+        <div class="grid gap-4">
+          <DashboardChart :option="lineOption" />
+          <InvoiceTable />
         </div>
         <div class="mt-4 flex gap-2">
           <Button variant="primary" @click="addInvoice">

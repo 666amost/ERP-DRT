@@ -107,6 +107,18 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       
       writeJson(res, { items: shipments });
       return;
+    } else if (endpoint === 'trend') {
+      // Return outgoing shipments counts for last 7 days (date + count)
+      const trend = await sql`
+        select to_char(date_trunc('day', created_at)::date, 'YYYY-MM-DD') as day, count(*)::int as count
+        from shipments
+        where created_at >= (current_date - interval '6 days')
+        group by day
+        order by day
+      ` as { day: string; count: number }[];
+
+      writeJson(res, { items: trend });
+      return;
     } else {
       res.writeHead(404, corsHeaders);
       res.end();

@@ -1,9 +1,34 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue';
+import { ref, onMounted, watch } from 'vue';
+import { CountUp } from 'countup.js';
 
 interface Props { title: string; value: number | string; delta?: string; icon: string }
-
 const p = defineProps<Props>();
+const valueRef = ref<HTMLElement | null>(null);
+let countUp: CountUp | null = null;
+
+onMounted(() => {
+  if (valueRef.value) {
+    if (typeof p.value === 'number') {
+      countUp = new CountUp((valueRef.value as HTMLElement), p.value as number);
+      if (!countUp.error) countUp.start();
+    } else {
+      valueRef.value.textContent = String(p.value);
+    }
+  }
+});
+
+watch(() => p.value, (nv) => {
+  if (!valueRef.value) return;
+  if (typeof nv === 'number') {
+    if (!countUp) countUp = new CountUp(valueRef.value as HTMLElement, nv);
+    countUp.update ? countUp.update(nv) : countUp.start();
+  } else {
+    if (countUp) countUp.pauseResume();
+    valueRef.value.textContent = String(nv);
+  }
+});
 </script>
 
 <template>
@@ -18,8 +43,8 @@ const p = defineProps<Props>();
       <div class="text-sm text-gray-500 dark:text-gray-300">
         {{ p.title }}
       </div>
-      <div class="text-2xl font-semibold mt-1 text-gray-900 dark:text-gray-100">
-        {{ p.value }}
+      <div class="text-2xl font-semibold mt-1 text-gray-900 dark:text-gray-100" ref="valueRef">
+        <template v-if="typeof p.value !== 'number'">{{ p.value }}</template>
       </div>
       <div
         v-if="p.delta"

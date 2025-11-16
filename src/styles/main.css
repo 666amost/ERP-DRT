@@ -62,3 +62,16 @@ table th, table td {
   overflow: hidden;
 }
 
+/* Page transitions */
+.page-enter-active, .page-leave-active {
+  transition: opacity 300ms ease, transform 300ms ease;
+}
+.page-enter-from, .page-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.page-enter-to, .page-leave-from {
+  opacity: 1;
+  transform: translateY(0);
+}
+

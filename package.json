@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "lint": "eslint . --ext .ts,.tsx,.vue",
     "migrate": "tsx scripts/migrate-and-seed.ts",
+    "migrate:update": "tsx scripts/migrate-and-seed.ts",
     "post-deploy": "tsx scripts/post-deploy.ts",
     "test": "vitest",
     "backfill:invoices": "tsx scripts/backfill-invoices-customer-id.ts",

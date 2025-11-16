@@ -4,7 +4,7 @@ import { getSql } from './_lib/db.js';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { readJsonNode, writeJson } from './_lib/http.js';
 
-type Customer = { id: number; name: string; phone: string | null };
+type Customer = { id: number; name: string; phone: string | null; address?: string | null };
 type CreateCustomerBody = { name: string; phone?: string; address?: string };
 
 enum ErrorCode { Validation = 'validation', Duplicate = 'duplicate' }
@@ -31,9 +31,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const search = url.searchParams.get('search');
     let rows: Customer[] = [];
     if (search) {
-      rows = await sql`select id, name, phone from customers where lower(name) like ${'%' + search.toLowerCase() + '%'} order by name limit 50` as Customer[];
+      rows = await sql`select id, name, phone, address from customers where lower(name) like ${'%' + search.toLowerCase() + '%'} order by name limit 50` as Customer[];
     } else {
-      rows = await sql`select id, name, phone from customers order by name limit 200` as Customer[];
+      rows = await sql`select id, name, phone, address from customers order by name limit 200` as Customer[];
     }
     writeJson(res, { items: rows });
     return;
@@ -44,7 +44,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     if (!body.name || body.name.trim().length < 2) { writeJson(res, { error: 'Nama customer wajib', code: ErrorCode.Validation }, 400); return; }
     const name = body.name.trim();
     try {
-      const rows = await sql`insert into customers (name, phone, address) values (${name}, ${body.phone || null}, ${body.address || null}) returning id, name, phone` as [{ id: number; name: string; phone: string | null }];
+      const rows = await sql`insert into customers (name, phone, address) values (${name}, ${body.phone || null}, ${body.address || null}) returning id, name, phone, address` as [{ id: number; name: string; phone: string | null; address: string | null }];
       writeJson(res, rows[0], 201);
       return;
     } catch (e: any) {

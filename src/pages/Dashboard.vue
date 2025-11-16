@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import OverviewCard from '../components/dashboard/OverviewCard.vue';
 import ProgressBar from '../components/ui/ProgressBar.vue';
 import Badge from '../components/ui/Badge.vue';
@@ -38,6 +39,15 @@ const stats = ref<Stats>({ outgoingToday: 0, activeShipments: 0, pendingInvoices
 const tracking = ref<Shipment[]>([]);
 const invoices = ref<Invoice[]>([]);
 const loading = ref(true);
+const router = useRouter();
+
+function viewAllInvoices() {
+  router.push({ name: 'invoice' });
+}
+
+function addInvoice() {
+  router.push({ name: 'invoice', query: { create: '1' } });
+}
 
 async function loadData() {
   try {
@@ -207,10 +217,10 @@ onMounted(() => {
           </ul>
         </div>
         <div class="mt-4 flex gap-2">
-          <Button variant="primary">
+          <Button variant="primary" @click="addInvoice">
             Tambah Invoice
           </Button>
-          <Button variant="default">
+          <Button variant="default" @click="viewAllInvoices">
             Lihat Semua
           </Button>
         </div>

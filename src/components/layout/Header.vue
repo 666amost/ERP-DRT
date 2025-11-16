@@ -2,6 +2,7 @@
 import { Icon } from '@iconify/vue';
 import { useTheme } from '../../composables/useTheme';
 import { useRouter } from 'vue-router';
+import { ref } from 'vue';
 
 const { theme, toggle } = useTheme();
 const router = useRouter();
@@ -9,6 +10,26 @@ const router = useRouter();
 defineEmits<{
   toggleSidebar: [];
 }>();
+
+const q = ref('');
+
+function submitSearch() {
+  const value = (q.value || '').trim();
+  if (!value) return;
+  // Simple heuristics: invoice numbers often contain "INV" or are long numeric strings
+  const isInvoice = /(^INV|^inv|invoice)/i.test(value) || /^\d{6,}$/.test(value);
+  const isSuratJalan = /(^SJ|^sj|surat)/i.test(value);
+  if (isInvoice) {
+    router.push({ name: 'invoice', query: { q: value } });
+    return;
+  }
+  if (isSuratJalan) {
+    router.push({ name: 'surat-jalan', query: { q: value } });
+    return;
+  }
+  // Default: go to pelacakan (tracking)
+  router.push({ name: 'pelacakan', query: { q: value } });
+}
 
 async function handleLogout() {
   try {
@@ -35,12 +56,16 @@ async function handleLogout() {
       <div class="relative flex-1 max-w-xl">
         <input
           type="text"
+          v-model="q"
+          @keydown.enter="submitSearch"
           placeholder="Cari invoice, surat jalan, tracking..."
           class="w-full h-10 pl-10 pr-3 rounded-lg bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-500 text-sm dark:text-gray-100 dark:placeholder-gray-400"
         >
         <Icon
-          icon="mdi:magnify"
-          class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400"
+          role="button"
+          :icon="'mdi:magnify'"
+          class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 cursor-pointer"
+          @click="submitSearch"
         />
       </div>
     </div>

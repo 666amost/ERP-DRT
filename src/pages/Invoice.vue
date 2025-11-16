@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import CustomerAutocomplete from '../components/CustomerAutocomplete.vue';
 import Button from '../components/ui/Button.vue';
 import Badge from '../components/ui/Badge.vue';
@@ -41,6 +42,10 @@ type Item = {
 };
 
 const invoices = ref<Invoice[]>([]);
+const filteredInvoices = ref<Invoice[]>([]);
+const searchQuery = ref('');
+const route = useRoute();
+const router = useRouter();
 const loading = ref(true);
 const showModal = ref(false);
 const editingId = ref<number | null>(null);
@@ -117,10 +122,24 @@ async function loadInvoices() {
       tax_percent: Number(x.tax_percent || 0),
       discount_amount: Number(x.discount_amount || 0)
     }));
+    // initialize filtered
+    filterInvoices();
   } catch (e) {
     console.error('Failed to load invoices:', e);
   } finally {
     loading.value = false;
+  }
+}
+
+function filterInvoices() {
+  if (!searchQuery.value.trim()) {
+    filteredInvoices.value = invoices.value;
+  } else {
+    const q = searchQuery.value.toLowerCase();
+    filteredInvoices.value = invoices.value.filter(i =>
+      String(i.invoice_number).toLowerCase().includes(q) ||
+      String(i.customer_name || '').toLowerCase().includes(q)
+    );
   }
 }
 
@@ -227,7 +246,38 @@ async function deleteInvoice(id: number) {
 }
 
 onMounted(() => {
+  if (route.query.q) {
+    searchQuery.value = String(route.query.q || '');
+  }
   loadInvoices();
+  if (route.query.create) {
+    openCreateModal();
+  }
+});
+
+watch([invoices, searchQuery], () => {
+  filterInvoices();
+});
+// react to route changes when header triggers a new query
+watch(() => route.query.q, (val) => {
+  const v = val ? String(val) : '';
+  if (v !== searchQuery.value) searchQuery.value = v;
+});
+
+// Open modal if route has create flag
+watch(() => route.query.create, (val) => {
+  if (val) {
+    openCreateModal();
+  }
+});
+
+// Clear create query when modal closed
+watch(() => showModal.value, (val) => {
+  if (!val && route.query.create) {
+    const newQuery = { ...route.query } as Record<string, any>;
+    delete newQuery.create;
+    router.replace({ name: 'invoice', query: newQuery as any });
+  }
 });
 
 async function printInvoice(inv: Invoice): Promise<void> {
@@ -340,7 +390,15 @@ watch([items, taxPercent, discountAmount], () => {
   <div class="space-y-4 pb-20 lg:pb-0">
     <div class="flex items-center justify-between">
       <div class="text-xl font-semibold">
-        Invoice
+          Invoice
+        </div>
+      <div class="flex gap-3">
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Cari nomor invoice, customer..."
+          class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 dark:border-gray-600"
+        >
       </div>
       <Button
         variant="primary"
@@ -364,6 +422,7 @@ watch([items, taxPercent, discountAmount], () => {
       v-else
       class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden card hidden lg:block transition-all duration-200"
     >
+      <div class="overflow-x-auto">
       <table class="w-full">
         <thead class="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
           <tr>
@@ -388,7 +447,7 @@ watch([items, taxPercent, discountAmount], () => {
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-          <tr v-if="invoices.length === 0">
+          <tr v-if="filteredInvoices.length === 0">
             <td
               colspan="6"
               class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"
@@ -397,7 +456,7 @@ watch([items, taxPercent, discountAmount], () => {
             </td>
           </tr>
           <tr
-            v-for="inv in invoices"
+            v-for="inv in filteredInvoices"
             :key="inv.id"
             class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150"
           >
@@ -441,15 +500,16 @@ watch([items, taxPercent, discountAmount], () => {
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
 
     <!-- Mobile Card View -->
-    <div
+      <div
       v-if="!loading"
       class="lg:hidden space-y-3"
     >
       <div
-        v-if="invoices.length === 0"
+        v-if="filteredInvoices.length === 0"
         class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 text-center"
       >
         <p class="text-sm text-gray-500 dark:text-gray-400">
@@ -457,7 +517,7 @@ watch([items, taxPercent, discountAmount], () => {
         </p>
       </div>
       <div
-        v-for="inv in invoices"
+        v-for="inv in filteredInvoices"
         :key="inv.id"
         class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md"
       >

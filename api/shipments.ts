@@ -8,6 +8,7 @@ type Shipment = {
   id: number;
   customer_id: number | null;
   customer_name: string | null;
+  customer_address: string | null;
   origin: string;
   destination: string;
   eta: string | null;
@@ -15,17 +16,21 @@ type Shipment = {
   total_colli: number;
   public_code: string | null;
   vehicle_plate_region: string | null;
+  shipping_address: string | null;
   created_at: string;
 };
 
 type CreateShipmentBody = {
   customer_id?: number;
   customer_name?: string;
+  customer_address?: string;
   origin: string;
   destination: string;
   eta?: string;
+  status?: string;
   total_colli: number;
   vehicle_plate_region?: string;
+  shipping_address?: string;
   regenerate_code?: boolean;
 };
 
@@ -33,12 +38,14 @@ type UpdateShipmentBody = {
   id: number;
   customer_id?: number;
   customer_name?: string;
+  customer_address?: string;
   origin?: string;
   destination?: string;
   eta?: string;
   status?: string;
   total_colli?: number;
   vehicle_plate_region?: string;
+  shipping_address?: string;
   regenerate_code?: boolean;
 };
 
@@ -72,8 +79,10 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     if (status && ['DRAFT', 'READY', 'LOADING', 'IN_TRANSIT', 'DELIVERED'].includes(status)) {
       shipments = await sql`
         select 
-          s.id, s.customer_id, c.name as customer_name,
-          s.origin, s.destination, s.eta, s.status, s.total_colli, s.public_code, s.vehicle_plate_region, s.created_at
+          s.id, s.customer_id,
+          coalesce(s.customer_name, c.name) as customer_name,
+          coalesce(s.customer_address, c.address) as customer_address,
+          s.origin, s.destination, s.eta, s.status, s.total_colli, s.public_code, s.vehicle_plate_region, s.shipping_address, s.created_at
         from shipments s
         left join customers c on c.id = s.customer_id
         where s.status = ${status}
@@ -89,8 +98,10 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     } else {
       shipments = await sql`
         select 
-          s.id, s.customer_id, c.name as customer_name,
-          s.origin, s.destination, s.eta, s.status, s.total_colli, s.public_code, s.vehicle_plate_region, s.created_at
+          s.id, s.customer_id,
+          coalesce(s.customer_name, c.name) as customer_name,
+          coalesce(s.customer_address, c.address) as customer_address,
+          s.origin, s.destination, s.eta, s.status, s.total_colli, s.public_code, s.vehicle_plate_region, s.shipping_address, s.created_at
         from shipments s
         left join customers c on c.id = s.customer_id
         order by s.created_at desc
@@ -124,10 +135,20 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     
     let customerId = body.customer_id || null;
     let customerName = body.customer_name || null;
+    let customerAddress = body.customer_address || null;
+    let shippingAddress = body.shipping_address || null;
     if (!customerName && customerId) {
       const c = await sql`select name from customers where id = ${customerId}` as [{ name: string }];
       if (!c.length) { writeJson(res, { error: 'Invalid customer_id' }, 400); return; }
       customerName = c[0].name;
+    }
+    if (!customerAddress && customerId) {
+      const ca = await sql`select address from customers where id = ${customerId}` as [{ address: string }];
+      customerAddress = ca[0]?.address || null;
+    }
+    if (!shippingAddress && customerId) {
+      const sa = await sql`select address from customers where id = ${customerId}` as [{ address: string }];
+      shippingAddress = sa[0]?.address || null;
     }
     
     // Generate a public_code based on origin/destination city codes if possible, else fallback to TRK-xxx
@@ -152,7 +173,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
     const result = await sql`
       insert into shipments (
-        customer_id, customer_name, public_code, origin, destination, eta, status, total_colli, vehicle_plate_region, created_at
+        customer_id, customer_name, public_code, origin, destination, eta, status, total_colli, vehicle_plate_region, customer_address, shipping_address, created_at
       ) values (
         ${customerId},
         ${customerName},
@@ -160,9 +181,11 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         ${body.origin},
         ${body.destination},
         ${body.eta || null},
-        'DRAFT',
+        ${body.status || 'DRAFT'},
         ${body.total_colli},
         ${body.vehicle_plate_region || null},
+        ${customerAddress || null},
+        ${shippingAddress || null},
         now()
       )
       returning id
@@ -179,17 +202,31 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     if (!body.id) { writeJson(res, { error: 'Missing id' }, 400); return; }
     
     let customerName = body.customer_name;
+    // keep undefined when not provided so we can detect presence vs absence
+    let customerAddress = body.customer_address as string | undefined;
+    let shippingAddress = body.shipping_address as string | undefined;
     let customerId = body.customer_id;
     if (!customerName && customerId) {
       const c = await sql`select name from customers where id = ${customerId}` as [{ name: string }];
       if (!c.length) { writeJson(res, { error: 'Invalid customer_id' }, 400); return; }
       customerName = c[0].name;
     }
+    if (!customerAddress && customerId) {
+      const ca = await sql`select address from customers where id = ${customerId}` as [{ address: string }?];
+      // prefer undefined if missing
+      customerAddress = ca[0]?.address ?? undefined;
+    }
+    if (!shippingAddress && customerId) {
+      const sa = await sql`select address from customers where id = ${customerId}` as [{ address: string }?];
+      shippingAddress = sa[0]?.address ?? undefined;
+    }
 
     const sets: string[] = [];
     const params: unknown[] = [];
     if (customerId !== undefined) { sets.push(`customer_id = $${sets.length + 1}`); params.push(customerId); }
     if (customerName !== undefined) { sets.push(`customer_name = $${sets.length + 1}`); params.push(customerName); }
+    if (customerAddress !== undefined) { sets.push(`customer_address = $${sets.length + 1}`); params.push(customerAddress); }
+    if (shippingAddress !== undefined) { sets.push(`shipping_address = $${sets.length + 1}`); params.push(shippingAddress); }
     if (body.origin) { sets.push(`origin = $${sets.length + 1}`); params.push(body.origin); }
     if (body.destination) { sets.push(`destination = $${sets.length + 1}`); params.push(body.destination); }
     if (body.eta !== undefined) { sets.push(`eta = $${sets.length + 1}`); params.push(body.eta); }
@@ -236,6 +273,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     let paramIndex = 0;
     if (customerId !== undefined) setClauses.push(`customer_id = ${params[paramIndex++]}`);
     if (customerName !== undefined) setClauses.push(`customer_name = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    if (customerAddress !== undefined) setClauses.push(`customer_address = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    if (shippingAddress !== undefined) setClauses.push(`shipping_address = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (body.origin) setClauses.push(`origin = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (body.destination) setClauses.push(`destination = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (body.eta !== undefined) setClauses.push(`eta = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);

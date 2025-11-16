@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 
-type Customer = { id:number; name:string; phone:string|null };
+type Customer = { id:number; name:string; phone:string|null; address?: string | null };
 
 const props = defineProps<{ modelValue:string; label:string; placeholder?:string }>();
-const emit = defineEmits<{ (e:'update:modelValue', v:string):void; (e:'select-id', id:number|null):void }>();
+const emit = defineEmits<{ (e:'update:modelValue', v:string):void; (e:'select-id', id:number|null):void; (e:'selected', c:Customer):void }>();
 
 const customers = ref<Customer[]>([]);
 const filtered = ref<Customer[]>([]);
@@ -13,6 +13,7 @@ const show = ref(false);
 const showModal = ref(false);
 const newName = ref('');
 const newPhone = ref('');
+const newAddress = ref('');
 const loading = ref(false);
 const selectedId = ref<number|null>(null);
 
@@ -40,6 +41,7 @@ function pick(c:Customer) {
   selectedId.value = c.id;
   emit('update:modelValue', c.name);
   emit('select-id', c.id);
+  emit('selected', c);
   show.value = false;
 }
 
@@ -50,12 +52,12 @@ async function addCustomer() {
   if (!newName.value.trim()) return;
   loading.value = true;
   try {
-    const res = await fetch('/api/customers?endpoint=create', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ name:newName.value.trim(), phone:newPhone.value.trim() || undefined }) });
+    const res = await fetch('/api/customers?endpoint=create', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ name:newName.value.trim(), phone:newPhone.value.trim() || undefined, address: newAddress.value.trim() || undefined }) });
     if (!res.ok) { const err = await res.json(); alert(err.error||'Gagal'); return; }
     const cust = await res.json();
     customers.value.push(cust);
     pick(cust);
-    newName.value=''; newPhone.value=''; showModal.value=false;
+    newName.value=''; newPhone.value=''; newAddress.value=''; showModal.value=false;
   } catch (e) { console.error(e); alert('Gagal tambah customer'); } finally { loading.value=false; }
 }
 
@@ -95,12 +97,8 @@ loadCustomers();
         <div class="font-medium">
           {{ c.name }}
         </div>
-        <div
-          v-if="c.phone"
-          class="text-xs text-gray-500"
-        >
-          {{ c.phone }}
-        </div>
+        <div v-if="c.phone" class="text-xs text-gray-500">{{ c.phone }}</div>
+        <div v-if="c.address" class="text-xs text-gray-500 truncate">{{ c.address }}</div>
       </button>
     </div>
     <div
@@ -128,6 +126,15 @@ loadCustomers();
             type="text"
             class="w-full px-3 py-2 border border-gray-300 rounded-lg"
             placeholder="0812xxxxx"
+          >
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Alamat (opsional)</label>
+          <input
+            v-model="newAddress"
+            type="text"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            placeholder="Alamat lengkap"
           >
         </div>
         <div class="flex gap-2 justify-end">

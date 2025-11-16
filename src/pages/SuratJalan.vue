@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import Button from '../components/ui/Button.vue';
 import Badge from '../components/ui/Badge.vue';
 import { useFormatters } from '../composables/useFormatters';
@@ -22,7 +23,10 @@ type Shipment = {
 };
 
 const shipments = ref<Shipment[]>([]);
+const filteredShipments = ref<Shipment[]>([]);
+const searchQuery = ref('');
 const loading = ref(true);
+const route = useRoute();
 
 async function loadShipments() {
   loading.value = true;
@@ -30,10 +34,26 @@ async function loadShipments() {
     const res = await fetch('/api/shipments?endpoint=list');
     const data = await res.json();
     shipments.value = data.items || [];
+    // initialize filtered results
+    filterShipments();
   } catch (e) {
     console.error('Failed to load shipments:', e);
   } finally {
     loading.value = false;
+  }
+}
+
+function filterShipments() {
+  if (!searchQuery.value.trim()) {
+    filteredShipments.value = shipments.value;
+  } else {
+    const q = searchQuery.value.toLowerCase();
+    filteredShipments.value = shipments.value.filter(s =>
+      String(s.public_code || '').toLowerCase().includes(q) ||
+      s.origin.toLowerCase().includes(q) ||
+      s.destination.toLowerCase().includes(q) ||
+      String(s.customer_name || '').toLowerCase().includes(q)
+    );
   }
 }
 
@@ -228,7 +248,16 @@ async function printDeliveryNote(shipment: Shipment) {
 }
 
 onMounted(() => {
+  if (route.query.q) searchQuery.value = String(route.query.q || '');
   loadShipments();
+});
+
+watch([shipments, searchQuery], () => {
+  filterShipments();
+});
+watch(() => route.query.q, (val) => {
+  const v = val ? String(val) : '';
+  if (v !== searchQuery.value) searchQuery.value = v;
 });
 </script>
 
@@ -236,6 +265,14 @@ onMounted(() => {
   <div class="space-y-4 pb-20 lg:pb-0">
     <div class="text-xl font-semibold">
       Surat Jalan
+    </div>
+    <div class="flex gap-3">
+      <input
+        v-model="searchQuery"
+        type="text"
+        placeholder="Cari kode surat jalan, customer, rute..."
+        class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 dark:border-gray-600"
+      >
     </div>
 
     <div
@@ -251,6 +288,7 @@ onMounted(() => {
       v-else
       class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden card"
     >
+      <div class="overflow-x-auto">
       <table class="w-full">
         <thead class="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
           <tr>
@@ -278,7 +316,7 @@ onMounted(() => {
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-          <tr v-if="shipments.length === 0">
+          <tr v-if="filteredShipments.length === 0">
             <td
               colspan="7"
               class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"
@@ -287,7 +325,7 @@ onMounted(() => {
             </td>
           </tr>
           <tr
-            v-for="ship in shipments"
+            v-for="ship in filteredShipments"
             :key="ship.id"
             class="hover:bg-gray-50 dark:hover:bg-gray-700"
           >
@@ -322,6 +360,7 @@ onMounted(() => {
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 </template>

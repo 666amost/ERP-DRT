@@ -54,3 +54,11 @@ table th, table td {
   border-color: rgba(255,255,255,0.04);
 }
 
+/* Clamp text to up to 2 lines in places like address fields */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import Badge from '../components/ui/Badge.vue';
 import ProgressBar from '../components/ui/ProgressBar.vue';
 import { useFormatters } from '../composables/useFormatters';
@@ -22,6 +23,7 @@ type Shipment = {
 const shipments = ref<Shipment[]>([]);
 const loading = ref(true);
 const searchQuery = ref('');
+const route = useRoute();
 const statusFilter = ref('');
 
 const statusOptions = [
@@ -83,12 +85,22 @@ function filterShipments() {
 }
 
 onMounted(() => {
+  // Initialize from route query if present
+  if (route.query.q) {
+    searchQuery.value = String(route.query.q || '');
+  }
   loadShipments();
 });
 
 import { watch } from 'vue';
 watch([shipments, searchQuery], () => {
   filterShipments();
+});
+
+// Reflect route query changes (when header triggers new search)
+watch(() => route.query.q, (val) => {
+  const v = val ? String(val) : '';
+  if (v !== searchQuery.value) searchQuery.value = v;
 });
 
 watch(statusFilter, () => {
@@ -146,7 +158,7 @@ watch(statusFilter, () => {
       <div
         v-for="ship in filteredShipments"
         :key="ship.id"
-        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 card"
+        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 card break-words"
       >
         <div class="flex items-start justify-between">
           <div>
@@ -163,23 +175,23 @@ watch(statusFilter, () => {
           </Badge>
         </div>
 
-        <div class="flex items-center gap-4 text-sm">
-          <div class="flex-1">
-            <div class="text-gray-500">
+        <div class="flex items-center gap-2 sm:gap-4 text-sm flex-wrap">
+          <div class="flex-1 min-w-0">
+            <div class="text-gray-500 text-xs">
               Origin
             </div>
-            <div class="font-medium">
+            <div class="font-medium truncate">
               {{ ship.origin }}
             </div>
           </div>
-          <div class="text-gray-400 dark:text-gray-500">
+          <div class="text-gray-400 dark:text-gray-500 flex-shrink-0">
             →
           </div>
-          <div class="flex-1">
-            <div class="text-gray-500">
+          <div class="flex-1 min-w-0">
+            <div class="text-gray-500 text-xs">
               Destination
             </div>
-            <div class="font-medium">
+            <div class="font-medium truncate">
               {{ ship.destination }}
             </div>
           </div>
@@ -192,13 +204,13 @@ watch(statusFilter, () => {
           <ProgressBar :value="getProgress(ship.status)" />
         </div>
 
-        <div class="flex items-center justify-between text-sm">
-          <div>
-            <span class="text-gray-500 dark:text-gray-400">Customer:</span>
+        <div class="flex items-center justify-between text-sm flex-wrap gap-2">
+          <div class="truncate max-w-full">
+            <span class="text-gray-500 dark:text-gray-400 text-xs">Customer:</span>
             <span class="font-medium ml-1 dark:text-gray-100">{{ ship.customer_name || '-' }}</span>
           </div>
-          <div v-if="ship.eta">
-            <span class="text-gray-500">ETA:</span>
+          <div v-if="ship.eta" class="flex-shrink-0">
+            <span class="text-gray-500 text-xs">ETA:</span>
             <span class="font-medium ml-1">{{ formatDate(ship.eta) }}</span>
           </div>
         </div>

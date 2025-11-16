@@ -36,6 +36,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       id bigserial primary key,
       customer_id bigint references customers(id),
       customer_name text,
+      customer_address text,
+      shipping_address text,
       origin text not null,
       destination text not null,
       eta date,
@@ -45,6 +47,10 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       vehicle_plate_region text,
       created_at timestamptz default now()
     )`;
+
+    // ensure migration: add customer_address column if missing
+    await sql`alter table shipments add column if not exists customer_address text`;
+    await sql`alter table shipments add column if not exists shipping_address text`;
 
     await sql`
     create table if not exists invoices (

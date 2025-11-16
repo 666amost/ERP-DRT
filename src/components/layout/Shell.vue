@@ -26,7 +26,7 @@ const sidebarOpen = ref(false);
 
     <div class="flex flex-col min-h-screen lg:min-h-0">
       <Header @toggle-sidebar="sidebarOpen = !sidebarOpen" />
-      <main class="p-4 lg:p-6 flex-1 overflow-auto">
+      <main class="p-4 lg:p-6 flex-1 overflow-auto overflow-x-hidden">
         <router-view />
       </main>
       <BottomNav />

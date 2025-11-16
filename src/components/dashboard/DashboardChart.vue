@@ -1,20 +1,20 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
-import * as echarts from 'echarts/core';
-import type { EChartsCoreOption } from 'echarts/core';
-import { LineChart, BarChart, PieChart, RadarChart } from 'echarts/charts';
-import { GridComponent, TooltipComponent, LegendComponent, TitleComponent } from 'echarts/components';
-import { CanvasRenderer } from 'echarts/renderers';
-
-echarts.use([LineChart, BarChart, PieChart, RadarChart, GridComponent, TooltipComponent, LegendComponent, TitleComponent, CanvasRenderer]);
+import type { ECharts, EChartsCoreOption } from 'echarts/core';
 
 type Props = { option: EChartsCoreOption };
 const props = defineProps<Props>();
 const chartDom = ref<HTMLDivElement | null>(null);
-let chart: echarts.ECharts | null = null;
+let chart: ECharts | null = null;
 
-onMounted(() => {
+onMounted(async () => {
   if (chartDom.value) {
+    // Dynamic import of echarts to avoid bundling in initial chunks
+    const echarts = await import('echarts/core');
+    const { LineChart, BarChart, PieChart, RadarChart } = await import('echarts/charts');
+    const { GridComponent, TooltipComponent, LegendComponent, TitleComponent } = await import('echarts/components');
+    const { CanvasRenderer } = await import('echarts/renderers');
+    echarts.use([LineChart, BarChart, PieChart, RadarChart, GridComponent, TooltipComponent, LegendComponent, TitleComponent, CanvasRenderer]);
     chart = echarts.init(chartDom.value as HTMLDivElement);
     if (props.option) chart.setOption(props.option);
     window.addEventListener('resize', handleResize);

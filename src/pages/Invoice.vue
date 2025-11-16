@@ -524,7 +524,7 @@ watch([items, taxPercent, discountAmount], () => {
       <div
         v-for="inv in filteredInvoices"
         :key="inv.id"
-        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md"
+        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md min-w-0"
       >
         <div class="flex items-start justify-between">
           <div>
@@ -557,25 +557,29 @@ watch([items, taxPercent, discountAmount], () => {
             <span class="text-sm">{{ formatDate(inv.issued_at) }}</span>
           </div>
         </div>
-        <div class="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
-          <button
-            class="flex-1 py-2 text-xs font-medium text-primary dark:text-blue-400 bg-primary-light dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+        <div class="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-700 min-w-0">
+          <Button
+            block
+            variant="primary"
             @click="openEditModal(inv)"
           >
             Edit
-          </button>
-          <button
-            class="flex-1 py-2 text-xs font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
+          </Button>
+          <Button
+            block
+            variant="success"
             @click="printInvoice(inv)"
           >
             Print
-          </button>
-          <button
-            class="flex-1 py-2 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+          </Button>
+          <Button
+            block
+            variant="default"
+            class="text-red-600 hover:text-red-700 bg-red-50 dark:bg-red-900/20"
             @click="deleteInvoice(inv.id)"
           >
             Delete
-          </button>
+          </Button>
         </div>
       </div>
     </div>

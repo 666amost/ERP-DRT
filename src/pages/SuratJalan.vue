@@ -262,11 +262,11 @@ watch(() => route.query.q, (val) => {
 </script>
 
 <template>
-  <div class="space-y-4 pb-20 lg:pb-0">
+  <div class="space-y-4 pb-20 lg:pb-0 overflow-x-hidden">
     <div class="text-xl font-semibold">
       Surat Jalan
     </div>
-    <div class="flex gap-3">
+    <div class="flex gap-3 min-w-0">
       <input
         v-model="searchQuery"
         type="text"
@@ -380,7 +380,7 @@ watch(() => route.query.q, (val) => {
       <div
         v-for="ship in filteredShipments"
         :key="ship.id"
-        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md"
+        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md min-w-0"
       >
         <div class="flex items-start justify-between gap-2">
           <div class="flex-1 min-w-0">
@@ -411,8 +411,9 @@ watch(() => route.query.q, (val) => {
         </div>
         <div class="pt-2 border-t border-gray-100 dark:border-gray-700">
           <Button
+            block
             variant="primary"
-            class="w-full text-sm"
+            class="text-sm"
             @click="printDeliveryNote(ship)"
           >
             Print Surat Jalan

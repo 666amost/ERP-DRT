@@ -109,12 +109,12 @@ watch(statusFilter, () => {
 </script>
 
 <template>
-  <div class="space-y-4 pb-20 lg:pb-0">
+  <div class="space-y-4 pb-20 lg:pb-0 overflow-x-hidden">
     <div class="text-xl font-semibold">
       Pelacakan Pengiriman
     </div>
 
-    <div class="flex gap-3">
+    <div class="flex gap-3 min-w-0">
       <input
         v-model="searchQuery"
         type="text"
@@ -158,7 +158,7 @@ watch(statusFilter, () => {
       <div
         v-for="ship in filteredShipments"
         :key="ship.id"
-        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 card break-words"
+        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 card break-words min-w-0"
       >
         <div class="flex items-start justify-between gap-2">
           <div class="flex-1 min-w-0">

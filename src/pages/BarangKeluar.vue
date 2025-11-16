@@ -273,16 +273,16 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-4 pb-20 lg:pb-0">
+  <div class="space-y-4 pb-20 lg:pb-0 overflow-x-hidden">
     <!-- Center content, keep layout in sync with other pages -->
-    <div class="w-full max-w-6xl mx-auto">
+    <div class="w-full max-w-6xl mx-auto min-w-0">
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div class="text-xl font-semibold dark:text-gray-100">
         Barang Keluar (Shipments)
       </div>
       <Button
         variant="primary"
-        class="text-sm"
+        class="flex-shrink-0 text-sm px-3"
         @click="openCreateModal"
       >
         + Tambah
@@ -417,7 +417,7 @@ onMounted(() => {
       <div
         v-for="ship in shipments"
         :key="ship.id"
-        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md"
+        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md min-w-0"
       >
         <div class="flex items-start justify-between gap-2">
           <div class="flex-1 min-w-0">
@@ -464,15 +464,31 @@ onMounted(() => {
             <span class="dark:text-gray-300 text-xs">{{ formatDate(ship.eta) }}</span>
           </div>
         </div>
-        <div class="grid grid-cols-3 gap-1.5 pt-2 border-t border-gray-100 dark:border-gray-700">
-          <Button variant="success" class="w-full py-2.5" @click="viewBarcode(ship)" title="Barcode">
-            <Icon icon="mdi:barcode" class="text-xl" />
+        <div class="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-700 min-w-0">
+          <Button
+            block
+            variant="success"
+            @click="viewBarcode(ship)"
+            title="Barcode"
+          >
+            Barcode
           </Button>
-          <Button variant="primary" class="w-full py-2.5" @click="openEditModal(ship)" title="Edit">
-            <Icon icon="mdi:pencil" class="text-xl" />
+          <Button
+            block
+            variant="primary"
+            @click="openEditModal(ship)"
+            title="Edit"
+          >
+            Edit
           </Button>
-          <Button variant="default" class="w-full py-2.5 text-red-600 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30" @click="deleteShipment(ship.id)" title="Hapus">
-            <Icon icon="mdi:delete" class="text-xl" />
+          <Button
+            block
+            variant="default"
+            class="text-red-600 hover:text-red-700 bg-red-50 rounded-lg"
+            @click="deleteShipment(ship.id)"
+            title="Hapus"
+          >
+            Hapus
           </Button>
         </div>
       </div>

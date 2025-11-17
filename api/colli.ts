@@ -58,7 +58,6 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       const shipmentId = Number(body.shipment_id);
       const items = Array.isArray(body.items) ? body.items : [];
       const existingRows = await sql<Array<{ id: number }>>`select id from colli where shipment_id = ${shipmentId}`;
-      const existingIds = new Set(existingRows.map(r => r.id));
       const incomingIds = new Set(items.filter((it) => it.id).map((it) => Number(it.id)));
       // Delete items that are no longer present
       for (const r of existingRows) {

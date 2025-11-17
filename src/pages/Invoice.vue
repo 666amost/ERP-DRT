@@ -70,7 +70,7 @@ async function loadItemsForInvoice(id: number | null): Promise<void> {
   try {
     const res = await fetch(`/api/invoices?endpoint=items&invoice_id=${id}`);
     const data = await res.json();
-    items.value = (data.items || []).map((i: any) => ({ ...i, _unit_price_display: i.unit_price ? formatRupiah(i.unit_price) : '' }));
+    items.value = (data.items || []).map((i: { unit_price?: number; description?: string; quantity?: number; tax_type?: string; item_discount?: number }) => ({ ...i, _unit_price_display: i.unit_price ? formatRupiah(i.unit_price) : '' }));
   } catch {
     items.value = [];
   }
@@ -94,16 +94,16 @@ function addItem(): void {
   items.value = [...items.value, { description: '', quantity: 1, unit_price: 0, tax_type: 'include', item_discount: 0, _unit_price_display: '' }];
 }
 
-function onInvUnitPriceFocus(it: any) {
+function onInvUnitPriceFocus(it: { unit_price?: number; _unit_price_display?: string }) {
   it._unit_price_display = it.unit_price !== undefined ? String(it.unit_price) : '';
 }
 
-function onInvUnitPriceInput(it: any, e: Event) {
+function onInvUnitPriceInput(it: { _unit_price_display?: string }, e: Event) {
   const target = e.target as HTMLInputElement | null;
   if (target) it._unit_price_display = target.value;
 }
 
-function onInvUnitPriceBlur(it: any, e: Event) {
+function onInvUnitPriceBlur(it: { unit_price?: number; _unit_price_display?: string }, e: Event) {
   const target = e.target as HTMLInputElement | null;
   const rawVal = String(it._unit_price_display || (target?.value || '')).replace(/[^0-9.,-]/g,'').replace(/,/g,'');
   it.unit_price = Number(rawVal || 0);

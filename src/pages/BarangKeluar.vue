@@ -75,16 +75,16 @@ function addItemRow() {
   form.value.items.push({ description: '', quantity: 1, kg_m3: null, unit_price: 0, amount: 0, _unit_price_display: '' });
 }
 
-function onUnitPriceFocus(it: any) {
+function onUnitPriceFocus(it: { unit_price?: number; _unit_price_display?: string }) {
   it._unit_price_display = it.unit_price !== undefined ? String(it.unit_price) : '';
 }
 
-function onUnitPriceInput(it: any, e: Event) {
+function onUnitPriceInput(it: { _unit_price_display?: string }, e: Event) {
   const target = e.target as HTMLInputElement | null;
   if (target) it._unit_price_display = target.value;
 }
 
-function onUnitPriceBlur(it: any, e: Event) {
+function onUnitPriceBlur(it: { unit_price?: number; _unit_price_display?: string }, e: Event) {
   const target = e.target as HTMLInputElement | null;
   const rawVal = String(it._unit_price_display || (target?.value || '')).replace(/[^0-9.,-]/g,'').replace(/,/g,'');
   it.unit_price = Number(rawVal || 0);
@@ -155,7 +155,7 @@ function openEditModal(shipment: Shipment) {
       const res = await fetch(`/api/colli?endpoint=list&shipment_id=${shipment.id}`);
       if (res.ok) {
         const data = await res.json();
-        form.value.items = (data.items || []).map((i: any) => ({ id: i.id, description: i.description || '', quantity: i.quantity || 1, kg_m3: i.weight || i.kg_m3 || null, unit_price: i.unit_price || 0, amount: i.amount || 0, _unit_price_display: i.unit_price ? formatRupiah(i.unit_price) : '' }));
+        form.value.items = (data.items || []).map((i: { id: number; description?: string; quantity?: number; weight?: number; kg_m3?: number; unit_price?: number; amount?: number }) => ({ id: i.id, description: i.description || '', quantity: i.quantity || 1, kg_m3: i.weight || i.kg_m3 || null, unit_price: i.unit_price || 0, amount: i.amount || 0, _unit_price_display: i.unit_price ? formatRupiah(i.unit_price) : '' }));
       }
     } catch (err) {
       console.warn('Failed to load collis for edit modal', err);
@@ -216,7 +216,7 @@ async function saveShipment() {
           if (listRes.ok) {
             const listData = await listRes.json();
             const existing = listData.items || [];
-            await Promise.all(existing.map((it: any) => fetch(`/api/colli?endpoint=delete&id=${it.id}`, { method: 'DELETE' })));
+            await Promise.all(existing.map((it: { id: number }) => fetch(`/api/colli?endpoint=delete&id=${it.id}`, { method: 'DELETE' })));
           }
         }
       } catch (err) {

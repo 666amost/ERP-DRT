@@ -1,4 +1,5 @@
 scripts/
+api/dev/
 *.md
 .vscode/
 .git/

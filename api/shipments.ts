@@ -9,6 +9,8 @@ type Shipment = {
   customer_id: number | null;
   customer_name: string | null;
   customer_address: string | null;
+  sender_name: string | null;
+  sender_address: string | null;
   origin: string;
   destination: string;
   eta: string | null;
@@ -17,6 +19,7 @@ type Shipment = {
   public_code: string | null;
   vehicle_plate_region: string | null;
   shipping_address: string | null;
+  service_type: string | null;
   created_at: string;
 };
 
@@ -24,6 +27,8 @@ type CreateShipmentBody = {
   customer_id?: number;
   customer_name?: string;
   customer_address?: string;
+  sender_name?: string;
+  sender_address?: string;
   origin: string;
   destination: string;
   eta?: string;
@@ -32,6 +37,7 @@ type CreateShipmentBody = {
   vehicle_plate_region?: string;
   shipping_address?: string;
   regenerate_code?: boolean;
+  service_type?: string;
 };
 
 type UpdateShipmentBody = {
@@ -39,6 +45,8 @@ type UpdateShipmentBody = {
   customer_id?: number;
   customer_name?: string;
   customer_address?: string;
+  sender_name?: string;
+  sender_address?: string;
   origin?: string;
   destination?: string;
   eta?: string;
@@ -47,6 +55,7 @@ type UpdateShipmentBody = {
   vehicle_plate_region?: string;
   shipping_address?: string;
   regenerate_code?: boolean;
+  service_type?: string;
 };
 
 const corsHeaders = {
@@ -82,7 +91,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           s.id, s.customer_id,
           coalesce(s.customer_name, c.name) as customer_name,
           coalesce(s.customer_address, c.address) as customer_address,
-          s.origin, s.destination, s.eta, s.status, s.total_colli, s.public_code, s.vehicle_plate_region, s.shipping_address, s.created_at
+          s.sender_name, s.sender_address,
+          s.origin, s.destination, s.eta, s.status, s.total_colli, s.public_code, s.vehicle_plate_region, s.shipping_address, s.service_type, s.created_at
         from shipments s
         left join customers c on c.id = s.customer_id
         where s.status = ${status}
@@ -101,7 +111,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           s.id, s.customer_id,
           coalesce(s.customer_name, c.name) as customer_name,
           coalesce(s.customer_address, c.address) as customer_address,
-          s.origin, s.destination, s.eta, s.status, s.total_colli, s.public_code, s.vehicle_plate_region, s.shipping_address, s.created_at
+          s.sender_name, s.sender_address,
+          s.origin, s.destination, s.eta, s.status, s.total_colli, s.public_code, s.vehicle_plate_region, s.shipping_address, s.service_type, s.created_at
         from shipments s
         left join customers c on c.id = s.customer_id
         order by s.created_at desc
@@ -151,32 +162,28 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       shippingAddress = sa[0]?.address || null;
     }
     
-    // Generate a public_code based on origin/destination city codes if possible, else fallback to TRK-xxx
+    // Generate public_code using new pattern: STE-<PLATE><DD><RND2><DESTCODE><COLLI2>
+    // e.g. STE-DK1825DPS11 (DK=plate, 18=day, 25=random, DPS=dest code, 11=colli)
     let publicCode: string | null = null;
     if (body.regenerate_code !== false) {
-      // lookup city codes
-      const originRow = await sql`select code from cities where name = ${body.origin}` as [{ code: string }?];
+      const plate = (body.vehicle_plate_region || 'XX').toUpperCase();
+      const createdAt = new Date();
+      const dd = String(createdAt.getDate()).padStart(2, '0');
+      const rnd2 = String(Math.floor(Math.random() * 90) + 10);
+      // try to fetch dest code
       const destRow = await sql`select code from cities where name = ${body.destination}` as [{ code: string }?];
-      const originCode = originRow[0]?.code;
-      const destCode = destRow[0]?.code;
-      const region = (body.vehicle_plate_region || 'XX').toUpperCase();
-      if (originCode && destCode) {
-        const likePattern = `${originCode}-${destCode}-%`;
-        const countRes = await sql`select count(*)::int as count from shipments where public_code like ${likePattern}` as [{ count: number }];
-        const nextNum = (countRes[0]?.count || 0) + 1;
-        publicCode = `${originCode}-${destCode}-${String(nextNum).padStart(3, '0')}-${region}`;
-      } else {
-        const countRes = await sql`select count(*)::int as count from shipments where public_code like 'TRK-%'` as [{ count: number }];
-        const nextNum = (countRes[0]?.count || 0) + 1;
-        publicCode = `TRK-${String(nextNum).padStart(3, '0')}`;
-      }
+      const destCode = (destRow[0]?.code || String(body.destination || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3)).slice(0, 3);
+      const colli2 = String(Math.max(0, Number(body.total_colli) || 0)).padStart(2, '0');
+      publicCode = `STE-${plate}${dd}${rnd2}${destCode}${colli2}`;
     }
     const result = await sql`
       insert into shipments (
-        customer_id, customer_name, public_code, origin, destination, eta, status, total_colli, vehicle_plate_region, customer_address, shipping_address, created_at
+        customer_id, customer_name, sender_name, sender_address, public_code, origin, destination, eta, status, total_colli, vehicle_plate_region, customer_address, shipping_address, service_type, created_at
       ) values (
         ${customerId},
         ${customerName},
+        ${body.sender_name || null},
+        ${body.sender_address || null},
         ${publicCode},
         ${body.origin},
         ${body.destination},
@@ -186,6 +193,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         ${body.vehicle_plate_region || null},
         ${customerAddress || null},
         ${shippingAddress || null},
+        ${(body.service_type || 'REG').toUpperCase()},
         now()
       )
       returning id
@@ -227,44 +235,57 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     if (customerName !== undefined) { sets.push(`customer_name = $${sets.length + 1}`); params.push(customerName); }
     if (customerAddress !== undefined) { sets.push(`customer_address = $${sets.length + 1}`); params.push(customerAddress); }
     if (shippingAddress !== undefined) { sets.push(`shipping_address = $${sets.length + 1}`); params.push(shippingAddress); }
+    if (body.sender_name !== undefined) { sets.push(`sender_name = $${sets.length + 1}`); params.push(body.sender_name); }
+    if (body.sender_address !== undefined) { sets.push(`sender_address = $${sets.length + 1}`); params.push(body.sender_address); }
     if (body.origin) { sets.push(`origin = $${sets.length + 1}`); params.push(body.origin); }
     if (body.destination) { sets.push(`destination = $${sets.length + 1}`); params.push(body.destination); }
     if (body.eta !== undefined) { sets.push(`eta = $${sets.length + 1}`); params.push(body.eta); }
     if (body.status) { sets.push(`status = $${sets.length + 1}`); params.push(body.status); }
     if (body.total_colli !== undefined) { sets.push(`total_colli = $${sets.length + 1}`); params.push(body.total_colli); }
     if (body.vehicle_plate_region !== undefined) { sets.push(`vehicle_plate_region = $${sets.length + 1}`); params.push(body.vehicle_plate_region); }
+    if (body.service_type !== undefined) { sets.push(`service_type = $${sets.length + 1}`); params.push((body.service_type || 'REG').toUpperCase()); }
     // If regenerate_code is provided, generate a new code and include it
     if (body.regenerate_code) {
-      // Determine origin/destination for code generation: updated values take precedence; otherwise fetch existing shipment
-      let originForCode = body.origin;
-      let destForCode = body.destination;
-      if (!originForCode || !destForCode) {
-        const existingRow = await sql`select origin, destination, vehicle_plate_region from shipments where id = ${body.id} limit 1` as Array<any>;
-        if (existingRow && existingRow.length) {
-          originForCode = originForCode || existingRow[0].origin;
-          destForCode = destForCode || existingRow[0].destination;
-          if (!body.vehicle_plate_region && existingRow[0].vehicle_plate_region) {
-            body.vehicle_plate_region = existingRow[0].vehicle_plate_region;
-          }
-        }
+      // Generate new pattern: STE-<PLATE><DD><RND2><DESTCODE><COLLI2>
+      // determine plate: prefer provided, otherwise fetch existing
+      let plateVal = body.vehicle_plate_region as string | undefined;
+      if (!plateVal) {
+        try {
+          const existingPlate = await sql`select vehicle_plate_region from shipments where id = ${body.id} limit 1` as Array<any>;
+          if (existingPlate && existingPlate.length && existingPlate[0].vehicle_plate_region) plateVal = existingPlate[0].vehicle_plate_region;
+        } catch { /* ignore */ }
       }
-      const originRow = await sql`select code from cities where name = ${originForCode}` as [{ code: string }?];
-      const destRow = await sql`select code from cities where name = ${destForCode}` as [{ code: string }?];
-      const originCode = originRow[0]?.code;
-      const destCode = destRow[0]?.code;
-      const region = (body.vehicle_plate_region || 'XX').toUpperCase();
-      if (originCode && destCode) {
-        const likePattern = `${originCode}-${destCode}-%`;
-        const countRes = await sql`select count(*)::int as count from shipments where public_code like ${likePattern}` as [{ count: number }];
-        const nextNum = (countRes[0]?.count || 0) + 1;
-        sets.push(`public_code = $${sets.length + 1}`);
-        params.push(`${originCode}-${destCode}-${String(nextNum).padStart(3, '0')}-${region}`);
-      } else {
-        const countRes = await sql`select count(*)::int as count from shipments where public_code like 'TRK-%'` as [{ count: number }];
-        const nextNum = (countRes[0]?.count || 0) + 1;
-        sets.push(`public_code = $${sets.length + 1}`);
-        params.push(`TRK-${String(nextNum).padStart(3, '0')}`);
+      const plate = (plateVal || 'XX').toUpperCase();
+      // attempt to get created_at of existing shipment to use as date; fall back to now
+      let createdAtForCode = new Date();
+      try {
+        const existing = await sql`select created_at from shipments where id = ${body.id} limit 1` as Array<any>;
+        if (existing && existing.length && existing[0].created_at) createdAtForCode = new Date(existing[0].created_at);
+      } catch { /* ignore */ }
+      const dd = String(createdAtForCode.getDate()).padStart(2, '0');
+      const rnd2 = String(Math.floor(Math.random() * 90) + 10);
+      // determine destination for code: prefer provided destination, otherwise fetch existing
+      let destForCode = body.destination as string | undefined;
+      if (!destForCode) {
+        try {
+          const existingDest = await sql`select destination from shipments where id = ${body.id} limit 1` as Array<any>;
+          if (existingDest && existingDest.length && existingDest[0].destination) destForCode = existingDest[0].destination;
+        } catch { /* ignore */ }
       }
+      const destRow2 = await sql`select code from cities where name = ${destForCode}` as [{ code: string }?];
+      const destCode2 = (destRow2[0]?.code || String(destForCode || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3)).slice(0, 3);
+      // determine colli: prefer provided total_colli, otherwise fetch existing value
+      let colliVal = body.total_colli as number | undefined;
+      if (colliVal === undefined) {
+        try {
+          const ex = await sql`select total_colli from shipments where id = ${body.id} limit 1` as Array<any>;
+          colliVal = ex && ex[0] ? ex[0].total_colli : 0;
+        } catch { colliVal = 0; }
+      }
+      const colli2 = String(Math.max(0, Number(colliVal) || 0)).padStart(2, '0');
+      const newCode = `STE-${plate}${dd}${rnd2}${destCode2}${colli2}`;
+      sets.push(`public_code = $${sets.length + 1}`);
+      params.push(newCode);
     }
     if (!sets.length) { writeJson(res, { error: 'No fields to update' }, 400); return; }
     params.push(body.id);
@@ -275,12 +296,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     if (customerName !== undefined) setClauses.push(`customer_name = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (customerAddress !== undefined) setClauses.push(`customer_address = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (shippingAddress !== undefined) setClauses.push(`shipping_address = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    if (body.sender_name !== undefined) setClauses.push(`sender_name = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    if (body.sender_address !== undefined) setClauses.push(`sender_address = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (body.origin) setClauses.push(`origin = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (body.destination) setClauses.push(`destination = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (body.eta !== undefined) setClauses.push(`eta = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (body.status) setClauses.push(`status = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (body.total_colli !== undefined) setClauses.push(`total_colli = ${params[paramIndex++]}`);
     if (body.vehicle_plate_region !== undefined) setClauses.push(`vehicle_plate_region = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    if (body.service_type !== undefined) setClauses.push(`service_type = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (body.regenerate_code) setClauses.push(`public_code = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     
     const updateQuery = `UPDATE shipments SET ${setClauses.join(', ')} WHERE id = ${body.id}`;

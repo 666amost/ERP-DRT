@@ -8,6 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext .ts,.tsx,.vue",
+    "migrate:service-type": "tsx scripts/migrate-service-type.ts",
+    "backfill:public-code": "tsx scripts/backfill-public-code.ts",
     "migrate": "tsx scripts/migrate-and-seed.ts",
     "migrate:update": "tsx scripts/migrate-and-seed.ts",
     "post-deploy": "tsx scripts/post-deploy.ts",

@@ -59,12 +59,20 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       if (!body || !body.shipment_id) return writeJson(res, { error: 'Missing shipment_id' }, 400);
       const shipmentId = Number(body.shipment_id);
       const items = Array.isArray(body.items) ? body.items : [];
+      // Defensive: if client sends empty items array, treat as no-op to avoid accidental mass deletions
+      if (items.length === 0) {
+        return writeJson(res, { success: true, items: [] });
+      }
       const existingRows = (await sql`select id from colli where shipment_id = ${shipmentId}`) as { id: number }[];
-      const incomingIds = new Set(items.filter((it) => it.id).map((it) => Number(it.id)));
-      // Delete items that are no longer present
-      for (const r of existingRows) {
-        if (!incomingIds.has(r.id)) {
-          await sql`delete from colli where id = ${r.id}`;
+      const incomingIds = new Set(items.filter((it) => it.id !== undefined && it.id !== null).map((it) => Number(it.id)));
+      // Defensive: only delete missing existing rows if the client included at least one id in the payload.
+      // This avoids accidental mass-deletion when the client accidentally sends items without preserved ids.
+      if (incomingIds.size > 0) {
+        // Delete items that are no longer present
+        for (const r of existingRows) {
+          if (!incomingIds.has(r.id)) {
+            await sql`delete from colli where id = ${r.id}`;
+          }
         }
       }
       const results: Array<{ id: number }> = [];

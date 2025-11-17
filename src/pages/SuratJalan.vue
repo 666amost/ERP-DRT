@@ -13,6 +13,8 @@ type Shipment = {
   id: number;
   customer_id: number | null;
   customer_name: string | null;
+  sender_name: string | null;
+  sender_address: string | null;
   origin: string;
   destination: string;
   eta: string | null;
@@ -155,11 +157,11 @@ async function printDeliveryNote(shipment: Shipment) {
         <div class="row">
           <div class="field">
             <div class="label">Pengirim</div>
-            <div class="value">${shipment.customer_name ?? '-'}</div>
+            <div class="value">${shipment.sender_name ?? '-'}</div>
           </div>
           <div class="field">
             <div class="label">Kepada Yth</div>
-            <div class="value">${shipment.destination}</div>
+            <div class="value">${shipment.customer_name ?? '-'}</div>
           </div>
         </div>
         <div class="row" style="margin-top:8px;">

@@ -35,6 +35,8 @@ export default async function handler(req: Request): Promise<Response> {
     customer_name text,
     customer_address text,
     shipping_address text,
+    sender_name text,
+    sender_address text,
     origin text not null,
     destination text not null,
     eta date,
@@ -46,6 +48,8 @@ export default async function handler(req: Request): Promise<Response> {
   )`;
   await sql`alter table shipments add column if not exists customer_address text`;
   await sql`alter table shipments add column if not exists shipping_address text`;
+  await sql`alter table shipments add column if not exists sender_name text`;
+  await sql`alter table shipments add column if not exists sender_address text`;
 
   await sql`
   create table if not exists invoices (
@@ -152,6 +156,34 @@ export default async function handler(req: Request): Promise<Response> {
   await sql`create index if not exists idx_colli_code on colli(code)`;
   await sql`create index if not exists idx_events_entity on events(entity_type, entity_id, created_at desc)`;
   await sql`create index if not exists idx_delivery_tokens_token on delivery_tokens(token)`;
+
+  // Recalculate public_code to STE-<ORIGIN>-<DEST>-<NNN>-<REGION>
+  await sql`
+    with s as (
+      select s.id,
+             coalesce(c1.code, 'UNK') as ocode,
+             coalesce(c2.code, 'UNK') as dcode,
+             upper(coalesce(s.vehicle_plate_region,'XX')) as region,
+             row_number() over (partition by c1.code, c2.code order by s.created_at, s.id) as seq
+      from shipments s
+      left join cities c1 on c1.name = s.origin
+      left join cities c2 on c2.name = s.destination
+    )
+    update shipments t
+    set public_code = 'STE-' || s.ocode || '-' || s.dcode || '-' || lpad(s.seq::text, 3, '0') || '-' || s.region
+    from s
+    where t.id = s.id
+  `;
+  await sql`
+    with seq as (
+      select id, row_number() over (order by created_at, id) as n, upper(coalesce(vehicle_plate_region,'XX')) as region
+      from shipments where public_code is null
+    )
+    update shipments t
+    set public_code = 'STE-TRK-' || lpad(seq.n::text, 3, '0') || '-' || seq.region
+    from seq
+    where t.id = seq.id
+  `;
 
   return Response.json({ ok: true });
 }

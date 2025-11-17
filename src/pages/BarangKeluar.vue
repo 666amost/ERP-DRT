@@ -5,6 +5,7 @@ import Badge from '../components/ui/Badge.vue';
 import CityAutocomplete from '../components/CityAutocomplete.vue';
 import CustomerAutocomplete from '../components/CustomerAutocomplete.vue';
 import { useFormatters } from '../composables/useFormatters';
+import { getCompany } from '../lib/company';
 import { Icon } from '@iconify/vue';
 const LOGO_URL = '/brand/logo.png';
 
@@ -15,6 +16,8 @@ type Shipment = {
   customer_id: number | null;
   customer_name: string | null;
   customer_address: string | null;
+  sender_name: string | null;
+  sender_address: string | null;
   origin: string;
   destination: string;
   eta: string | null;
@@ -23,6 +26,7 @@ type Shipment = {
   public_code: string | null;
   vehicle_plate_region: string | null;
   shipping_address: string | null;
+  service_type: string | null;
   created_at: string;
 };
 
@@ -37,7 +41,10 @@ type ShipmentForm = {
   customer_id: number | null;
   customer_address: string;
   shipping_address: string;
+  sender_name: string;
+  sender_address: string;
   regenerate_code: boolean;
+  service_type: string;
   items?: { id?: number; description?: string; quantity?: number; kg_m3?: number | null; unit_price?: number; amount?: number; _unit_price_display?: string; status?: string }[];
 };
 
@@ -56,7 +63,10 @@ const form = ref<ShipmentForm>({
   customer_id: null,
   customer_address: '',
   shipping_address: '',
+  sender_name: '',
+  sender_address: '',
   regenerate_code: false
+  , service_type: 'REG'
   , items: []
 });
 
@@ -70,6 +80,7 @@ const statusOptions = [
 
 const selectedShipment = ref<Shipment | null>(null);
 const showBarcodeModal = ref(false);
+const modalBarcodeValue = ref<string>('');
 function addItemRow() {
   if (!form.value.items) form.value.items = [];
   form.value.items.push({ description: '', quantity: 1, kg_m3: null, unit_price: 0, amount: 0, _unit_price_display: '' });
@@ -96,9 +107,33 @@ function removeItemRow(i: number) {
   form.value.items.splice(i, 1);
 }
 
-function viewBarcode(shipment: Shipment) {
+async function viewBarcode(shipment: Shipment) {
   selectedShipment.value = shipment;
   showBarcodeModal.value = true;
+  // compute barcodeValue for modal display
+  const plate = (shipment.vehicle_plate_region || 'XX').toUpperCase();
+  const dest = shipment.destination;
+  const colliTotal = shipment.total_colli || 0;
+  const createdAt = shipment.created_at ? new Date(shipment.created_at) : new Date();
+  const dd = String(createdAt.getDate()).padStart(2, '0');
+  const rnd2 = String(Math.floor(Math.random() * 90) + 10);
+  
+  const getDestCode = async (name: string): Promise<string> => {
+    try {
+      const res = await fetch(`/api/cities?endpoint=list&search=${encodeURIComponent(name)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const items = (data?.items || []) as Array<{ name: string; code: string }>
+        const exact = items.find((c) => (c.name || '').toLowerCase() === name.toLowerCase());
+        const picked = exact || items[0];
+        if (picked && picked.code) return String(picked.code).toUpperCase().slice(0, 3);
+      }
+    } catch { void 0; }
+    return String(name || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) || 'XXX';
+  };
+  const destCode = await getDestCode(dest);
+  const colli2 = String(Math.max(0, Number(colliTotal) || 0)).padStart(2, '0');
+  modalBarcodeValue.value = `STE-${plate}${dd}${rnd2}${destCode}${colli2}`;
 }
 
 async function loadShipments() {
@@ -127,7 +162,10 @@ function openCreateModal() {
     customer_id: null,
     customer_address: '',
     shipping_address: '',
+    sender_name: '',
+    sender_address: '',
     regenerate_code: true
+    , service_type: 'REG'
     , items: []
   };
   showModal.value = true;
@@ -146,7 +184,10 @@ function openEditModal(shipment: Shipment) {
     customer_id: shipment.customer_id,
     customer_address: shipment.customer_address || '',
     shipping_address: shipment.shipping_address || shipment.customer_address || '',
+    sender_name: shipment.sender_name || '',
+    sender_address: shipment.sender_address || '',
     regenerate_code: false
+    , service_type: shipment.service_type || 'REG'
     , items: []
   };
   // fetch colli rows for the shipment
@@ -155,7 +196,16 @@ function openEditModal(shipment: Shipment) {
       const res = await fetch(`/api/colli?endpoint=list&shipment_id=${shipment.id}`);
       if (res.ok) {
         const data = await res.json();
-        form.value.items = (data.items || []).map((i: { id: number; description?: string; quantity?: number; weight?: number; kg_m3?: number; unit_price?: number; amount?: number }) => ({ id: i.id, description: i.description || '', quantity: i.quantity || 1, kg_m3: i.weight || i.kg_m3 || null, unit_price: i.unit_price || 0, amount: i.amount || 0, _unit_price_display: i.unit_price ? formatRupiah(i.unit_price) : '' }));
+        // preserve id and normalize weight property to kg_m3 (ensure numeric types)
+        form.value.items = (data.items || []).map((i: { id?: number; description?: string; quantity?: number; weight?: number; kg_m3?: number; unit_price?: number; amount?: number }) => ({
+          id: i.id ?? undefined,
+          description: i.description || '',
+          quantity: typeof i.quantity === 'number' ? i.quantity : Number(i.quantity || 1),
+          kg_m3: (i.kg_m3 ?? i.weight) !== undefined ? Number(i.kg_m3 ?? i.weight) : null,
+          unit_price: typeof i.unit_price === 'number' ? i.unit_price : (i.unit_price ? Number(i.unit_price) : 0),
+          amount: typeof i.amount === 'number' ? i.amount : (i.amount ? Number(i.amount) : 0),
+          _unit_price_display: i.unit_price ? formatRupiah(i.unit_price) : ''
+        }));
       }
     } catch (err) {
       console.warn('Failed to load collis for edit modal', err);
@@ -187,8 +237,11 @@ async function saveShipment() {
           customer_name: form.value.customer_name || undefined,
           customer_address: form.value.customer_address || undefined,
           shipping_address: form.value.shipping_address || undefined,
+          sender_name: form.value.sender_name || undefined,
+          sender_address: form.value.sender_address || undefined,
           vehicle_plate_region: form.value.vehicle_plate_region.trim().toUpperCase() || undefined,
-          regenerate_code: form.value.regenerate_code
+          regenerate_code: form.value.regenerate_code,
+          service_type: form.value.service_type || 'REG'
         })
       });
       if (!res.ok) throw new Error('Update failed');
@@ -211,13 +264,7 @@ async function saveShipment() {
             if (!resp.ok) console.warn('Bulk set collis failed', await resp.text());
           } catch (err) { console.warn('bulk-set colli request error', err); }
         } else {
-          // if no items provided, delete existing collis
-          const listRes = await fetch(`/api/colli?endpoint=list&shipment_id=${editingId.value}`);
-          if (listRes.ok) {
-            const listData = await listRes.json();
-            const existing = listData.items || [];
-            await Promise.all(existing.map((it: { id: number }) => fetch(`/api/colli?endpoint=delete&id=${it.id}`, { method: 'DELETE' })));
-          }
+          // no items provided in form – keep existing items untouched
         }
       } catch (err) {
         console.warn('Failed to update collis', err);
@@ -236,7 +283,10 @@ async function saveShipment() {
           customer_id: form.value.customer_id || undefined,
           customer_name: form.value.customer_name || undefined,
           customer_address: form.value.customer_address || undefined,
-          shipping_address: form.value.shipping_address || undefined
+          sender_name: form.value.sender_name || undefined,
+          sender_address: form.value.sender_address || undefined,
+          shipping_address: form.value.shipping_address || undefined,
+          service_type: form.value.service_type || 'REG'
         })
       });
       if (!res.ok) throw new Error('Create failed');
@@ -285,69 +335,108 @@ function getStatusVariant(status: string): 'default' | 'info' | 'warning' | 'suc
   return (opt?.variant || 'default') as 'default' | 'info' | 'warning' | 'success';
 }
 
-function printLabel() {
+async function printLabel() {
   if (!selectedShipment.value) return;
-  const code = String(selectedShipment.value.public_code || '');
   const origin = selectedShipment.value.origin;
   const dest = selectedShipment.value.destination;
   const customerName = selectedShipment.value.customer_name || '';
+  const senderName = selectedShipment.value.sender_name || '';
   const customerAddress = selectedShipment.value.customer_address || '';
   const shippingAddressVal = selectedShipment.value.shipping_address || '';
+  const colliTotal = selectedShipment.value.total_colli || 0;
+  const plate = (selectedShipment.value.vehicle_plate_region || 'XX').toUpperCase();
+  const serviceType = (selectedShipment.value.service_type || 'REG').toUpperCase();
+
+  const getDestCode = async (name: string): Promise<string> => {
+    try {
+      const res = await fetch(`/api/cities?endpoint=list&search=${encodeURIComponent(name)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const items = (data?.items || []) as Array<{ name: string; code: string }>
+        const exact = items.find((c) => (c.name || '').toLowerCase() === name.toLowerCase());
+        const picked = exact || items[0];
+        if (picked && picked.code) return String(picked.code).toUpperCase().slice(0, 3);
+      }
+    } catch { void 0; }
+    return String(name || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) || 'XXX';
+  };
+
+  const createdAt = selectedShipment.value.created_at ? new Date(selectedShipment.value.created_at) : new Date();
+  const dd = String(createdAt.getDate()).padStart(2, '0');
+  const rnd2 = String(Math.floor(Math.random() * 90) + 10);
+  const destCode = await getDestCode(dest);
+  const colli2 = String(Math.max(0, Number(colliTotal) || 0)).padStart(2, '0');
+  const barcodeValue = `STE-${plate}${dd}${rnd2}${destCode}${colli2}`;
+
+  // fetch colli items to calculate weight
+  let totalWeight = 0;
+  try {
+    const colliRes = await fetch(`/api/colli?endpoint=list&shipment_id=${selectedShipment.value.id}`);
+    if (colliRes.ok) {
+      const colliData = await colliRes.json();
+      const items = (colliData.items || []) as Array<{ kg_m3?: number | null }>;
+      totalWeight = items.reduce((sum, it) => sum + (Number(it.kg_m3) || 0), 0);
+    }
+  } catch { void 0; }
+  const weightDisplay = totalWeight > 0 ? `${totalWeight.toFixed(2)} kg` : '-';
+
+  const company = await getCompany();
+
   const win = window.open('', '_blank');
   if (!win) return;
-  // small helper to escape HTML
-  const esc = (s: string) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const addrHtml = esc(shippingAddressVal || customerAddress).replace(/\n/g,'<br />');
+  const esc = (s: string) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const addrHtml = esc(shippingAddressVal || customerAddress).replace(/\n/g, '<br />');
   const originEsc = esc(origin);
   const destEsc = esc(dest);
-  const collis = selectedShipment.value.total_colli || '';
-  const plate = selectedShipment.value.vehicle_plate_region || '';
-  const etaFmt = selectedShipment.value.eta ? formatDate(selectedShipment.value.eta) : '';
   const customerNameHtml = esc(customerName);
 
   win.document.write(`<!DOCTYPE html><html><head><title>Print Label</title><style>
-    @page { size: 100mm 150mm; margin: 0; }
-    body { margin:0; font-family: 'Inter', Arial, sans-serif; -webkit-print-color-adjust: exact; }
-    .label-box {
-      width: 100mm; height: 150mm; box-sizing: border-box;
-      padding: 0; border: 2px solid #1d4ed8; border-radius: 8px;
-      display: flex; flex-direction: column; background: #ffffff;
-      page-break-inside: avoid;
-    }
-    .label-inner {
-      padding: 6mm; height: calc(150mm - 12mm); display: flex; flex-direction: column; gap: 2mm;
-    }
-    .brand { display:flex; align-items:center; justify-content:center; gap:5px; }
-    .brand img { width: 14mm; height: 14mm; object-fit: contain; }
-    .brand-name { font-size: 11px; font-weight: 700; color: #1d4ed8; letter-spacing: .4px; }
-    .label-header { text-align: center; font-size: 16px; font-weight: 700; color: #1d4ed8; }
-    .label-customer { text-align: center; font-size: 12px; color: #1e40af; font-weight: 600; }
-    .label-address { text-align: center; font-size: 10px; color: #374151; line-height: 1.15; max-height: 26mm; overflow: hidden; }
-    .label-route { text-align: center; font-size: 12px; font-weight: 600; color: #1e40af; }
-    .label-meta { text-align:center; font-size:11px; color:#374151; }
-    .codes { display: flex; flex-direction: column; gap: 4mm; justify-content: center; align-items: center; }
-    .codes .qr { width: 44mm; height: 44mm; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 4px; background: #fff; display:block; }
-    .codes .barcode { width: 80mm; height: 24mm; object-fit: contain; display:block; }
-    .label-footer { text-align: center; font-size: 11px; color: #1e40af; margin-top:auto; }
-    @media print { body { background: transparent; } }
+  @page { size: 100mm 150mm; margin: 0; }
+  html,body { height:100%; margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Inter', Arial, sans-serif; -webkit-print-color-adjust: exact; }
+  .wrap { width: 100mm; height: 150mm; box-sizing: border-box; page-break-inside: avoid; overflow: hidden; }
+  .inner { padding: 4mm; display:flex; flex-direction:column; gap: 2mm; border: 1px solid #d1d5db; height:100%; box-sizing: border-box; }
+    .header { display:flex; align-items:center; justify-content:space-between; }
+    .company { font-weight:800; font-size:13px; letter-spacing:.3px; }
+    .logo { width: 10mm; height: 10mm; object-fit: contain; }
+    .resi-row { display:flex; align-items:stretch; gap: 2mm; }
+    .resi { flex:1; background:#111827; color:#fff; border-radius:2px; padding:2mm 3mm; }
+    .resi .label { font-size:7px; opacity:0.8; }
+    .resi .code { font-size:12px; font-weight:700; letter-spacing: .4px; margin-top:1mm; word-break:break-all; }
+    .qr { width: 18mm; height: 18mm; border:1px solid #e5e7eb; background:#fff; border-radius:2px; }
+    .route { background:#e5e7eb; color:#111827; border-radius:2px; padding:2mm 3mm; font-size:10px; font-weight:600; }
+    .section { border:1px solid #d1d5db; border-radius:2px; padding:2mm 3mm; }
+    .section .title { font-size:8px; color:#6b7280; text-transform:uppercase; margin-bottom:1mm; }
+    .section .value { font-size:10px; line-height:1.25; }
+    .info { display:flex; gap:2mm; }
+    .info .box { flex:1; border:1px solid #d1d5db; border-radius:2px; padding:2mm; text-align:center; }
+    .info .box .k { font-size:8px; color:#6b7280; text-transform:uppercase; }
+    .info .box .v { font-size:11px; font-weight:700; margin-top:1mm; }
+     /* Barcode area: keep exact size and crop the image so white margins are hidden.
+       This avoids changing backend barcode generation while removing visible image border. */
+     .barcode-wrap { margin-top:auto; display:flex; justify-content:center; padding-bottom:2mm; height: 20mm; }
+     .barcode-crop { width: 86mm; height: 14mm; overflow: hidden; display:block; }
+     .barcode { width: 110%; height: calc(100% + 2mm); object-fit: cover; display:block; border: none; margin: 0; padding: 0; transform-origin:center; transform: translateX(-5%) scale(1.05); }
   </style></head><body>`);
-  win.document.write(`<div class="label-box">
-    <div class="label-inner">
-      <div class="brand"><img src="${LOGO_URL}" alt="Logo" /><div class="brand-name">SUMBER TRANS EXPRESS</div></div>
-      <div class="label-header">${esc(code)}</div>
-      <div class="label-customer">${customerNameHtml}</div>
-      <div class="label-route">${originEsc} → ${destEsc}</div>
-      <div class="label-address">${addrHtml}</div>
-      <div class="label-meta">
-        ${collis ? 'Colli: ' + esc(String(collis)) : ''}${(collis && plate) ? ' · ' : ''}${plate ? 'Plat: ' + esc(plate) : ''}${(collis || plate) && etaFmt ? ' · ' : ''}${etaFmt ? 'ETA: ' + esc(etaFmt) : ''}
-      </div>
-      <div class="codes">
-        <img class="qr" src="/api/blob?endpoint=generate&code=${esc(code)}&type=qr" alt="QR Code" />
-        <img class="barcode" src="/api/blob?endpoint=generate&code=${esc(code)}&type=barcode" alt="Barcode" />
-      </div>
-      <div class="label-footer">SUMBER TRANS EXPRESS</div>
+  win.document.write(`<div class="wrap"><div class="inner">
+    <div class="header">
+      <div class="company">${esc(company?.name || 'PERUSAHAAN')}</div>
+      <img class="logo" src="${LOGO_URL}" alt="Logo" />
     </div>
-  </div>`);
+    <div class="resi-row">
+      <div class="resi"><div class="label">Nomor Resi / Tracking Number</div><div class="code">${esc(barcodeValue)}</div></div>
+      <img class="qr" src="/api/blob?endpoint=generate&code=${esc(barcodeValue)}&type=qr" alt="QR" />
+    </div>
+    <div class="route">${originEsc} → ${destEsc}</div>
+    <div class="section"><div class="title">Pengirim / Sender</div><div class="value">${esc(senderName) || '-'}</div></div>
+    <div class="section"><div class="title">Penerima / Recipient</div><div class="value"><div>${customerNameHtml}</div><div style="margin-top:1mm">${addrHtml}</div></div></div>
+    <div class="info">
+      <div class="box"><div class="k">Berat</div><div class="v">${esc(weightDisplay)}</div></div>
+      <div class="box"><div class="k">Layanan</div><div class="v">${esc(serviceType)}</div></div>
+      <div class="box"><div class="k">Koli</div><div class="v">1 / ${esc(String(colliTotal || 0))}</div></div>
+    </div>
+    <div class="barcode-wrap"><div class="barcode-crop"><img class="barcode" src="/api/blob?endpoint=generate&code=${esc(barcodeValue)}&type=barcode" alt="Barcode" /></div></div>
+  </div></div>`);
   win.document.write('</body></html>');
   win.document.close();
   win.focus();
@@ -618,6 +707,24 @@ watch(() => form.value.items, () => {
             v-model="form.destination"
             label="Destination"
           />
+          <div>
+            <label class="block text-sm font-medium mb-1">Nama Pengirim</label>
+            <input
+              v-model="form.sender_name"
+              type="text"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              placeholder="Nama pengirim"
+            >
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Alamat Pengirim</label>
+            <textarea
+              v-model="form.sender_address"
+              rows="3"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              placeholder="Alamat lengkap pengirim"
+            ></textarea>
+          </div>
           <CustomerAutocomplete
             v-model="form.customer_name"
             label="Customer"
@@ -668,6 +775,16 @@ watch(() => form.value.items, () => {
               type="date"
               class="w-full px-3 py-2 border border-gray-300 rounded-lg"
             >
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Jenis Layanan</label>
+            <select
+              v-model="form.service_type"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            >
+              <option value="REG">REG</option>
+              <option value="CARGO">CARGO</option>
+            </select>
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">Status</label>
@@ -780,7 +897,7 @@ watch(() => form.value.items, () => {
     >
       <div class="bg-white rounded-xl p-6 w-full max-w-md space-y-4 card">
         <div class="text-lg font-semibold">
-          Barcode - {{ selectedShipment.public_code }}
+          Barcode - {{ modalBarcodeValue }}
         </div>
         <div class="space-y-4">
           <div class="text-sm text-gray-500 text-center">
@@ -793,7 +910,7 @@ watch(() => form.value.items, () => {
               QR Code
             </div>
             <img
-              :src="`/api/blob?endpoint=generate&code=${selectedShipment.public_code}&type=qr`"
+              :src="`/api/blob?endpoint=generate&code=${modalBarcodeValue}&type=qr`"
               alt="QR Code"
               class="mx-auto border border-gray-200 p-2 rounded"
             >
@@ -803,7 +920,7 @@ watch(() => form.value.items, () => {
               Barcode (Code 128)
             </div>
             <img
-              :src="`/api/blob?endpoint=generate&code=${selectedShipment.public_code}&type=barcode`"
+              :src="`/api/blob?endpoint=generate&code=${modalBarcodeValue}&type=barcode`"
               alt="Barcode"
               class="mx-auto border border-gray-200 p-2 rounded"
             >

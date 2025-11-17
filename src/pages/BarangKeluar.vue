@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import Button from '../components/ui/Button.vue';
 import Badge from '../components/ui/Badge.vue';
 import CityAutocomplete from '../components/CityAutocomplete.vue';
@@ -8,7 +8,7 @@ import { useFormatters } from '../composables/useFormatters';
 import { Icon } from '@iconify/vue';
 const LOGO_URL = '/brand/logo.png';
 
-const { formatDate } = useFormatters();
+const { formatDate, formatRupiah } = useFormatters();
 
 type Shipment = {
   id: number;
@@ -38,6 +38,7 @@ type ShipmentForm = {
   customer_address: string;
   shipping_address: string;
   regenerate_code: boolean;
+  items?: { id?: number; description?: string; quantity?: number; kg_m3?: number | null; unit_price?: number; amount?: number; _unit_price_display?: string; status?: string }[];
 };
 
 const shipments = ref<Shipment[]>([]);
@@ -56,6 +57,7 @@ const form = ref<ShipmentForm>({
   customer_address: '',
   shipping_address: '',
   regenerate_code: false
+  , items: []
 });
 
 const statusOptions = [
@@ -68,6 +70,31 @@ const statusOptions = [
 
 const selectedShipment = ref<Shipment | null>(null);
 const showBarcodeModal = ref(false);
+function addItemRow() {
+  if (!form.value.items) form.value.items = [];
+  form.value.items.push({ description: '', quantity: 1, kg_m3: null, unit_price: 0, amount: 0, _unit_price_display: '' });
+}
+
+function onUnitPriceFocus(it: any) {
+  it._unit_price_display = it.unit_price !== undefined ? String(it.unit_price) : '';
+}
+
+function onUnitPriceInput(it: any, e: Event) {
+  const target = e.target as HTMLInputElement | null;
+  if (target) it._unit_price_display = target.value;
+}
+
+function onUnitPriceBlur(it: any, e: Event) {
+  const target = e.target as HTMLInputElement | null;
+  const rawVal = String(it._unit_price_display || (target?.value || '')).replace(/[^0-9.,-]/g,'').replace(/,/g,'');
+  it.unit_price = Number(rawVal || 0);
+  it._unit_price_display = formatRupiah(it.unit_price || 0);
+}
+
+function removeItemRow(i: number) {
+  if (!form.value.items) return;
+  form.value.items.splice(i, 1);
+}
 
 function viewBarcode(shipment: Shipment) {
   selectedShipment.value = shipment;
@@ -101,6 +128,7 @@ function openCreateModal() {
     customer_address: '',
     shipping_address: '',
     regenerate_code: true
+    , items: []
   };
   showModal.value = true;
 }
@@ -119,7 +147,20 @@ function openEditModal(shipment: Shipment) {
     customer_address: shipment.customer_address || '',
     shipping_address: shipment.shipping_address || shipment.customer_address || '',
     regenerate_code: false
+    , items: []
   };
+  // fetch colli rows for the shipment
+  (async () => {
+    try {
+      const res = await fetch(`/api/colli?endpoint=list&shipment_id=${shipment.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        form.value.items = (data.items || []).map((i: any) => ({ id: i.id, description: i.description || '', quantity: i.quantity || 1, kg_m3: i.weight || i.kg_m3 || null, unit_price: i.unit_price || 0, amount: i.amount || 0, _unit_price_display: i.unit_price ? formatRupiah(i.unit_price) : '' }));
+      }
+    } catch (err) {
+      console.warn('Failed to load collis for edit modal', err);
+    }
+  })();
   showModal.value = true;
 }
 
@@ -151,6 +192,36 @@ async function saveShipment() {
         })
       });
       if (!res.ok) throw new Error('Update failed');
+      // handle collis update: delete existing and recreate from form
+      try {
+        if (form.value.items && form.value.items.length) {
+          // bulk-set collis (upsert items)
+          try {
+            // ensure unit_price values are numeric and amounts are set
+            const itemsToSend = (form.value.items || []).map(it => ({
+              id: it.id,
+              description: it.description,
+              quantity: it.quantity || 1,
+              kg_m3: it.kg_m3 || null,
+              unit_price: (typeof it.unit_price === 'number' && !isNaN(it.unit_price)) ? it.unit_price : Number(String(it._unit_price_display || '').replace(/[^0-9.-]/g, '')) || 0,
+              amount: (Number(it.quantity || 0) * (Number(it.unit_price || 0))) || 0,
+              status: it.status || undefined
+            }));
+            const resp = await fetch(`/api/colli?endpoint=bulk-set`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shipment_id: editingId.value, items: itemsToSend }) });
+            if (!resp.ok) console.warn('Bulk set collis failed', await resp.text());
+          } catch (err) { console.warn('bulk-set colli request error', err); }
+        } else {
+          // if no items provided, delete existing collis
+          const listRes = await fetch(`/api/colli?endpoint=list&shipment_id=${editingId.value}`);
+          if (listRes.ok) {
+            const listData = await listRes.json();
+            const existing = listData.items || [];
+            await Promise.all(existing.map((it: any) => fetch(`/api/colli?endpoint=delete&id=${it.id}`, { method: 'DELETE' })));
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to update collis', err);
+      }
     } else {
       const res = await fetch('/api/shipments?endpoint=create', {
         method: 'POST',
@@ -169,6 +240,24 @@ async function saveShipment() {
         })
       });
       if (!res.ok) throw new Error('Create failed');
+      const created = await res.json();
+      // create collis for the new shipment
+      const sid = created.id;
+      if (form.value.items && form.value.items.length) {
+        try {
+          const itemsToSend = (form.value.items || []).map(it => ({
+            id: it.id,
+            description: it.description,
+            quantity: it.quantity || 1,
+            kg_m3: it.kg_m3 || null,
+            unit_price: (typeof it.unit_price === 'number' && !isNaN(it.unit_price)) ? it.unit_price : Number(String(it._unit_price_display || '').replace(/[^0-9.-]/g, '')) || 0,
+            amount: (Number(it.quantity || 0) * (Number(it.unit_price || 0))) || 0,
+            status: it.status || undefined
+          }));
+          const resp = await fetch(`/api/colli?endpoint=bulk-set`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shipment_id: sid, items: itemsToSend }) });
+          if (!resp.ok) console.warn('Bulk set collis failed', await resp.text());
+        } catch (err) { console.warn('bulk-set colli request error', err); }
+      }
     }
     showModal.value = false;
     loadShipments();
@@ -198,7 +287,7 @@ function getStatusVariant(status: string): 'default' | 'info' | 'warning' | 'suc
 
 function printLabel() {
   if (!selectedShipment.value) return;
-  const code = selectedShipment.value.public_code;
+  const code = String(selectedShipment.value.public_code || '');
   const origin = selectedShipment.value.origin;
   const dest = selectedShipment.value.destination;
   const customerName = selectedShipment.value.customer_name || '';
@@ -269,6 +358,21 @@ function printLabel() {
 onMounted(() => {
   loadShipments();
 });
+
+watch(() => form.value.items, () => {
+  if (!form.value.items) return;
+  for (const it of form.value.items) {
+    const qty = typeof it.quantity === 'number' ? it.quantity : Number(it.quantity || 0);
+    const unit = typeof it.unit_price === 'number' ? it.unit_price : Number(it.unit_price || 0);
+    it.amount = +(qty * unit);
+  }
+}, { deep: true });
+
+watch(() => form.value.items, () => {
+  if (!form.value.items || form.value.items.length === 0) return;
+  const sum = form.value.items.reduce((acc, it) => acc + (Number(it.quantity || 0)), 0);
+  form.value.total_colli = String(sum);
+}, { deep: true });
 </script>
 
 <template>
@@ -496,11 +600,12 @@ onMounted(() => {
 
     <div
       v-if="showModal"
-      class="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center z-50 p-4"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center z-50 pt-4 px-4 pb-[60px] lg:p-4"
       @click.self="showModal = false"
     >
-      <div class="bg-white rounded-xl w-full max-w-md card max-h-[90vh] overflow-hidden flex flex-col">
-        <div class="p-6 overflow-auto" style="max-height: calc(90vh - 78px);">
+      <!-- Modal: use full mobile height minus bottom nav (~56px) so action buttons sit lower without covering nav -->
+      <div class="bg-white rounded-xl w-full max-w-4xl card flex flex-col h-[calc(100vh-60px)] lg:max-h-[90vh]">
+        <div class="p-6 overflow-auto flex-1">
         <div class="text-lg font-semibold">
           {{ editingId ? 'Edit Shipment' : 'Tambah Shipment' }}
         </div>
@@ -591,8 +696,66 @@ onMounted(() => {
               class="text-xs text-gray-600 select-none"
             >Regenerate kode tracking jika origin/dest/plat berubah</label>
           </div>
+          <div class="pt-2 border-t border-gray-100 dark:border-gray-800">
+            <div class="mb-2 flex items-center justify-between">
+              <div class="text-sm font-medium">Items</div>
+              <div>
+                <Button variant="default" class="text-xs px-3 py-1" @click="addItemRow">Tambah Item</Button>
+              </div>
+            </div>
+            <div class="space-y-2">
+              <div class="hidden md:grid md:grid-cols-[1fr_90px_100px_130px_130px_60px] gap-3 px-2 text-xs font-semibold text-gray-600">
+                <div>Deskripsi</div>
+                <div class="text-center">Qty</div>
+                <div class="text-center">Kg/M3</div>
+                <div class="text-center">Harga</div>
+                <div class="text-center">Jumlah</div>
+                <div></div>
+              </div>
+              <div v-if="!form.items || form.items.length === 0" class="text-sm text-gray-500 px-2">Belum ada item</div>
+              <div v-for="(it, idx) in form.items" :key="idx" class="p-2 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded">
+                <div class="grid md:grid-cols-[1fr_90px_100px_130px_130px_60px] gap-3 items-start">
+                  <div class="md:row-span-1">
+                    <div class="md:hidden text-xs text-gray-500 mb-1">Deskripsi</div>
+                    <input v-model="it.description" class="w-full px-2 py-1 border rounded" placeholder="Deskripsi barang" />
+                  </div>
+                  <div>
+                    <div class="md:hidden text-xs text-gray-500 mb-1">Qty</div>
+                    <input v-model.number="it.quantity" type="number" min="1" class="w-full px-2 py-1 border rounded text-right" placeholder="Qty" />
+                  </div>
+                  <div>
+                    <div class="md:hidden text-xs text-gray-500 mb-1">Kg/M3</div>
+                    <input v-model.number="it.kg_m3" type="number" step="0.01" class="w-full px-2 py-1 border rounded text-right" placeholder="Kg/M3" />
+                  </div>
+                  <div>
+                    <div class="md:hidden text-xs text-gray-500 mb-1">Harga</div>
+                    <input
+                      :value="it._unit_price_display || (it.unit_price !== undefined ? String(it.unit_price) : '')"
+                      @focus="onUnitPriceFocus(it)"
+                      @blur="onUnitPriceBlur(it, $event)"
+                      @input="onUnitPriceInput(it, $event)"
+                      type="text"
+                      class="w-full px-2 py-1 border rounded text-right"
+                      placeholder="Harga"
+                    />
+                  </div>
+                  <div>
+                    <div class="md:hidden text-xs text-gray-500 mb-1">Jumlah</div>
+                    <input :value="formatRupiah(it.amount || 0)" readonly class="w-full px-2 py-1 border rounded bg-gray-50 text-right" />
+                  </div>
+                  <div class="flex md:flex-col justify-end items-center">
+                    <Button variant="default" class="text-xs px-2 py-1" @click="removeItemRow(idx)">X</Button>
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center justify-between mt-2 px-2">
+                <Button variant="default" class="text-xs px-3 py-1" @click="addItemRow">Tambah Item</Button>
+                <div class="text-sm text-gray-500">Total Colli: {{ form.total_colli }}</div>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="flex gap-2 justify-end border-t border-gray-100 dark:border-gray-800 p-4 bg-white sticky bottom-0">
+        <div class="flex gap-2 justify-end border-t border-gray-100 dark:border-gray-800 p-4 bg-white">
           <Button
             variant="default"
             @click="showModal = false"
@@ -662,5 +825,5 @@ onMounted(() => {
         </div>
       </div>
     </div>
-  </div>
+    </div> <!-- end space-y-4 wrapper -->
 </template>

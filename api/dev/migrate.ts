@@ -68,6 +68,7 @@ export default async function handler(req: Request): Promise<Response> {
     weight numeric(10,2),
     status text default 'READY'
   )`;
+  await sql`alter table colli add column if not exists created_at timestamptz default now()`;
 
   await sql`
   create table if not exists trips (

@@ -65,173 +65,170 @@ async function printDeliveryNote(shipment: Shipment) {
   }
 
   const company = await getCompany();
+  // Try to fetch item (colli) details for this shipment if available
+  let collis: Array<{ id: number; shipment_id: number; code?: string; description?: string; quantity?: number; kg_m3?: number; unit_price?: number; amount?: number }> = [];
+  try {
+    const resColli = await fetch(`/api/colli?endpoint=list&shipment_id=${shipment.id}`);
+    if (resColli.ok) {
+      const data = await resColli.json();
+      // Expecting { items: [] }
+      collis = data.items || [];
+    }
+  } catch (err) {
+    console.warn('Failed to fetch collis for shipment', err);
+  }
   const html = `
     <!DOCTYPE html>
     <html>
     <head>
-      <title>Surat Jalan - ${shipment.public_code}</title>
+      <title>Surat Jalan - ${shipment.public_code ?? ''}</title>
+      <meta charset="utf-8" />
       <style>
-        body {
-          font-family: Arial, sans-serif;
-          padding: 40px;
-          max-width: 800px;
-          margin: 0 auto;
-        }
-        .header {
-          text-align: center;
-          margin-bottom: 30px;
-          border-bottom: 2px solid #000;
-          padding-bottom: 20px;
-        }
-        .brand { display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:10px; }
-        .brand img { height: 48px; width: 48px; object-fit: contain; }
-        .brand-name { font-weight: 700; color: #1d4ed8; letter-spacing: .5px; }
-        .header h1 {
-          margin: 0;
-          font-size: 24px;
-        }
-        .header p {
-          margin: 5px 0;
-          color: #666;
-        }
-        .info-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 20px;
-          margin-bottom: 30px;
-        }
-        .info-item {
-          margin-bottom: 10px;
-        }
-        .info-label {
-          font-weight: bold;
-          font-size: 12px;
-          color: #666;
-          text-transform: uppercase;
-        }
-        .info-value {
-          font-size: 14px;
-          margin-top: 2px;
-        }
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-bottom: 30px;
-        }
-        th, td {
-          border: 1px solid #ddd;
-          padding: 10px;
-          text-align: left;
-        }
-        th {
-          background-color: #f5f5f5;
-          font-weight: bold;
-        }
-        .signatures {
-          display: grid;
-          grid-template-columns: 1fr 1fr 1fr;
-          gap: 20px;
-          margin-top: 60px;
-        }
-        .signature-box {
-          text-align: center;
-        }
-        .signature-line {
-          border-top: 1px solid #000;
-          margin-top: 80px;
-          padding-top: 10px;
-        }
+        :root { --ink:#0e0e0e; --line:#1f2937; --muted:#6b7280; --paper:#fffbe6; }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+        body { font-family: Arial, Helvetica, sans-serif; color: var(--ink); margin:0; padding:24px; }
+        .sheet { width: 210mm; max-width: 210mm; margin:0 auto; background: var(--paper); border: 1px solid var(--line); padding: 18px 18px 14px; }
+        .top { display:flex; align-items:flex-start; gap:16px; }
+        .brand { display:flex; gap:10px; align-items:center; }
+        .brand img { width:48px; height:48px; object-fit:contain; }
+        .brand-title { font-weight:800; letter-spacing:.4px; }
+        .brand-sub { font-size:12px; color:#1f2937; margin-top:2px; }
+        .addr { font-size:11px; color: var(--muted); margin-top:6px; white-space:pre-line; }
+        .right-box { margin-left:auto; border:1px solid var(--line); padding:8px 10px; text-align:center; min-width:230px; }
+        .right-box .title { font-weight:800; font-size:13px; letter-spacing:.5px; }
+        .right-box .code { margin-top:6px; font-size:12px; }
+
+        .barcode { text-align:right; margin:8px 0 10px; }
+        .barcode img { width:300px; height:72px; object-fit:contain; border:1px solid #e5e7eb; padding:6px; border-radius:4px; background:#fff; }
+
+        .row { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-top:10px; }
+        .field { border:1px solid var(--line); padding:8px; min-height:44px; }
+        .label { font-size:11px; color:var(--muted); margin-bottom:4px; text-transform:uppercase; }
+        .value { font-size:13px; }
+
+        table { width:100%; border-collapse:collapse; margin-top:12px; }
+        th, td { border:1px solid #000; font-size:12px; padding:6px 8px; }
+        thead th { background:#f7f7f7; }
+
+        .bottom { display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:12px; align-items:start; }
+        .tnc { border:1px solid var(--line); padding:10px; font-size:10px; line-height:1.35; color:#111827; }
+        .tnc h4 { margin:0 0 6px; font-size:11px; }
+        .badge-note { display:inline-block; border:1px solid var(--line); padding:6px 10px; font-weight:700; margin-top:8px; border-radius:4px; }
+
+        .sign-row { display:grid; grid-template-columns: repeat(3,1fr); gap:18px; margin-top:22px; }
+        .sign { text-align:center; font-size:12px; }
+        .line { border-top:1px solid #000; margin-top:60px; padding-top:4px; }
+
+        .right-summary { text-align:right; font-size:12px; }
+        .right-summary .date { margin-top:8px; }
+
         @media print {
-          body {
-            padding: 20px;
-          }
+          body { padding:0; }
+          .sheet { border:0; width:auto; max-width:none; padding:16mm; }
         }
-        /* Barcode container and sizing for precise printing */
-        .barcode-right { text-align: right; }
-        .barcode-right img { width: 320px; max-width: 100%; height: 72px; object-fit: contain; border: 1px solid #e5e7eb; padding: 6px; border-radius: 6px; background: #fff; }
       </style>
     </head>
     <body>
-      <div class="header">
-        <div class="brand"><img src="${LOGO_URL}" alt="Logo" /><div class="brand-name">SUMBER TRANS EXPRESS</div></div>
-        <h1>SURAT JALAN</h1>
-        <p>${company.name}</p>
-        <p>${company.address}</p>
-      </div>
-
-      <div class="barcode-right" style="margin:12px 0 24px;">
-        <div style="font-size:12px;color:#374151;margin-bottom:4px;">Barcode</div>
-        <!-- Use Code 128 barcode for surat jalan (precision for labels) -->
-        <img src="/api/blob?endpoint=generate&code=${shipment.public_code || ''}&type=barcode" alt="Barcode (Code 128)" />
-      </div>
-
-      <div class="info-grid">
-        <div>
-          <div class="info-item">
-            <div class="info-label">No. Surat Jalan</div>
-            <div class="info-value">${shipment.public_code}</div>
+      <div class="sheet">
+        <div class="top">
+          <div>
+            <div class="brand">
+              <img src="${LOGO_URL}" alt="Logo" />
+              <div>
+                <div class="brand-title">${company?.name ?? 'PERUSAHAAN LOGISTIK'}</div>
+                <div class="brand-sub">Melayani: Pengiriman ke Seluruh Indonesia</div>
+              </div>
+            </div>
+            <div class="addr">${company?.address ?? ''}</div>
           </div>
-          <div class="info-item">
-            <div class="info-label">Tanggal</div>
-            <div class="info-value">${formatDateLong(shipment.created_at)}</div>
-          </div>
-          <div class="info-item">
-            <div class="info-label">Customer</div>
-            <div class="info-value">${shipment.customer_name || '-'}</div>
+          <div class="right-box">
+            <div class="title">SURAT PENGANTAR BARANG</div>
+            <div class="code">No.S ${shipment.public_code ?? ''}</div>
           </div>
         </div>
-        <div>
-          <div class="info-item">
-            <div class="info-label">Origin</div>
-            <div class="info-value">${shipment.origin}</div>
-          </div>
-          <div class="info-item">
-            <div class="info-label">Destination</div>
-            <div class="info-value">${shipment.destination}</div>
-          </div>
-          <div class="info-item">
-            <div class="info-label">ETA</div>
-            <div class="info-value">${shipment.eta ? formatDateLong(shipment.eta) : '-'}</div>
-          </div>
-        </div>
-      </div>
 
-      <table>
-        <thead>
-          <tr>
-            <th>No</th>
-            <th>Deskripsi</th>
-            <th style="text-align: center;">Jumlah Colli</th>
-            <th>Keterangan</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>1</td>
-            <td>Barang Kiriman</td>
-            <td style="text-align: center;">${shipment.total_colli}</td>
-            <td>${shipment.status}</td>
-          </tr>
-        </tbody>
-      </table>
+        <div class="barcode">
+          <img src="/api/blob?endpoint=generate&code=${shipment.public_code ?? ''}&type=barcode" alt="Barcode" />
+        </div>
 
-      <div class="signatures">
-        <div class="signature-box">
-          <div>Pengirim</div>
-          <div class="signature-line">
-            (&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)
+        <div class="row">
+          <div class="field">
+            <div class="label">Pengirim</div>
+            <div class="value">${shipment.customer_name ?? '-'}</div>
+          </div>
+          <div class="field">
+            <div class="label">Kepada Yth</div>
+            <div class="value">${shipment.destination}</div>
           </div>
         </div>
-        <div class="signature-box">
-          <div>Driver</div>
-          <div class="signature-line">
-            (&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)
+        <div class="row" style="margin-top:8px;">
+          <div class="field">
+            <div class="label">Dari</div>
+            <div class="value">${shipment.origin}</div>
+          </div>
+          <div class="field">
+            <div class="label">Tanggal</div>
+            <div class="value">${formatDateLong(shipment.created_at)}</div>
           </div>
         </div>
-        <div class="signature-box">
-          <div>Penerima</div>
-          <div class="signature-line">
-            (&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width:12%">Banyaknya</th>
+              <th>Nama barang menurut keterangan pengirim</th>
+              <th style="width:14%">Berat Barang</th>
+              <th style="width:16%">Ongkos Kirim</th>
+            </tr>
+          </thead>
+          <tbody>
+${(collis.length ? collis.map((c) => `            <tr>
+              <td>${c.quantity ?? 1}</td>
+              <td>${(c.description ?? 'Barang kiriman').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</td>
+              <td>${c.kg_m3 ?? ''}</td>
+              <td>${c.amount !== undefined ? Number(c.amount).toFixed(2) : ''}</td>
+            </tr>`).join('\n') : `            <tr>
+              <td>${shipment.total_colli}</td>
+              <td>Barang kiriman</td>
+              <td></td>
+              <td></td>
+            </tr>`)}
+          </tbody>
+        </table>
+
+        <div class="bottom">
+          <div>
+            <div class="tnc">
+              <h4>Persyaratan Pengiriman</h4>
+              <div>
+                1) Pengirim menjamin isi barang sesuai dengan keterangan.\n
+                2) Kerusakan/kehilangan akibat force majeure tidak menjadi tanggung jawab pengangkut.\n
+                3) Barang mudah pecah/cepat rusak harus diberi pengaman memadai.\n
+                4) Klaim disertai bukti sah dan diajukan selambat-lambatnya 3x24 jam setelah diterima.\n
+                5) Perhitungan berat berdasarkan Kg/M3 yang lebih besar.
+              </div>
+              <div class="badge-note">Isi dalam tidak diperiksa</div>
+            </div>
+          </div>
+          <div class="right-summary">
+            <div><strong>Jumlah</strong></div>
+            <div class="date">Jakarta, ${formatDate(shipment.created_at)}</div>
+          </div>
+        </div>
+
+        <div class="sign-row">
+          <div class="sign">
+            <div>Pengirim</div>
+            <div class="line">(..............................)</div>
+          </div>
+          <div class="sign">
+            <div>Yang Menerima</div>
+            <div class="line">(..............................)</div>
+          </div>
+          <div class="sign">
+            <div>Hormat kami</div>
+            <div class="line">(..............................)</div>
           </div>
         </div>
       </div>

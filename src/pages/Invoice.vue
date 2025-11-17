@@ -39,6 +39,7 @@ type Item = {
   unit_price: number;
   tax_type?: string;
   item_discount?: number;
+  _unit_price_display?: string;
 };
 
 const invoices = ref<Invoice[]>([]);
@@ -69,7 +70,7 @@ async function loadItemsForInvoice(id: number | null): Promise<void> {
   try {
     const res = await fetch(`/api/invoices?endpoint=items&invoice_id=${id}`);
     const data = await res.json();
-    items.value = (data.items || []) as Item[];
+    items.value = (data.items || []).map((i: any) => ({ ...i, _unit_price_display: i.unit_price ? formatRupiah(i.unit_price) : '' }));
   } catch {
     items.value = [];
   }
@@ -81,7 +82,7 @@ async function saveItemsForInvoice(invoiceId: number): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       invoice_id: invoiceId,
-      items: items.value,
+      items: items.value.map((it) => ({ description: it.description, quantity: it.quantity, unit_price: it.unit_price, tax_type: it.tax_type, item_discount: it.item_discount })),
       tax_percent: taxPercent.value,
       discount_amount: discountAmount.value,
       notes: notes.value || undefined
@@ -90,7 +91,23 @@ async function saveItemsForInvoice(invoiceId: number): Promise<void> {
 }
 
 function addItem(): void {
-  items.value = [...items.value, { description: '', quantity: 1, unit_price: 0, tax_type: 'include', item_discount: 0 }];
+  items.value = [...items.value, { description: '', quantity: 1, unit_price: 0, tax_type: 'include', item_discount: 0, _unit_price_display: '' }];
+}
+
+function onInvUnitPriceFocus(it: any) {
+  it._unit_price_display = it.unit_price !== undefined ? String(it.unit_price) : '';
+}
+
+function onInvUnitPriceInput(it: any, e: Event) {
+  const target = e.target as HTMLInputElement | null;
+  if (target) it._unit_price_display = target.value;
+}
+
+function onInvUnitPriceBlur(it: any, e: Event) {
+  const target = e.target as HTMLInputElement | null;
+  const rawVal = String(it._unit_price_display || (target?.value || '')).replace(/[^0-9.,-]/g,'').replace(/,/g,'');
+  it.unit_price = Number(rawVal || 0);
+  it._unit_price_display = formatRupiah(it.unit_price || 0);
 }
 
 function removeItem(index: number): void {
@@ -639,6 +656,14 @@ watch([items, taxPercent, discountAmount], () => {
           <div>
             <label class="block text-sm font-medium mb-1">Item</label>
             <div class="space-y-2">
+              <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 text-xs text-gray-500 font-medium px-2">
+                <div class="sm:col-span-4">Deskripsi</div>
+                <div class="sm:col-span-1">Qty</div>
+                <div class="sm:col-span-2">Harga</div>
+                <div class="sm:col-span-2">PPN</div>
+                <div class="sm:col-span-2">Diskon</div>
+                <div class="sm:col-span-1"></div>
+              </div>
               <div
                 v-for="(it, idx) in items"
                 :key="idx"
@@ -657,11 +682,12 @@ watch([items, taxPercent, discountAmount], () => {
                   placeholder="Qty"
                 >
                 <input
-                  v-model.number="it.unit_price"
-                  type="number"
-                  min="0"
+                  :value="it._unit_price_display || (it.unit_price !== undefined ? String(it.unit_price) : '')"
+                  @focus="onInvUnitPriceFocus(it)"
+                  @blur="onInvUnitPriceBlur(it, $event)"
+                  @input="onInvUnitPriceInput(it, $event)"
+                  type="text"
                   class="col-span-1 sm:col-span-2 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                  placeholder="Harga"
                 >
                 <select
                   v-model="it.tax_type"
@@ -682,7 +708,6 @@ watch([items, taxPercent, discountAmount], () => {
                   type="number"
                   min="0"
                   class="col-span-1 sm:col-span-2 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                  placeholder="Diskon"
                 >
                 <button
                   type="button"

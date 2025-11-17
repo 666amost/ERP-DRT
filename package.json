@@ -17,26 +17,31 @@
     "backfill:invoices": "tsx scripts/backfill-invoices-customer-id.ts",
     "report:invoices-unmatched": "tsx scripts/report-invoices-unmatched.ts"
   },
+  "overrides": {
+    "glob": "11.1.0"
+  },
   "dependencies": {
     "@iconify/vue": "^4.2.0",
     "@neondatabase/serverless": "^0.10.3",
     "@vercel/blob": "^0.25.1",
+    "axios": "^1.13.2",
     "browser-image-compression": "^2.0.2",
     "bwip-js": "^4.8.0",
+    "countup.js": "^2.9.0",
+    "echarts": "^6.0.0",
+    "jsbarcode": "^3.12.1",
+    "nprogress": "^0.2.0",
     "qr-scanner": "^1.4.2",
     "qrcode": "^1.5.4",
     "vue": "^3.5.12",
-    "vue-router": "^4.4.5",
-    "axios": "^1.13.2",
-    "echarts": "^6.0.0",
     "vue-echarts": "^8.0.1",
-    "countup.js": "^2.9.0",
-    "nprogress": "^0.2.0"
+    "vue-router": "^4.4.5"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
     "@types/bwip-js": "^3.2.3",
     "@types/node": "^20.11.24",
+    "@types/nprogress": "^0.2.0",
     "@types/qrcode": "^1.5.6",
     "@typescript-eslint/eslint-plugin": "^8.13.0",
     "@typescript-eslint/parser": "^8.13.0",
@@ -48,11 +53,11 @@
     "eslint": "^9.14.0",
     "eslint-plugin-vue": "^9.30.0",
     "globals": "^15.11.0",
+    "js-beautify": "^1.15.4",
     "jsdom": "^27.2.0",
     "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.16",
+    "tailwindcss": "^4.1.17",
     "tsx": "^4.20.6",
-    "@types/nprogress": "^0.2.0",
     "typescript": "^5.6.3",
     "vite": "^7.2.2",
     "vitest": "^4.0.8"

@@ -7,7 +7,18 @@ import CustomerAutocomplete from '../components/CustomerAutocomplete.vue';
 import { useFormatters } from '../composables/useFormatters';
 import { getCompany } from '../lib/company';
 import { Icon } from '@iconify/vue';
+import JsBarcode from 'jsbarcode';
 const LOGO_URL = '/brand/logo.png';
+
+function toInputDate(val: string | null | undefined): string {
+  if (!val) return '';
+  const d = new Date(val);
+  if (Number.isNaN(d.getTime())) return '';
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
 
 const { formatDate, formatRupiah } = useFormatters();
 
@@ -176,7 +187,7 @@ function openEditModal(shipment: Shipment) {
   form.value = {
     origin: shipment.origin,
     destination: shipment.destination,
-    eta: shipment.eta || '',
+    eta: toInputDate(shipment.eta),
     status: shipment.status,
     total_colli: String(shipment.total_colli),
     vehicle_plate_region: shipment.vehicle_plate_region || '',
@@ -368,6 +379,37 @@ async function printLabel() {
   const colli2 = String(Math.max(0, Number(colliTotal) || 0)).padStart(2, '0');
   const barcodeValue = `STE-${plate}${dd}${rnd2}${destCode}${colli2}`;
 
+  // Generate Code128 barcode client-side (avoid blob egress and ensure AWB text is present)
+  let barcodeDataUrl: string | null = null;
+  try {
+    const canvas = document.createElement('canvas');
+    // Convert mm to px at 96dpi: px = mm * 96 / 25.4
+    const mmToPx = (mm: number) => Math.round(mm * 96 / 25.4);
+    // target visual size approx 86mm x 14mm, use higher resolution for crisp print
+    const targetW = mmToPx(86);
+    const targetH = mmToPx(14);
+    const scale = Math.max(1, Math.ceil((window.devicePixelRatio || 1)));
+    canvas.width = targetW * scale;
+    canvas.height = (targetH + 18) * scale; // extra space for human-readable text
+    canvas.style.width = String(targetW) + 'px';
+    canvas.style.height = String(targetH + 18) + 'px';
+
+    JsBarcode(canvas, barcodeValue, {
+      format: 'CODE128',
+      displayValue: true,
+      fontSize: Math.round(12 * scale),
+      margin: 0,
+      height: Math.round(targetH * 0.8 * scale),
+      textMargin: Math.round(6 * scale),
+      background: '#ffffff'
+    });
+
+    barcodeDataUrl = canvas.toDataURL('image/png');
+  } catch (err) {
+    console.warn('Client-side barcode generation failed, falling back to server image', err);
+    barcodeDataUrl = null;
+  }
+
   // fetch colli items to calculate weight
   let totalWeight = 0;
   try {
@@ -381,6 +423,7 @@ async function printLabel() {
   const weightDisplay = totalWeight > 0 ? `${totalWeight.toFixed(2)} kg` : '-';
 
   const company = await getCompany();
+  const etaDisplay = selectedShipment.value?.eta ? formatDate(selectedShipment.value.eta) : '';
 
   const win = window.open('', '_blank');
   if (!win) return;
@@ -390,35 +433,48 @@ async function printLabel() {
   const destEsc = esc(dest);
   const customerNameHtml = esc(customerName);
 
+  // Generated timestamp for this printed label (changes every print)
+  const printedAt = new Date();
+  const printedAtDisplay = `${printedAt.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })} ${printedAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`;
+
   win.document.write(`<!DOCTYPE html><html><head><title>Print Label</title><style>
   @page { size: 100mm 150mm; margin: 0; }
   html,body { height:100%; margin:0; padding:0; box-sizing:border-box; }
   body { font-family: 'Inter', Arial, sans-serif; -webkit-print-color-adjust: exact; }
-  .wrap { width: 100mm; height: 150mm; box-sizing: border-box; page-break-inside: avoid; overflow: hidden; }
-  .inner { padding: 4mm; display:flex; flex-direction:column; gap: 2mm; border: 1px solid #d1d5db; height:100%; box-sizing: border-box; }
+  /* Page container that matches canvas */
+  .page { width: 100mm; height: 150mm; position: relative; box-sizing: border-box; }
+  /* Generated timestamp sits outside the outer border but inside the page (bottom-right) */
+  .generated { position: absolute; bottom: 2mm; right: 4mm; font-style: italic; font-size:9px; color:#6b7280; z-index:5; }
+      /* Outer wrapper positioned below the generated area.
+        Reduce top offset and remove outer border to avoid duplicate borders (we keep the inner border). */
+      .wrap { position: absolute; top: 2mm; left: 1mm; right: 1mm; bottom: 1mm; box-sizing: border-box; padding: 1mm; border: none; }
+  /* Inner content keeps its subtle border */
+  .inner { padding: 2mm; display:flex; flex-direction:column; gap: 1.5mm; border: 1px solid #d1d5db; height: 100%; box-sizing: border-box; position: relative; }
     .header { display:flex; align-items:center; justify-content:space-between; }
-    .company { font-weight:800; font-size:13px; letter-spacing:.3px; }
-    .logo { width: 10mm; height: 10mm; object-fit: contain; }
+    .company { font-weight:800; font-size:12px; letter-spacing:.3px; }
+    .logo { width: 9mm; height: 9mm; object-fit: contain; }
     .resi-row { display:flex; align-items:stretch; gap: 2mm; }
-    .resi { flex:1; background:#111827; color:#fff; border-radius:2px; padding:2mm 3mm; }
+    .resi { flex:1; background:#111827; color:#fff; border-radius:2px; padding:1.5mm 2mm; }
     .resi .label { font-size:7px; opacity:0.8; }
     .resi .code { font-size:12px; font-weight:700; letter-spacing: .4px; margin-top:1mm; word-break:break-all; }
     .qr { width: 18mm; height: 18mm; border:1px solid #e5e7eb; background:#fff; border-radius:2px; }
-    .route { background:#e5e7eb; color:#111827; border-radius:2px; padding:2mm 3mm; font-size:10px; font-weight:600; }
-    .section { border:1px solid #d1d5db; border-radius:2px; padding:2mm 3mm; }
+    .route { background:#e5e7eb; color:#111827; border-radius:2px; padding:1mm 2mm; font-size:10px; font-weight:600; }
+    .eta-box { font-size:10px; color:#374151; background:transparent; margin-top:1.5mm; padding:0 1.5mm; }
+    .section { border:1px solid #d1d5db; border-radius:2px; padding:1.5mm 2mm; }
     .section .title { font-size:8px; color:#6b7280; text-transform:uppercase; margin-bottom:1mm; }
     .section .value { font-size:10px; line-height:1.25; }
-    .info { display:flex; gap:2mm; }
-    .info .box { flex:1; border:1px solid #d1d5db; border-radius:2px; padding:2mm; text-align:center; }
+    .info { display:flex; gap:1.5mm; }
+    .info .box { flex:1; border:1px solid #d1d5db; border-radius:2px; padding:1.5mm; text-align:center; }
     .info .box .k { font-size:8px; color:#6b7280; text-transform:uppercase; }
     .info .box .v { font-size:11px; font-weight:700; margin-top:1mm; }
-     /* Barcode area: keep exact size and crop the image so white margins are hidden.
-       This avoids changing backend barcode generation while removing visible image border. */
-     .barcode-wrap { margin-top:auto; display:flex; justify-content:center; padding-bottom:2mm; height: 20mm; }
-     .barcode-crop { width: 86mm; height: 14mm; overflow: hidden; display:block; }
-     .barcode { width: 110%; height: calc(100% + 2mm); object-fit: cover; display:block; border: none; margin: 0; padding: 0; transform-origin:center; transform: translateX(-5%) scale(1.05); }
+     /* Barcode area: show barcode + human-readable AWB text.
+        Avoid cropping the text by reserving enough height and keeping the image fully visible. */
+    .barcode-wrap { margin-top:auto; display:flex; justify-content:center; padding-bottom:1mm; }
+    .barcode-crop { width: 86mm; height: 18mm; overflow: visible; display:block; }
+     .barcode { width: 100%; height: auto; object-fit: contain; display:block; border: none; margin: 0; padding: 0; transform: none; }
+      /* support removed per user request */
   </style></head><body>`);
-  win.document.write(`<div class="wrap"><div class="inner">
+    win.document.write(`<div class="page"><div class="generated">Generated: ${esc(printedAtDisplay)}</div><div class="wrap"><div class="inner">
     <div class="header">
       <div class="company">${esc(company?.name || 'PERUSAHAAN')}</div>
       <img class="logo" src="${LOGO_URL}" alt="Logo" />
@@ -428,6 +484,7 @@ async function printLabel() {
       <img class="qr" src="/api/blob?endpoint=generate&code=${esc(barcodeValue)}&type=qr" alt="QR" />
     </div>
     <div class="route">${originEsc} → ${destEsc}</div>
+    ${etaDisplay ? `<div class="eta-box">ETA: ${esc(etaDisplay)}</div>` : ''}
     <div class="section"><div class="title">Pengirim / Sender</div><div class="value">${esc(senderName) || '-'}</div></div>
     <div class="section"><div class="title">Penerima / Recipient</div><div class="value"><div>${customerNameHtml}</div><div style="margin-top:1mm">${addrHtml}</div></div></div>
     <div class="info">
@@ -435,8 +492,9 @@ async function printLabel() {
       <div class="box"><div class="k">Layanan</div><div class="v">${esc(serviceType)}</div></div>
       <div class="box"><div class="k">Koli</div><div class="v">1 / ${esc(String(colliTotal || 0))}</div></div>
     </div>
-    <div class="barcode-wrap"><div class="barcode-crop"><img class="barcode" src="/api/blob?endpoint=generate&code=${esc(barcodeValue)}&type=barcode" alt="Barcode" /></div></div>
-  </div></div>`);
+    <div class="barcode-wrap"><div class="barcode-crop"><img class="barcode" src="${esc(barcodeDataUrl || (`/api/blob?endpoint=generate&code=${barcodeValue}&type=barcode`))}" alt="Barcode" /></div></div>
+    <!-- support contact removed -->
+  </div></div></div>`);
   win.document.write('</body></html>');
   win.document.close();
   win.focus();

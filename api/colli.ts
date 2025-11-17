@@ -31,11 +31,13 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     } else if (endpoint === 'create' && req.method === 'POST') {
       const body = await readJsonNode(req) as ColliBody | null;
       if (!body || !body.shipment_id) return writeJson(res, { error: 'Missing shipment_id' }, 400);
-      const resInsert = await sql<Array<{ id: number }>>`
+      const resInsert = (await sql`
         insert into colli (shipment_id, code, weight, status, description, quantity, unit_price, amount)
         values (${body.shipment_id}, ${body.code || null}, ${body.kg_m3 || null}, ${body.status || 'READY'}, ${body.description || null}, ${body.quantity || 1}, ${body.unit_price || 0}, ${body.amount || 0})
-        returning id`;
-      return writeJson(res, { id: resInsert[0].id }, 201);
+        returning id`) as { id: number }[];
+      const newId = resInsert[0]?.id;
+      if (!newId && newId !== 0) return writeJson(res, { error: 'Insert failed' }, 500);
+      return writeJson(res, { id: newId }, 201);
     } else if (endpoint === 'update' && req.method === 'PUT') {
       const body = await readJsonNode(req) as ColliBody | null;
       if (!body || !body.id) return writeJson(res, { error: 'Missing id' }, 400);
@@ -57,7 +59,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       if (!body || !body.shipment_id) return writeJson(res, { error: 'Missing shipment_id' }, 400);
       const shipmentId = Number(body.shipment_id);
       const items = Array.isArray(body.items) ? body.items : [];
-      const existingRows = await sql<Array<{ id: number }>>`select id from colli where shipment_id = ${shipmentId}`;
+      const existingRows = (await sql`select id from colli where shipment_id = ${shipmentId}`) as { id: number }[];
       const incomingIds = new Set(items.filter((it) => it.id).map((it) => Number(it.id)));
       // Delete items that are no longer present
       for (const r of existingRows) {
@@ -79,10 +81,12 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           await Promise.all(updates);
           results.push({ id });
         } else {
-          const insertRes = await sql<Array<{ id: number }>>`
+          const insertRes = (await sql`
             insert into colli (shipment_id, code, weight, status, description, quantity, unit_price, amount)
-            values (${shipmentId}, ${it.code || null}, ${it.kg_m3 || null}, ${it.status || 'READY'}, ${it.description || null}, ${it.quantity || 1}, ${it.unit_price || 0}, ${it.amount || 0}) returning id`;
-          results.push({ id: insertRes[0].id });
+            values (${shipmentId}, ${it.code || null}, ${it.kg_m3 || null}, ${it.status || 'READY'}, ${it.description || null}, ${it.quantity || 1}, ${it.unit_price || 0}, ${it.amount || 0}) returning id`) as { id: number }[];
+          const newInsertedId = insertRes[0]?.id;
+          if (!newInsertedId && newInsertedId !== 0) continue;
+          results.push({ id: newInsertedId });
         }
       }
       return writeJson(res, { success: true, items: results });

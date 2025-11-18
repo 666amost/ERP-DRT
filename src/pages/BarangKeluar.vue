@@ -2,7 +2,6 @@
 import { ref, onMounted, watch } from 'vue';
 import Button from '../components/ui/Button.vue';
 import Badge from '../components/ui/Badge.vue';
-import CityAutocomplete from '../components/CityAutocomplete.vue';
 import CustomerAutocomplete from '../components/CustomerAutocomplete.vue';
 import { useFormatters } from '../composables/useFormatters';
 import { getCompany } from '../lib/company';
@@ -63,6 +62,7 @@ const shipments = ref<Shipment[]>([]);
 const loading = ref(true);
 const showModal = ref(false);
 const editingId = ref<number | null>(null);
+const searchQuery = ref('');
 const form = ref<ShipmentForm>({
   origin: '',
   destination: '',
@@ -479,6 +479,7 @@ async function printLabel() {
       <div class="company">${esc(company?.name || 'PERUSAHAAN')}</div>
       <img class="logo" src="${LOGO_URL}" alt="Logo" />
     </div>
+  </div>
     <div class="resi-row">
       <div class="resi"><div class="label">Nomor Resi / Tracking Number</div><div class="code">${esc(barcodeValue)}</div></div>
       <img class="qr" src="/api/blob?endpoint=generate&code=${esc(barcodeValue)}&type=qr" alt="QR" />
@@ -669,113 +670,66 @@ watch(() => form.value.items, () => {
         :key="ship.id"
         class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md min-w-0"
       >
-        <div class="flex items-start justify-between gap-2">
-          <div class="flex-1 min-w-0">
-            <div class="text-sm font-semibold dark:text-gray-100 truncate">
-              {{ ship.public_code }}
+        <div class="flex-1 w-full max-w-5xl mx-auto py-4 px-2 lg:px-0">
+          <div class="space-y-4">
+            <div class="text-xl font-bold mb-2">Barang Keluar (Shipments)</div>
+            <div class="space-y-4">
+              <div class="flex items-center justify-between gap-2 mb-2">
+                <div class="flex-1 min-w-0">
+                  <input
+                    v-model="searchQuery"
+                    type="text"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    placeholder="Cari kode, customer, rute..."
+                  />
+                </div>
+                <Button variant="primary" @click="openCreateModal" class="ml-2">+ Tambah</Button>
+              </div>
+              <div class="space-y-4">
+                <div v-if="shipments.length === 0" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 text-center">
+                  <p class="text-sm text-gray-500 dark:text-gray-400">Belum ada shipment</p>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div v-for="s in shipments" :key="s.id" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md min-w-0 flex flex-col">
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="flex-1 min-w-0">
+                        <div class="text-sm font-semibold dark:text-gray-100 truncate">{{ s.public_code }}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{{ s.customer_name || '-' }}</div>
+                        <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">{{ s.customer_address || '' }}</div>
+                        <div v-if="s.shipping_address" class="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">Ship: {{ s.shipping_address }}</div>
+                      </div>
+                      <Badge :variant="getStatusVariant(s.status)" class="flex-shrink-0">{{ statusOptions.find(o => o.value === s.status)?.label || s.status }}</Badge>
+                    </div>
+                    <div class="text-xs space-y-1.5">
+                      <div class="flex items-start gap-2">
+                        <Icon icon="mdi:map-marker-outline" class="text-base text-gray-500 dark:text-gray-400 flex-shrink-0 mt-0.5" />
+                        <span class="dark:text-gray-300 text-xs leading-tight break-all">{{ s.origin }} → {{ s.destination }}</span>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <Icon icon="mdi:archive-outline" class="text-base text-gray-500 dark:text-gray-400 flex-shrink-0" />
+                        <span class="dark:text-gray-300 text-xs">{{ s.total_colli }} colli</span>
+                      </div>
+                      <div v-if="s.eta" class="flex items-center gap-2">
+                        <Icon icon="mdi:calendar-outline" class="text-base text-gray-500 dark:text-gray-400 flex-shrink-0" />
+                        <span class="dark:text-gray-300 text-xs">{{ formatDate(s.eta) }}</span>
+                      </div>
+                    </div>
+                    <div class="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-700 min-w-0">
+                      <Button block variant="success" @click="viewBarcode(s)" title="Barcode">Barcode</Button>
+                      <Button block variant="primary" @click="openEditModal(s)" title="Edit">Edit</Button>
+                      <Button block variant="default" class="text-red-600 hover:text-red-700 bg-red-50 rounded-lg" @click="deleteShipment(s.id)" title="Hapus">Hapus</Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
-              {{ ship.customer_name || '-' }}
-            </div>
-            <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">
-              {{ ship.customer_address || '' }}
-            </div>
-            <div v-if="ship.shipping_address" class="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">
-              Ship: {{ ship.shipping_address }}
-            </div>
-          </div>
-          <Badge :variant="getStatusVariant(ship.status)" class="flex-shrink-0">
-            {{ statusOptions.find(o => o.value === ship.status)?.label || ship.status }}
-          </Badge>
-        </div>
-        <div class="text-xs space-y-1.5">
-          <div class="flex items-start gap-2">
-            <Icon
-              icon="mdi:map-marker-outline"
-              class="text-base text-gray-500 dark:text-gray-400 flex-shrink-0 mt-0.5"
-            />
-            <span class="dark:text-gray-300 text-xs leading-tight break-all">{{ ship.origin }} → {{ ship.destination }}</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <Icon
-              icon="mdi:archive-outline"
-              class="text-base text-gray-500 dark:text-gray-400 flex-shrink-0"
-            />
-            <span class="dark:text-gray-300 text-xs">{{ ship.total_colli }} colli</span>
-          </div>
-          <div
-            v-if="ship.eta"
-            class="flex items-center gap-2"
-          >
-            <Icon
-              icon="mdi:calendar-outline"
-              class="text-base text-gray-500 dark:text-gray-400 flex-shrink-0"
-            />
-            <span class="dark:text-gray-300 text-xs">{{ formatDate(ship.eta) }}</span>
           </div>
         </div>
-        <div class="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-700 min-w-0">
-          <Button
-            block
-            variant="success"
-            @click="viewBarcode(ship)"
-            title="Barcode"
-          >
-            Barcode
-          </Button>
-          <Button
-            block
-            variant="primary"
-            @click="openEditModal(ship)"
-            title="Edit"
-          >
-            Edit
-          </Button>
-          <Button
-            block
-            variant="default"
-            class="text-red-600 hover:text-red-700 bg-red-50 rounded-lg"
-            @click="deleteShipment(ship.id)"
-            title="Hapus"
-          >
-            Hapus
-          </Button>
-        </div>
-      </div>
-    </div>
-    </div> <!-- end center wrapper -->
-
-    <div
-      v-if="showModal"
-      class="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center z-50 pt-4 px-4 pb-[60px] lg:p-4"
-      @click.self="showModal = false"
-    >
-      <!-- Modal: use full mobile height minus bottom nav (~56px) so action buttons sit lower without covering nav -->
-      <div class="bg-white rounded-xl w-full max-w-4xl card flex flex-col h-[calc(100vh-60px)] lg:max-h-[90vh]">
-        <div class="p-6 overflow-auto flex-1">
-        <div class="text-lg font-semibold">
-          {{ editingId ? 'Edit Shipment' : 'Tambah Shipment' }}
-        </div>
-        <div class="space-y-3">
-          <CityAutocomplete
-            v-model="form.origin"
-            label="Origin"
-          />
-          <CityAutocomplete
-            v-model="form.destination"
-            label="Destination"
-          />
-          <div>
-            <label class="block text-sm font-medium mb-1">Nama Pengirim</label>
-            <input
-              v-model="form.sender_name"
-              type="text"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
-              placeholder="Nama pengirim"
-            >
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Alamat Pengirim</label>
+          <div v-if="showModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center z-50 pt-4 px-4 pb-[60px] lg:p-4" @click.self="showModal = false">
+            <div class="bg-white rounded-xl w-full max-w-4xl card flex flex-col h-[calc(100vh-60px)] lg:max-h-[90vh]">
+              <div class="p-6 overflow-auto flex-1">
+                <div>
+                  <label class="block text-sm font-medium mb-1">Alamat Pengirim</label>
             <textarea
               v-model="form.sender_address"
               rows="3"
@@ -1000,5 +954,7 @@ watch(() => form.value.items, () => {
         </div>
       </div>
     </div>
-    </div> <!-- end space-y-4 wrapper -->
+    </div>
+  </div>
+</div>
 </template>

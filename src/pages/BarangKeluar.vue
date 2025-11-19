@@ -302,6 +302,7 @@ async function saveShipment() {
       });
       if (!res.ok) throw new Error('Create failed');
       const created = await res.json();
+      
       // create collis for the new shipment
       const sid = created.id;
       if (form.value.items && form.value.items.length) {
@@ -691,7 +692,7 @@ watch(() => form.value.items, () => {
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div v-for="s in shipments" :key="s.id" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md min-w-0 flex flex-col">
-                    <div class="flex items-start justify-between gap-2">
+        <div class="flex items-start justify-between gap-2">
                       <div class="flex-1 min-w-0">
                         <div class="text-sm font-semibold dark:text-gray-100 truncate">{{ s.public_code }}</div>
                         <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{{ s.customer_name || '-' }}</div>
@@ -725,11 +726,14 @@ watch(() => form.value.items, () => {
             </div>
           </div>
         </div>
-          <div v-if="showModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center z-50 pt-4 px-4 pb-[60px] lg:p-4" @click.self="showModal = false">
-            <div class="bg-white rounded-xl w-full max-w-4xl card flex flex-col h-[calc(100vh-60px)] lg:max-h-[90vh]">
-              <div class="p-6 overflow-auto flex-1">
-                <div>
-                  <label class="block text-sm font-medium mb-1">Alamat Pengirim</label>
+      </div>
+    </div>
+
+    <div v-if="showModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center z-50 pt-4 px-4 pb-[60px] lg:p-4" @click.self="showModal = false">
+      <div class="bg-white rounded-xl w-full max-w-4xl card flex flex-col h-[calc(100vh-60px)] lg:max-h-[90vh]">
+        <div class="p-6 overflow-auto flex-1">
+          <div>
+            <label class="block text-sm font-medium mb-1">Alamat Pengirim</label>
             <textarea
               v-model="form.sender_address"
               rows="3"
@@ -741,7 +745,7 @@ watch(() => form.value.items, () => {
             v-model="form.customer_name"
             label="Customer"
             @select-id="(id:number|null)=>{ form.customer_id = id; }"
-                @selected="(c: { id: number; name: string; address?: string }) => { form.customer_id = c.id; form.customer_name = c.name; form.customer_address = c.address || ''; form.shipping_address = c.address || '' }"
+            @selected="(c: { id: number; name: string; address?: string }) => { form.customer_id = c.id; form.customer_name = c.name; form.customer_address = c.address || ''; form.shipping_address = c.address || '' }"
           />
           <div>
             <label class="block text-sm font-medium mb-1">Alamat Customer</label>
@@ -898,7 +902,6 @@ watch(() => form.value.items, () => {
             Simpan
           </Button>
         </div>
-        </div>
       </div>
     </div>
 
@@ -956,5 +959,4 @@ watch(() => form.value.items, () => {
     </div>
     </div>
   </div>
-</div>
 </template>

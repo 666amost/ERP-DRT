@@ -114,16 +114,17 @@ watch(statusFilter, () => {
       Pelacakan Pengiriman
     </div>
 
-    <div class="flex gap-3 min-w-0">
+    <!-- Stack on mobile, inline on larger screens -->
+    <div class="flex flex-col sm:flex-row gap-3 min-w-0">
       <input
         v-model="searchQuery"
         type="text"
         placeholder="Cari kode tracking, kota, driver..."
-        class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 dark:border-gray-600"
+        class="w-full sm:flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 dark:border-gray-600"
       >
       <select
         v-model="statusFilter"
-        class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 dark:border-gray-600"
+        class="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 dark:border-gray-600"
       >
         <option
           v-for="opt in statusOptions"
@@ -160,12 +161,12 @@ watch(statusFilter, () => {
         :key="ship.id"
         class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 card break-words min-w-0"
       >
-        <div class="flex items-start justify-between gap-2">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <div class="flex-1 min-w-0">
-            <div class="font-semibold text-base lg:text-lg truncate">
+            <div class="font-semibold text-base lg:text-lg truncate min-w-0">
               {{ ship.public_code }}
             </div>
-            <div class="text-xs sm:text-sm text-gray-600 dark:text-gray-300 truncate">
+            <div class="text-xs sm:text-sm text-gray-600 dark:text-gray-300 truncate min-w-0">
               {{ ship.driver_name || 'Driver' }} 
               <span v-if="ship.driver_phone" class="hidden sm:inline">• {{ ship.driver_phone }}</span>
             </div>
@@ -175,12 +176,12 @@ watch(statusFilter, () => {
           </Badge>
         </div>
 
-        <div class="flex items-center gap-2 sm:gap-4 text-sm flex-wrap">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-sm flex-wrap">
           <div class="flex-1 min-w-0">
             <div class="text-gray-500 text-xs">
               Origin
             </div>
-            <div class="font-medium truncate">
+            <div class="font-medium truncate min-w-0">
               {{ ship.origin }}
             </div>
           </div>
@@ -191,7 +192,7 @@ watch(statusFilter, () => {
             <div class="text-gray-500 text-xs">
               Destination
             </div>
-            <div class="font-medium truncate">
+            <div class="font-medium truncate min-w-0">
               {{ ship.destination }}
             </div>
           </div>

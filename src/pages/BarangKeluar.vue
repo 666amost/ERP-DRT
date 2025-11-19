@@ -528,7 +528,7 @@ watch(() => form.value.items, () => {
   <div class="space-y-4 pb-20 lg:pb-0 overflow-x-hidden">
     <!-- Center content, keep layout in sync with other pages -->
     <div class="w-full max-w-6xl mx-auto min-w-0">
-    <div class="flex items-center justify-between flex-wrap gap-3">
+    <div class="hidden lg:flex items-center justify-between flex-wrap gap-3">
       <div class="text-xl font-semibold dark:text-gray-100">
         Barang Keluar (Shipments)
       </div>
@@ -666,15 +666,7 @@ watch(() => form.value.items, () => {
           Belum ada shipment
         </p>
       </div>
-      <div
-        v-for="ship in shipments"
-        :key="ship.id"
-        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md min-w-0"
-      >
-        <div class="flex-1 w-full max-w-5xl mx-auto py-4 px-2 lg:px-0">
-          <div class="space-y-4">
-            <div class="text-xl font-bold mb-2">Barang Keluar (Shipments)</div>
-            <div class="space-y-4">
+      <div class="flex-1 w-full max-w-5xl mx-auto py-4 px-2 lg:px-0 space-y-4">
               <div class="flex items-center justify-between gap-2 mb-2">
                 <div class="flex-1 min-w-0">
                   <input
@@ -687,9 +679,6 @@ watch(() => form.value.items, () => {
                 <Button variant="primary" @click="openCreateModal" class="ml-2">+ Tambah</Button>
               </div>
               <div class="space-y-4">
-                <div v-if="shipments.length === 0" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 text-center">
-                  <p class="text-sm text-gray-500 dark:text-gray-400">Belum ada shipment</p>
-                </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div v-for="s in shipments" :key="s.id" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md min-w-0 flex flex-col">
         <div class="flex items-start justify-between gap-2">
@@ -724,9 +713,7 @@ watch(() => form.value.items, () => {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
+          
     </div>
 
     <div v-if="showModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center z-50 pt-4 px-4 pb-[60px] lg:p-4" @click.self="showModal = false">

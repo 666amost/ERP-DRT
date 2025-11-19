@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, nextTick } from 'vue';
 import Button from '../components/ui/Button.vue';
 import Badge from '../components/ui/Badge.vue';
 import CustomerAutocomplete from '../components/CustomerAutocomplete.vue';
+import CityAutocomplete from '../components/CityAutocomplete.vue';
 import { useFormatters } from '../composables/useFormatters';
 import { getCompany } from '../lib/company';
 import { Icon } from '@iconify/vue';
@@ -81,6 +82,41 @@ const form = ref<ShipmentForm>({
   , items: []
 });
 
+// validation errors keyed by field name
+const validationErrors = ref<Record<string, string>>({});
+
+function validateForm(): { ok: boolean; errors: Record<string, string> } {
+  const errors: Record<string, string> = {};
+  const f = form.value;
+  if (!f.origin || !String(f.origin).trim()) errors.origin = 'Origin (kota asal) harus diisi';
+  if (!f.destination || !String(f.destination).trim()) errors.destination = 'Destination (kota tujuan) harus diisi';
+  const total = Number(f.total_colli);
+  if (Number.isNaN(total) || total < 0) errors.total_colli = 'Total colli harus berupa angka (>= 0)';
+  if (f.vehicle_plate_region && !/^[A-Za-z]{2}$/.test(String(f.vehicle_plate_region).trim())) errors.vehicle_plate_region = 'Kode plat harus 2 huruf (contoh: BK)';
+  if (f.eta && String(f.eta).trim()) {
+    const d = new Date(f.eta);
+    if (Number.isNaN(d.getTime())) errors.eta = 'Format ETA tidak valid';
+  }
+  // status and service_type checks
+  const statuses = ['DRAFT', 'READY', 'LOADING', 'IN_TRANSIT', 'DELIVERED'];
+  if (f.status && !statuses.includes(f.status)) errors.status = 'Status tidak valid';
+  const services = ['REG', 'CARGO'];
+  if (f.service_type && !services.includes(String(f.service_type).toUpperCase())) errors.service_type = 'Jenis layanan tidak valid';
+
+  // items basic validation
+  if (f.items && f.items.length) {
+    const itemMsgs: string[] = [];
+    f.items.forEach((it, idx) => {
+      if (!it.description || !String(it.description).trim()) itemMsgs.push(`Item #${idx + 1}: deskripsi kosong`);
+      if (!it.quantity || Number(it.quantity) <= 0) itemMsgs.push(`Item #${idx + 1}: quantity harus >= 1`);
+    });
+    if (itemMsgs.length) errors.items = itemMsgs.join('; ');
+  }
+
+  validationErrors.value = errors;
+  return { ok: Object.keys(errors).length === 0, errors };
+}
+
 const statusOptions = [
   { value: 'DRAFT', label: 'Draft', variant: 'default' },
   { value: 'READY', label: 'Ready', variant: 'info' },
@@ -92,6 +128,8 @@ const statusOptions = [
 const selectedShipment = ref<Shipment | null>(null);
 const showBarcodeModal = ref(false);
 const modalBarcodeValue = ref<string>('');
+const itemsLoading = ref(false);
+const itemsLoadError = ref<string | null>(null);
 function addItemRow() {
   if (!form.value.items) form.value.items = [];
   form.value.items.push({ description: '', quantity: 1, kg_m3: null, unit_price: 0, amount: 0, _unit_price_display: '' });
@@ -179,6 +217,7 @@ function openCreateModal() {
     , service_type: 'REG'
     , items: []
   };
+  validationErrors.value = {};
   showModal.value = true;
 }
 
@@ -203,6 +242,8 @@ function openEditModal(shipment: Shipment) {
   };
   // fetch colli rows for the shipment
   (async () => {
+    itemsLoading.value = true;
+    itemsLoadError.value = null;
     try {
       const res = await fetch(`/api/colli?endpoint=list&shipment_id=${shipment.id}`);
       if (res.ok) {
@@ -217,18 +258,28 @@ function openEditModal(shipment: Shipment) {
           amount: typeof i.amount === 'number' ? i.amount : (i.amount ? Number(i.amount) : 0),
           _unit_price_display: i.unit_price ? formatRupiah(i.unit_price) : ''
         }));
+      } else {
+        itemsLoadError.value = `Gagal memuat items (status ${res.status})`;
+        console.warn('Failed to load collis for edit modal', await res.text());
       }
     } catch (err) {
+      itemsLoadError.value = 'Gagal memuat items';
       console.warn('Failed to load collis for edit modal', err);
+    } finally {
+      itemsLoading.value = false;
     }
   })();
   showModal.value = true;
+  validationErrors.value = {};
 }
 
 async function saveShipment() {
   const totalColli = parseInt(form.value.total_colli);
-  if (!form.value.origin || !form.value.destination || isNaN(totalColli)) {
-    alert('Isi semua field dengan benar');
+  const validation = validateForm();
+  if (!validation.ok) {
+    const msgs = Object.entries(validation.errors).map(([k, v]) => `${k}: ${v}`);
+    alert('Periksa field berikut:\n' + msgs.join('\n'));
+    // keep modal open and show inline errors
     return;
   }
 
@@ -268,7 +319,8 @@ async function saveShipment() {
               quantity: it.quantity || 1,
               kg_m3: it.kg_m3 || null,
               unit_price: (typeof it.unit_price === 'number' && !isNaN(it.unit_price)) ? it.unit_price : Number(String(it._unit_price_display || '').replace(/[^0-9.-]/g, '')) || 0,
-              amount: (Number(it.quantity || 0) * (Number(it.unit_price || 0))) || 0,
+              // calculate amount using weight (kg_m3) when present, otherwise fall back to quantity
+              amount: (((it.kg_m3 !== null && it.kg_m3 !== undefined) ? Number(it.kg_m3) : Number(it.quantity || 0)) * (Number(it.unit_price || 0))) || 0,
               status: it.status || undefined
             }));
             const resp = await fetch(`/api/colli?endpoint=bulk-set`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shipment_id: editingId.value, items: itemsToSend }) });
@@ -313,7 +365,8 @@ async function saveShipment() {
             quantity: it.quantity || 1,
             kg_m3: it.kg_m3 || null,
             unit_price: (typeof it.unit_price === 'number' && !isNaN(it.unit_price)) ? it.unit_price : Number(String(it._unit_price_display || '').replace(/[^0-9.-]/g, '')) || 0,
-            amount: (Number(it.quantity || 0) * (Number(it.unit_price || 0))) || 0,
+            // calculate amount using weight (kg_m3) when present, otherwise fall back to quantity
+            amount: (((it.kg_m3 !== null && it.kg_m3 !== undefined) ? Number(it.kg_m3) : Number(it.quantity || 0)) * (Number(it.unit_price || 0))) || 0,
             status: it.status || undefined
           }));
           const resp = await fetch(`/api/colli?endpoint=bulk-set`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shipment_id: sid, items: itemsToSend }) });
@@ -454,7 +507,7 @@ async function printLabel() {
     .header { display:flex; align-items:center; justify-content:space-between; }
     .company { font-weight:800; font-size:12px; letter-spacing:.3px; }
     .logo { width: 9mm; height: 9mm; object-fit: contain; }
-    .resi-row { display:flex; align-items:stretch; gap: 2mm; }
+    .resi-row { display:flex; align-items:center; gap: 2mm; }
     .resi { flex:1; background:#111827; color:#fff; border-radius:2px; padding:1.5mm 2mm; }
     .resi .label { font-size:7px; opacity:0.8; }
     .resi .code { font-size:12px; font-weight:700; letter-spacing: .4px; margin-top:1mm; word-break:break-all; }
@@ -480,7 +533,6 @@ async function printLabel() {
       <div class="company">${esc(company?.name || 'PERUSAHAAN')}</div>
       <img class="logo" src="${LOGO_URL}" alt="Logo" />
     </div>
-  </div>
     <div class="resi-row">
       <div class="resi"><div class="label">Nomor Resi / Tracking Number</div><div class="code">${esc(barcodeValue)}</div></div>
       <img class="qr" src="/api/blob?endpoint=generate&code=${esc(barcodeValue)}&type=qr" alt="QR" />
@@ -513,7 +565,9 @@ watch(() => form.value.items, () => {
   for (const it of form.value.items) {
     const qty = typeof it.quantity === 'number' ? it.quantity : Number(it.quantity || 0);
     const unit = typeof it.unit_price === 'number' ? it.unit_price : Number(it.unit_price || 0);
-    it.amount = +(qty * unit);
+    // Use kg_m3 as the weight when provided (shipping calculates by weight), otherwise fall back to qty
+    const weight = (it.kg_m3 !== null && it.kg_m3 !== undefined && Number(it.kg_m3) !== 0) ? Number(it.kg_m3) : qty;
+    it.amount = +(weight * unit);
   }
 }, { deep: true });
 
@@ -720,6 +774,15 @@ watch(() => form.value.items, () => {
       <div class="bg-white rounded-xl w-full max-w-4xl card flex flex-col h-[calc(100vh-60px)] lg:max-h-[90vh]">
         <div class="p-6 overflow-auto flex-1">
           <div>
+            <label class="block text-sm font-medium mb-1">Nama Pengirim</label>
+            <input
+              v-model="form.sender_name"
+              type="text"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              placeholder="Nama pengirim (opsional)"
+            />
+          </div>
+          <div>
             <label class="block text-sm font-medium mb-1">Alamat Pengirim</label>
             <textarea
               v-model="form.sender_address"
@@ -753,13 +816,24 @@ watch(() => form.value.items, () => {
             ></textarea>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">Total Colli</label>
-            <input
-              v-model="form.total_colli"
-              type="number"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
-              placeholder="10"
-            >
+            <div>
+              <CityAutocomplete v-model="form.origin" label="Origin" placeholder="Kota asal" />
+              <p v-if="validationErrors.origin" class="text-red-600 text-xs mt-1">{{ validationErrors.origin }}</p>
+            </div>
+            <div>
+              <CityAutocomplete v-model="form.destination" label="Destination" placeholder="Kota tujuan" />
+              <p v-if="validationErrors.destination" class="text-red-600 text-xs mt-1">{{ validationErrors.destination }}</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Total Colli</label>
+              <input
+                v-model="form.total_colli"
+                type="number"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="10"
+              />
+              <p v-if="validationErrors.total_colli" class="text-red-600 text-xs mt-1">{{ validationErrors.total_colli }}</p>
+            </div>
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">Kode Plat (2 huruf)</label>
@@ -770,6 +844,7 @@ watch(() => form.value.items, () => {
               class="w-full px-3 py-2 border border-gray-300 rounded-lg"
               placeholder="BV, T, B"
             >
+            <p v-if="validationErrors.vehicle_plate_region" class="text-red-600 text-xs mt-1">{{ validationErrors.vehicle_plate_region }}</p>
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">ETA</label>
@@ -778,6 +853,7 @@ watch(() => form.value.items, () => {
               type="date"
               class="w-full px-3 py-2 border border-gray-300 rounded-lg"
             >
+            <p v-if="validationErrors.eta" class="text-red-600 text-xs mt-1">{{ validationErrors.eta }}</p>
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">Jenis Layanan</label>
@@ -788,6 +864,7 @@ watch(() => form.value.items, () => {
               <option value="REG">REG</option>
               <option value="CARGO">CARGO</option>
             </select>
+            <p v-if="validationErrors.service_type" class="text-red-600 text-xs mt-1">{{ validationErrors.service_type }}</p>
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">Status</label>
@@ -803,6 +880,7 @@ watch(() => form.value.items, () => {
                 {{ opt.label }}
               </option>
             </select>
+            <p v-if="validationErrors.status" class="text-red-600 text-xs mt-1">{{ validationErrors.status }}</p>
           </div>
           <div class="flex items-center gap-2">
             <input
@@ -823,6 +901,9 @@ watch(() => form.value.items, () => {
                 <Button variant="default" class="text-xs px-3 py-1" @click="addItemRow">Tambah Item</Button>
               </div>
             </div>
+            <div v-if="validationErrors.items" class="text-xs text-red-600 mb-2">{{ validationErrors.items }}</div>
+            <div v-if="itemsLoading" class="text-xs text-gray-500 mb-2">Memuat item...</div>
+            <div v-if="itemsLoadError" class="text-xs text-red-600 mb-2">{{ itemsLoadError }}</div>
             <div class="space-y-2">
               <div class="hidden md:grid md:grid-cols-[1fr_90px_100px_130px_130px_60px] gap-3 px-2 text-xs font-semibold text-gray-600">
                 <div>Deskripsi</div>

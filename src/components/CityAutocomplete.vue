@@ -27,6 +27,13 @@ const newCityCode = ref('');
 const newCityProvince = ref('');
 const loading = ref(false);
 
+function closeDropdownDelayed() {
+  // Use script scope setTimeout (global) and update ref value
+  setTimeout(() => {
+    showDropdown.value = false;
+  }, 200);
+}
+
 async function loadCities() {
   try {
     const res = await fetch('/api/cities?endpoint=list');
@@ -117,7 +124,7 @@ loadCities();
         :placeholder="placeholder || 'Pilih atau ketik kota...'"
         class="w-full px-3 py-2 border border-gray-300 rounded-lg pr-20"
         @focus="showDropdown = true"
-        @blur="setTimeout(() => showDropdown = false, 200)"
+        @blur="closeDropdownDelayed"
       >
       <button
         type="button"

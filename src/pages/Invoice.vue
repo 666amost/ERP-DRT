@@ -24,6 +24,23 @@ type Invoice = {
   tax_percent?: number;
   discount_amount?: number;
   notes?: string | null;
+  subtotal?: number;
+  pph_percent?: number;
+  pph_amount?: number;
+  paid_amount?: number;
+  remaining_amount?: number;
+  dbl_id?: number | null;
+};
+
+type InvoicePayment = {
+  id: number;
+  invoice_id: number;
+  amount: number;
+  payment_date: string;
+  payment_method: string | null;
+  reference_number: string | null;
+  notes: string | null;
+  created_at: string;
 };
 
 type CreateInvoiceForm = {
@@ -50,6 +67,22 @@ const router = useRouter();
 const loading = ref(true);
 const showModal = ref(false);
 const editingId = ref<number | null>(null);
+
+const showPaymentModal = ref(false);
+const selectedInvoice = ref<Invoice | null>(null);
+const invoicePayments = ref<InvoicePayment[]>([]);
+const loadingPayments = ref(false);
+const paymentForm = ref({
+  amount: '',
+  payment_date: '',
+  payment_method: 'TRANSFER',
+  reference_number: '',
+  notes: ''
+});
+
+const showPphModal = ref(false);
+const pphFormPercent = ref<string>('0');
+
 const form = ref<CreateInvoiceForm>({
   customer_name: '',
   customer_id: null,
@@ -264,6 +297,126 @@ async function deleteInvoice(id: number) {
   }
 }
 
+async function openPaymentModal(inv: Invoice) {
+  selectedInvoice.value = inv;
+  loadingPayments.value = true;
+  showPaymentModal.value = true;
+  paymentForm.value = {
+    amount: '',
+    payment_date: new Date().toISOString().split('T')[0],
+    payment_method: 'TRANSFER',
+    reference_number: '',
+    notes: ''
+  };
+  
+  try {
+    const res = await fetch(`/api/invoices?endpoint=payments&invoice_id=${inv.id}`);
+    if (res.ok) {
+      const data = await res.json();
+      invoicePayments.value = data.payments || [];
+    }
+  } catch (e) {
+    console.error('Failed to load payments:', e);
+  } finally {
+    loadingPayments.value = false;
+  }
+}
+
+async function addPayment() {
+  if (!selectedInvoice.value) return;
+  
+  const amount = parseFloat(paymentForm.value.amount);
+  if (isNaN(amount) || amount <= 0) {
+    alert('Masukkan jumlah pembayaran yang valid');
+    return;
+  }
+  
+  try {
+    const res = await fetch('/api/invoices?endpoint=add-payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        invoice_id: selectedInvoice.value.id,
+        amount,
+        payment_date: paymentForm.value.payment_date || null,
+        payment_method: paymentForm.value.payment_method || null,
+        reference_number: paymentForm.value.reference_number || null,
+        notes: paymentForm.value.notes || null
+      })
+    });
+    
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Add payment failed');
+    }
+    
+    await openPaymentModal(selectedInvoice.value);
+    loadInvoices();
+  } catch (e) {
+    console.error('Add payment error:', e);
+    alert('Gagal menambahkan pembayaran: ' + (e instanceof Error ? e.message : 'Unknown error'));
+  }
+}
+
+async function deletePayment(paymentId: number) {
+  if (!selectedInvoice.value) return;
+  if (!confirm('Hapus pembayaran ini?')) return;
+  
+  try {
+    await fetch(`/api/invoices?endpoint=delete-payment&payment_id=${paymentId}`, {
+      method: 'DELETE'
+    });
+    await openPaymentModal(selectedInvoice.value);
+    loadInvoices();
+  } catch (e) {
+    console.error('Delete payment error:', e);
+    alert('Gagal menghapus pembayaran');
+  }
+}
+
+function openPphModal(inv: Invoice) {
+  selectedInvoice.value = inv;
+  pphFormPercent.value = String(inv.pph_percent || 0);
+  showPphModal.value = true;
+}
+
+async function updatePph() {
+  if (!selectedInvoice.value) return;
+  
+  const pph = parseFloat(pphFormPercent.value) || 0;
+  
+  try {
+    const res = await fetch('/api/invoices?endpoint=update-pph', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        invoice_id: selectedInvoice.value.id,
+        pph_percent: pph
+      })
+    });
+    
+    if (!res.ok) throw new Error('Update PPh failed');
+    
+    showPphModal.value = false;
+    loadInvoices();
+  } catch (e) {
+    console.error('Update PPh error:', e);
+    alert('Gagal update PPh');
+  }
+}
+
+function getPaymentStatus(inv: Invoice): { label: string; variant: 'default' | 'warning' | 'success' } {
+  const remaining = inv.remaining_amount ?? inv.amount;
+  const paid = inv.paid_amount ?? 0;
+  
+  if (remaining <= 0 || inv.status === 'paid') {
+    return { label: 'Lunas', variant: 'success' };
+  } else if (paid > 0) {
+    return { label: 'Cicilan', variant: 'warning' };
+  }
+  return { label: 'Belum Bayar', variant: 'default' };
+}
+
 onMounted(() => {
   if (route.query.q) {
     searchQuery.value = String(route.query.q || '');
@@ -459,6 +612,12 @@ watch([items, taxPercent, discountAmount], () => {
             <th class="px-4 py-3 text-right text-xs font-medium text-gray-600">
               Amount
             </th>
+            <th class="px-4 py-3 text-right text-xs font-medium text-gray-600">
+              Dibayar
+            </th>
+            <th class="px-4 py-3 text-right text-xs font-medium text-gray-600">
+              Sisa
+            </th>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">
               Status
             </th>
@@ -473,7 +632,7 @@ watch([items, taxPercent, discountAmount], () => {
         <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
           <tr v-if="filteredInvoices.length === 0">
             <td
-              colspan="6"
+              colspan="8"
               class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"
             >
               Belum ada invoice
@@ -492,33 +651,54 @@ watch([items, taxPercent, discountAmount], () => {
             </td>
             <td class="px-4 py-3 text-sm text-right font-semibold dark:text-gray-100">
               {{ formatRupiah(inv.amount) }}
+              <div v-if="inv.pph_percent && inv.pph_percent > 0" class="text-xs text-gray-500">
+                PPh {{ inv.pph_percent }}%: -{{ formatRupiah(inv.pph_amount || 0) }}
+              </div>
+            </td>
+            <td class="px-4 py-3 text-sm text-right text-green-600 dark:text-green-400">
+              {{ formatRupiah(inv.paid_amount || 0) }}
+            </td>
+            <td class="px-4 py-3 text-sm text-right text-orange-600 dark:text-orange-400">
+              {{ formatRupiah(inv.remaining_amount ?? inv.amount) }}
             </td>
             <td class="px-4 py-3">
-              <Badge :variant="inv.status === 'paid' ? 'success' : 'warning'">
-                {{ inv.status === 'paid' ? 'Paid' : 'Pending' }}
+              <Badge :variant="getPaymentStatus(inv).variant">
+                {{ getPaymentStatus(inv).label }}
               </Badge>
             </td>
             <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
               {{ formatDate(inv.issued_at) }}
             </td>
-            <td class="px-4 py-3 text-right space-x-2">
+            <td class="px-4 py-3 text-right space-x-1">
               <button
-                class="text-primary hover:text-primary-dark dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium transition-colors"
+                class="text-blue-600 hover:text-blue-700 text-xs font-medium"
+                @click="openPaymentModal(inv)"
+              >
+                Bayar
+              </button>
+              <button
+                class="text-purple-600 hover:text-purple-700 text-xs font-medium"
+                @click="openPphModal(inv)"
+              >
+                PPh
+              </button>
+              <button
+                class="text-primary hover:text-primary-dark dark:text-blue-400 dark:hover:text-blue-300 text-xs font-medium transition-colors"
                 @click="openEditModal(inv)"
               >
                 Edit
               </button>
               <button
-                class="text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 text-sm font-medium transition-colors"
+                class="text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 text-xs font-medium transition-colors"
                 @click="printInvoice(inv)"
               >
                 Print
               </button>
               <button
-                class="text-red-600 hover:text-red-700 text-sm font-medium"
+                class="text-red-600 hover:text-red-700 text-xs font-medium"
                 @click="deleteInvoice(inv.id)"
               >
-                Delete
+                Hapus
               </button>
             </td>
           </tr>
@@ -777,6 +957,96 @@ watch([items, taxPercent, discountAmount], () => {
           >
             Simpan
           </Button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showPaymentModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" @click.self="showPaymentModal = false">
+      <div class="bg-white dark:bg-gray-800 rounded-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+          <h3 class="text-lg font-semibold dark:text-gray-100">Pembayaran - {{ selectedInvoice?.invoice_number }}</h3>
+          <div class="text-sm text-gray-500 mt-1">
+            Total: {{ formatRupiah(selectedInvoice?.amount || 0) }} |
+            Dibayar: {{ formatRupiah(selectedInvoice?.paid_amount || 0) }} |
+            Sisa: {{ formatRupiah(selectedInvoice?.remaining_amount ?? selectedInvoice?.amount ?? 0) }}
+          </div>
+        </div>
+        
+        <div class="flex-1 overflow-auto p-4 space-y-4">
+          <div v-if="loadingPayments" class="text-center py-4 text-gray-500">Loading...</div>
+          
+          <template v-else>
+            <div>
+              <h4 class="font-medium mb-2 dark:text-gray-200">Riwayat Pembayaran</h4>
+              <div v-if="invoicePayments.length === 0" class="text-sm text-gray-500">Belum ada pembayaran</div>
+              <div v-else class="space-y-2 max-h-32 overflow-auto">
+                <div v-for="p in invoicePayments" :key="p.id" class="flex items-center justify-between bg-gray-50 dark:bg-gray-700 p-2 rounded-lg text-sm">
+                  <div>
+                    <div class="font-medium text-green-600">{{ formatRupiah(p.amount) }}</div>
+                    <div class="text-xs text-gray-500">{{ formatDate(p.payment_date) }} - {{ p.payment_method || 'N/A' }}</div>
+                    <div v-if="p.reference_number" class="text-xs text-gray-400">Ref: {{ p.reference_number }}</div>
+                  </div>
+                  <button class="text-red-500 text-xs" @click="deletePayment(p.id)">Hapus</button>
+                </div>
+              </div>
+            </div>
+            
+            <div class="border-t border-gray-200 dark:border-gray-600 pt-4">
+              <h4 class="font-medium mb-2 dark:text-gray-200">Tambah Pembayaran</h4>
+              <div class="space-y-3">
+                <div>
+                  <label class="block text-sm font-medium mb-1 dark:text-gray-300">Jumlah (Rp)</label>
+                  <input v-model="paymentForm.amount" type="number" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100" placeholder="0" />
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-sm font-medium mb-1 dark:text-gray-300">Tanggal</label>
+                    <input v-model="paymentForm.payment_date" type="date" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100" />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium mb-1 dark:text-gray-300">Metode</label>
+                    <select v-model="paymentForm.payment_method" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100">
+                      <option value="TRANSFER">Transfer</option>
+                      <option value="CASH">Cash</option>
+                      <option value="GIRO">Giro</option>
+                      <option value="CHEQUE">Cheque</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium mb-1 dark:text-gray-300">No. Referensi</label>
+                  <input v-model="paymentForm.reference_number" type="text" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100" placeholder="No. transfer/giro" />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium mb-1 dark:text-gray-300">Catatan</label>
+                  <input v-model="paymentForm.notes" type="text" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100" placeholder="Catatan pembayaran" />
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+        
+        <div class="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+          <Button variant="default" @click="showPaymentModal = false">Tutup</Button>
+          <Button variant="primary" @click="addPayment">Tambah Pembayaran</Button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showPphModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" @click.self="showPphModal = false">
+      <div class="bg-white dark:bg-gray-800 rounded-xl w-full max-w-sm p-6 space-y-4">
+        <h3 class="text-lg font-semibold dark:text-gray-100">Update PPh</h3>
+        <p class="text-sm text-gray-500">Invoice: {{ selectedInvoice?.invoice_number }}</p>
+        
+        <div>
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">PPh (%) - Opsional</label>
+          <input v-model="pphFormPercent" type="number" step="0.1" min="0" max="100" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100" placeholder="0" />
+          <p class="text-xs text-gray-500 mt-1">PPh akan dipotong dari total invoice</p>
+        </div>
+        
+        <div class="flex justify-end gap-2 pt-2">
+          <Button variant="default" @click="showPphModal = false">Batal</Button>
+          <Button variant="primary" @click="updatePph">Simpan</Button>
         </div>
       </div>
     </div>

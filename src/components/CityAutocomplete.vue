@@ -99,6 +99,8 @@ async function addNewCity() {
 
 watch(searchQuery, () => {
   filterCities();
+  // propagate typed value to parent so free typing updates v-model
+  updateModelValue(searchQuery.value);
   // Only show dropdown when user types (length change due to user input)
   if (document.activeElement && (document.activeElement as HTMLElement).tagName === 'INPUT') {
     showDropdown.value = true;

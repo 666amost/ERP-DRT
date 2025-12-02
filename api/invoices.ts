@@ -7,16 +7,52 @@ import { readJsonNode, writeJson } from './_lib/http.js';
 type Invoice = {
   id: number;
   shipment_id: number | null;
+  dbl_id: number | null;
   invoice_number: string;
   customer_name: string;
   customer_id: number | null;
   amount: number;
+  subtotal: number;
+  pph_percent: number;
+  pph_amount: number;
+  total_tagihan: number;
+  paid_amount: number;
+  remaining_amount: number;
   status: string;
   issued_at: string;
+  invoice_date: string | null;
+  due_date: string | null;
   paid_at: string | null;
+  bank_account: string | null;
+  transfer_date: string | null;
   tax_percent?: number;
   discount_amount?: number;
   notes?: string | null;
+};
+
+type InvoicePayment = {
+  id: number;
+  invoice_id: number;
+  payment_date: string;
+  amount: number;
+  payment_method: string | null;
+  bank_account: string | null;
+  reference_no: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
+type PaymentHistory = {
+  id: number;
+  invoice_id: number;
+  invoice_number: string | null;
+  customer_name: string | null;
+  original_amount: number;
+  discount: number;
+  final_amount: number;
+  payment_date: string;
+  payment_method: string | null;
+  notes: string | null;
 };
 
 type InvoiceItem = {
@@ -31,10 +67,17 @@ type InvoiceItem = {
 
 type CreateInvoiceBody = {
   shipment_id?: number;
+  dbl_id?: number;
   customer_name?: string;
   customer_id?: number;
   amount: number;
+  subtotal?: number;
+  pph_percent?: number;
+  pph_amount?: number;
   status?: string;
+  invoice_date?: string;
+  due_date?: string;
+  bank_account?: string;
   tax_percent?: number;
   discount_amount?: number;
   notes?: string;
@@ -45,9 +88,25 @@ type UpdateInvoiceBody = {
   customer_name?: string;
   customer_id?: number;
   amount?: number;
+  subtotal?: number;
+  pph_percent?: number;
+  pph_amount?: number;
   status?: string;
+  invoice_date?: string;
+  due_date?: string;
+  bank_account?: string;
   tax_percent?: number;
   discount_amount?: number;
+  notes?: string;
+};
+
+type AddPaymentBody = {
+  invoice_id: number;
+  payment_date: string;
+  amount: number;
+  payment_method?: string;
+  bank_account?: string;
+  reference_no?: string;
   notes?: string;
 };
 
@@ -57,8 +116,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type',
   'Access-Control-Allow-Credentials': 'true'
 };
-
-// use writeJson helper
 
 export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method === 'OPTIONS') { res.writeHead(204, corsHeaders); res.end(); return; }
@@ -78,11 +135,19 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     let invoices: Invoice[];
     let total: number;
     
-    if (status && ['pending', 'paid', 'cancelled'].includes(status)) {
+    if (status && ['pending', 'partial', 'paid', 'cancelled', 'overdue'].includes(status)) {
       invoices = await sql`
         select 
-          id, shipment_id, invoice_number, customer_name, customer_id,
-          amount, status, issued_at, paid_at, tax_percent, discount_amount, notes
+          id, shipment_id, dbl_id, invoice_number, customer_name, customer_id,
+          coalesce(amount, 0)::float as amount, 
+          coalesce(subtotal, 0)::float as subtotal,
+          coalesce(pph_percent, 0)::float as pph_percent,
+          coalesce(pph_amount, 0)::float as pph_amount,
+          coalesce(total_tagihan, amount, 0)::float as total_tagihan,
+          coalesce(paid_amount, 0)::float as paid_amount,
+          coalesce(remaining_amount, amount, 0)::float as remaining_amount,
+          status, issued_at, invoice_date, due_date, paid_at, 
+          bank_account, transfer_date, tax_percent, discount_amount, notes
         from invoices
         where status = ${status}
         order by issued_at desc
@@ -98,8 +163,16 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     } else {
       invoices = await sql`
         select 
-          id, shipment_id, invoice_number, customer_name, customer_id,
-          amount, status, issued_at, paid_at, tax_percent, discount_amount, notes
+          id, shipment_id, dbl_id, invoice_number, customer_name, customer_id,
+          coalesce(amount, 0)::float as amount, 
+          coalesce(subtotal, 0)::float as subtotal,
+          coalesce(pph_percent, 0)::float as pph_percent,
+          coalesce(pph_amount, 0)::float as pph_amount,
+          coalesce(total_tagihan, amount, 0)::float as total_tagihan,
+          coalesce(paid_amount, 0)::float as paid_amount,
+          coalesce(remaining_amount, amount, 0)::float as remaining_amount,
+          status, issued_at, invoice_date, due_date, paid_at, 
+          bank_account, transfer_date, tax_percent, discount_amount, notes
         from invoices
         order by issued_at desc
         limit ${limit} offset ${offset}
@@ -252,6 +325,199 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     await sql`delete from invoices where id = ${parseInt(id)}`;
     
     writeJson(res, { success: true });
+    return;
+  } else if (endpoint === 'payments' && req.method === 'GET') {
+    const invoiceId = parseInt(url.searchParams.get('invoice_id') || '0');
+    if (!invoiceId) { writeJson(res, { error: 'Missing invoice_id' }, 400); return; }
+    
+    const payments = await sql`
+      select id, invoice_id, payment_date, amount::float as amount, 
+             payment_method, bank_account, reference_no, notes, created_at
+      from invoice_payments 
+      where invoice_id = ${invoiceId}
+      order by payment_date desc, created_at desc
+    ` as InvoicePayment[];
+    
+    writeJson(res, { items: payments });
+    return;
+  } else if (endpoint === 'add-payment' && req.method === 'POST') {
+    let body: AddPaymentBody;
+    try { body = await readJsonNode(req) as AddPaymentBody; } catch { body = null as unknown as AddPaymentBody; }
+    if (!body || !body.invoice_id || !body.amount || !body.payment_date) {
+      writeJson(res, { error: 'Missing required fields (invoice_id, amount, payment_date)' }, 400);
+      return;
+    }
+
+    const invCheck = await sql`select id, total_tagihan, remaining_amount from invoices where id = ${body.invoice_id}` as Array<{ id: number; total_tagihan: number; remaining_amount: number }>;
+    if (!invCheck.length) { writeJson(res, { error: 'Invoice not found' }, 404); return; }
+
+    const result = await sql`
+      insert into invoice_payments (
+        invoice_id, payment_date, amount, payment_method, bank_account, reference_no, notes
+      ) values (
+        ${body.invoice_id},
+        ${body.payment_date},
+        ${body.amount},
+        ${body.payment_method || null},
+        ${body.bank_account || null},
+        ${body.reference_no || null},
+        ${body.notes || null}
+      ) returning id
+    ` as [{ id: number }];
+
+    writeJson(res, { id: result[0].id, success: true }, 201);
+    return;
+  } else if (endpoint === 'delete-payment' && req.method === 'DELETE') {
+    const id = url.searchParams.get('id');
+    if (!id) { writeJson(res, { error: 'Missing id' }, 400); return; }
+
+    await sql`delete from invoice_payments where id = ${parseInt(id)}`;
+    writeJson(res, { success: true });
+    return;
+  } else if (endpoint === 'update-pph' && req.method === 'PUT') {
+    let body: { id: number; pph_percent: number };
+    try { body = await readJsonNode(req) as { id: number; pph_percent: number }; } catch { body = null as unknown as { id: number; pph_percent: number }; }
+    if (!body || !body.id) { writeJson(res, { error: 'Missing id' }, 400); return; }
+
+    const inv = await sql`select subtotal, paid_amount from invoices where id = ${body.id}` as [{ subtotal: number; paid_amount: number }];
+    if (!inv.length) { writeJson(res, { error: 'Invoice not found' }, 404); return; }
+
+    const subtotal = Number(inv[0].subtotal || 0);
+    const paidAmount = Number(inv[0].paid_amount || 0);
+    const pphPercent = body.pph_percent || 0;
+    const pphAmount = pphPercent > 0 ? (subtotal * pphPercent / 100) : 0;
+    const totalTagihan = subtotal - pphAmount;
+    const remaining = totalTagihan - paidAmount;
+
+    let status = 'pending';
+    if (paidAmount >= totalTagihan) status = 'paid';
+    else if (paidAmount > 0) status = 'partial';
+
+    await sql`
+      update invoices set 
+        pph_percent = ${pphPercent},
+        pph_amount = ${pphAmount},
+        total_tagihan = ${totalTagihan},
+        amount = ${totalTagihan},
+        remaining_amount = ${remaining},
+        status = ${status}
+      where id = ${body.id}
+    `;
+
+    writeJson(res, { success: true, pph_amount: pphAmount, total_tagihan: totalTagihan, remaining_amount: remaining, status });
+    return;
+  } else if (endpoint === 'shipments' && req.method === 'GET') {
+    const invoiceId = parseInt(url.searchParams.get('invoice_id') || '0');
+    const dblId = parseInt(url.searchParams.get('dbl_id') || '0');
+    
+    if (!invoiceId && !dblId) { writeJson(res, { error: 'Missing invoice_id or dbl_id' }, 400); return; }
+
+    let shipments;
+    if (dblId) {
+      const inv = await sql`select customer_name from invoices where id = ${invoiceId}` as [{ customer_name: string }];
+      const customerName = inv[0]?.customer_name;
+      
+      if (customerName) {
+        shipments = await sql`
+          select s.id, s.spb_number, s.pengirim_name, s.penerima_name, s.macam_barang,
+                 s.qty, s.satuan, coalesce(s.nominal, 0)::float as nominal, s.destination
+          from dbl_items di
+          join shipments s on s.id = di.shipment_id
+          where di.dbl_id = ${dblId} and s.customer_name = ${customerName}
+          order by di.urutan
+        `;
+      } else {
+        shipments = [];
+      }
+    } else {
+      const inv = await sql`select dbl_id, customer_name from invoices where id = ${invoiceId}` as [{ dbl_id: number; customer_name: string }];
+      if (inv[0]?.dbl_id) {
+        shipments = await sql`
+          select s.id, s.spb_number, s.pengirim_name, s.penerima_name, s.macam_barang,
+                 s.qty, s.satuan, coalesce(s.nominal, 0)::float as nominal, s.destination
+          from dbl_items di
+          join shipments s on s.id = di.shipment_id
+          where di.dbl_id = ${inv[0].dbl_id} and s.customer_name = ${inv[0].customer_name}
+          order by di.urutan
+        `;
+      } else {
+        shipments = [];
+      }
+    }
+
+    writeJson(res, { items: shipments });
+    return;
+  } else if (endpoint === 'outstanding' && req.method === 'GET') {
+    const items = await sql`
+      select 
+        s.id, s.spb_number, s.public_code, s.customer_id, s.customer_name,
+        s.origin, s.destination, s.total_colli, 
+        coalesce(s.nominal, 0)::float as nominal,
+        s.created_at, i.id as invoice_id, i.invoice_number
+      from shipments s
+      left join invoices i on i.shipment_id = s.id
+      where (i.id is null or i.status in ('pending', 'partial'))
+        and s.status != 'DELIVERED'
+      order by s.created_at desc
+    `;
+    writeJson(res, { items });
+    return;
+  } else if (endpoint === 'payment-history' && req.method === 'GET') {
+    const payments = await sql`
+      select 
+        ip.id, ip.invoice_id, i.invoice_number, i.customer_name,
+        i.amount as original_amount,
+        coalesce(i.discount_amount, 0)::float as discount,
+        ip.amount as final_amount,
+        ip.payment_date, ip.payment_method, ip.notes
+      from invoice_payments ip
+      join invoices i on i.id = ip.invoice_id
+      order by ip.payment_date desc
+      limit 500
+    ` as PaymentHistory[];
+    writeJson(res, { items: payments });
+    return;
+  } else if (endpoint === 'sales-report' && req.method === 'GET') {
+    const fromDate = url.searchParams.get('from');
+    const toDate = url.searchParams.get('to');
+    
+    let items;
+    if (fromDate && toDate) {
+      items = await sql`
+        select 
+          c.id as customer_id,
+          c.name as customer_name,
+          count(s.id)::int as total_shipments,
+          coalesce(sum(s.total_colli), 0)::int as total_colli,
+          coalesce(sum(s.nominal), 0)::float as total_nominal,
+          coalesce(sum(case when i.status = 'paid' then i.amount else 0 end), 0)::float as total_paid,
+          coalesce(sum(case when i.status in ('pending', 'partial') then i.remaining_amount else 0 end), 0)::float as total_outstanding
+        from customers c
+        left join shipments s on s.customer_id = c.id and s.created_at >= ${fromDate} and s.created_at <= ${toDate + 'T23:59:59'}
+        left join invoices i on i.customer_id = c.id
+        group by c.id, c.name
+        having count(s.id) > 0
+        order by total_nominal desc
+      `;
+    } else {
+      items = await sql`
+        select 
+          c.id as customer_id,
+          c.name as customer_name,
+          count(s.id)::int as total_shipments,
+          coalesce(sum(s.total_colli), 0)::int as total_colli,
+          coalesce(sum(s.nominal), 0)::float as total_nominal,
+          coalesce(sum(case when i.status = 'paid' then i.amount else 0 end), 0)::float as total_paid,
+          coalesce(sum(case when i.status in ('pending', 'partial') then i.remaining_amount else 0 end), 0)::float as total_outstanding
+        from customers c
+        left join shipments s on s.customer_id = c.id
+        left join invoices i on i.customer_id = c.id
+        group by c.id, c.name
+        having count(s.id) > 0
+        order by total_nominal desc
+      `;
+    }
+    writeJson(res, { items });
     return;
   } else {
     res.writeHead(404, corsHeaders);

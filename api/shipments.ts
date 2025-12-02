@@ -6,56 +6,91 @@ import { readJsonNode, writeJson } from './_lib/http.js';
 
 type Shipment = {
   id: number;
+  spb_number: string | null;
   customer_id: number | null;
   customer_name: string | null;
   customer_address: string | null;
   sender_name: string | null;
   sender_address: string | null;
+  pengirim_name: string | null;
+  penerima_name: string | null;
+  penerima_phone: string | null;
   origin: string;
   destination: string;
   eta: string | null;
   status: string;
   total_colli: number;
+  qty: number;
+  satuan: string | null;
+  berat: number;
+  macam_barang: string | null;
+  nominal: number;
   public_code: string | null;
   vehicle_plate_region: string | null;
   shipping_address: string | null;
   service_type: string | null;
+  jenis: string | null;
+  dbl_id: number | null;
+  invoice_generated: boolean;
+  keterangan: string | null;
   created_at: string;
 };
 
 type CreateShipmentBody = {
+  spb_number?: string;
   customer_id?: number;
   customer_name?: string;
   customer_address?: string;
   sender_name?: string;
   sender_address?: string;
+  pengirim_name?: string;
+  penerima_name?: string;
+  penerima_phone?: string;
   origin: string;
   destination: string;
   eta?: string;
   status?: string;
   total_colli: number;
+  qty?: number;
+  satuan?: string;
+  berat?: number;
+  macam_barang?: string;
+  nominal?: number;
   vehicle_plate_region?: string;
   shipping_address?: string;
   regenerate_code?: boolean;
   service_type?: string;
+  jenis?: string;
+  keterangan?: string;
 };
 
 type UpdateShipmentBody = {
   id: number;
+  spb_number?: string;
   customer_id?: number;
   customer_name?: string;
   customer_address?: string;
   sender_name?: string;
   sender_address?: string;
+  pengirim_name?: string;
+  penerima_name?: string;
+  penerima_phone?: string;
   origin?: string;
   destination?: string;
   eta?: string;
   status?: string;
   total_colli?: number;
+  qty?: number;
+  satuan?: string;
+  berat?: number;
+  macam_barang?: string;
+  nominal?: number;
   vehicle_plate_region?: string;
   shipping_address?: string;
   regenerate_code?: boolean;
   service_type?: string;
+  jenis?: string;
+  keterangan?: string;
 };
 
 const corsHeaders = {
@@ -88,11 +123,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     if (status && ['DRAFT', 'READY', 'LOADING', 'IN_TRANSIT', 'DELIVERED'].includes(status)) {
       shipments = await sql`
         select 
-          s.id, s.customer_id,
+          s.id, s.spb_number, s.customer_id,
           coalesce(s.customer_name, c.name) as customer_name,
           coalesce(s.customer_address, c.address) as customer_address,
-          s.sender_name, s.sender_address,
-          s.origin, s.destination, s.eta, s.status, s.total_colli, s.public_code, s.vehicle_plate_region, s.shipping_address, s.service_type, s.created_at
+          s.sender_name, s.sender_address, s.pengirim_name, s.penerima_name, s.penerima_phone,
+          s.origin, s.destination, s.eta, s.status, s.total_colli, s.qty, s.satuan, 
+          coalesce(s.berat, 0)::float as berat, s.macam_barang, 
+          coalesce(s.nominal, 0)::float as nominal, s.public_code, s.vehicle_plate_region, 
+          s.shipping_address, s.service_type, s.jenis, s.dbl_id, coalesce(s.invoice_generated, false) as invoice_generated, 
+          s.keterangan, s.created_at
         from shipments s
         left join customers c on c.id = s.customer_id
         where s.status = ${status}
@@ -108,11 +147,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     } else {
       shipments = await sql`
         select 
-          s.id, s.customer_id,
+          s.id, s.spb_number, s.customer_id,
           coalesce(s.customer_name, c.name) as customer_name,
           coalesce(s.customer_address, c.address) as customer_address,
-          s.sender_name, s.sender_address,
-          s.origin, s.destination, s.eta, s.status, s.total_colli, s.public_code, s.vehicle_plate_region, s.shipping_address, s.service_type, s.created_at
+          s.sender_name, s.sender_address, s.pengirim_name, s.penerima_name, s.penerima_phone,
+          s.origin, s.destination, s.eta, s.status, s.total_colli, s.qty, s.satuan,
+          coalesce(s.berat, 0)::float as berat, s.macam_barang, 
+          coalesce(s.nominal, 0)::float as nominal, s.public_code, s.vehicle_plate_region, 
+          s.shipping_address, s.service_type, s.jenis, s.dbl_id, coalesce(s.invoice_generated, false) as invoice_generated, 
+          s.keterangan, s.created_at
         from shipments s
         left join customers c on c.id = s.customer_id
         order by s.created_at desc
@@ -162,6 +205,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       shippingAddress = sa[0]?.address || null;
     }
     
+    // SPB number is manual input from user (not auto-generated)
+    const spbNumber = body.spb_number || null;
+    
     // Generate public_code using new pattern: STE-<PLATE><DD><RND2><DESTCODE><COLLI2>
     // e.g. STE-DK1825DPS11 (DK=plate, 18=day, 25=random, DPS=dest code, 11=colli)
     let publicCode: string | null = null;
@@ -178,22 +224,35 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
     const result = await sql`
       insert into shipments (
-        customer_id, customer_name, sender_name, sender_address, public_code, origin, destination, eta, status, total_colli, vehicle_plate_region, customer_address, shipping_address, service_type, created_at
+        spb_number, customer_id, customer_name, sender_name, sender_address, pengirim_name, penerima_name, penerima_phone,
+        public_code, origin, destination, eta, status, total_colli, qty, satuan, berat, macam_barang, nominal,
+        vehicle_plate_region, customer_address, shipping_address, service_type, jenis, keterangan, created_at
       ) values (
+        ${spbNumber},
         ${customerId},
         ${customerName},
         ${body.sender_name || null},
         ${body.sender_address || null},
+        ${body.pengirim_name || null},
+        ${body.penerima_name || null},
+        ${body.penerima_phone || null},
         ${publicCode},
         ${body.origin},
         ${body.destination},
         ${body.eta || null},
-        ${body.status || 'DRAFT'},
+        ${body.status || 'LOADING'},
         ${body.total_colli},
+        ${body.qty || body.total_colli || 0},
+        ${body.satuan || 'Koli'},
+        ${body.berat || 0},
+        ${body.macam_barang || null},
+        ${body.nominal || 0},
         ${body.vehicle_plate_region || null},
         ${customerAddress || null},
         ${shippingAddress || null},
-        ${(body.service_type || 'REG').toUpperCase()},
+        ${(body.service_type || 'CARGO').toUpperCase()},
+        ${(body.jenis || 'FRANCO').toUpperCase()},
+        ${body.keterangan || null},
         now()
       )
       returning id
@@ -231,19 +290,30 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
     const sets: string[] = [];
     const params: unknown[] = [];
+    if (body.spb_number !== undefined) { sets.push(`spb_number = $${sets.length + 1}`); params.push(body.spb_number); }
     if (customerId !== undefined) { sets.push(`customer_id = $${sets.length + 1}`); params.push(customerId); }
     if (customerName !== undefined) { sets.push(`customer_name = $${sets.length + 1}`); params.push(customerName); }
     if (customerAddress !== undefined) { sets.push(`customer_address = $${sets.length + 1}`); params.push(customerAddress); }
     if (shippingAddress !== undefined) { sets.push(`shipping_address = $${sets.length + 1}`); params.push(shippingAddress); }
     if (body.sender_name !== undefined) { sets.push(`sender_name = $${sets.length + 1}`); params.push(body.sender_name); }
     if (body.sender_address !== undefined) { sets.push(`sender_address = $${sets.length + 1}`); params.push(body.sender_address); }
+    if (body.pengirim_name !== undefined) { sets.push(`pengirim_name = $${sets.length + 1}`); params.push(body.pengirim_name); }
+    if (body.penerima_name !== undefined) { sets.push(`penerima_name = $${sets.length + 1}`); params.push(body.penerima_name); }
+    if (body.penerima_phone !== undefined) { sets.push(`penerima_phone = $${sets.length + 1}`); params.push(body.penerima_phone); }
     if (body.origin) { sets.push(`origin = $${sets.length + 1}`); params.push(body.origin); }
     if (body.destination) { sets.push(`destination = $${sets.length + 1}`); params.push(body.destination); }
     if (body.eta !== undefined) { sets.push(`eta = $${sets.length + 1}`); params.push(body.eta); }
     if (body.status) { sets.push(`status = $${sets.length + 1}`); params.push(body.status); }
     if (body.total_colli !== undefined) { sets.push(`total_colli = $${sets.length + 1}`); params.push(body.total_colli); }
+    if (body.qty !== undefined) { sets.push(`qty = $${sets.length + 1}`); params.push(body.qty); }
+    if (body.satuan !== undefined) { sets.push(`satuan = $${sets.length + 1}`); params.push(body.satuan); }
+    if (body.berat !== undefined) { sets.push(`berat = $${sets.length + 1}`); params.push(body.berat); }
+    if (body.macam_barang !== undefined) { sets.push(`macam_barang = $${sets.length + 1}`); params.push(body.macam_barang); }
+    if (body.nominal !== undefined) { sets.push(`nominal = $${sets.length + 1}`); params.push(body.nominal); }
     if (body.vehicle_plate_region !== undefined) { sets.push(`vehicle_plate_region = $${sets.length + 1}`); params.push(body.vehicle_plate_region); }
-    if (body.service_type !== undefined) { sets.push(`service_type = $${sets.length + 1}`); params.push((body.service_type || 'REG').toUpperCase()); }
+    if (body.service_type !== undefined) { sets.push(`service_type = $${sets.length + 1}`); params.push((body.service_type || 'CARGO').toUpperCase()); }
+    if (body.jenis !== undefined) { sets.push(`jenis = $${sets.length + 1}`); params.push((body.jenis || 'FRANCO').toUpperCase()); }
+    if (body.keterangan !== undefined) { sets.push(`keterangan = $${sets.length + 1}`); params.push(body.keterangan); }
     // If regenerate_code is provided, generate a new code and include it
     if (body.regenerate_code) {
       // Generate new pattern: STE-<PLATE><DD><RND2><DESTCODE><COLLI2>
@@ -292,19 +362,29 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     
     const setClauses: string[] = [];
     let paramIndex = 0;
+    if (body.spb_number !== undefined) setClauses.push(`spb_number = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (customerId !== undefined) setClauses.push(`customer_id = ${params[paramIndex++]}`);
     if (customerName !== undefined) setClauses.push(`customer_name = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (customerAddress !== undefined) setClauses.push(`customer_address = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (shippingAddress !== undefined) setClauses.push(`shipping_address = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (body.sender_name !== undefined) setClauses.push(`sender_name = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (body.sender_address !== undefined) setClauses.push(`sender_address = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    if (body.pengirim_name !== undefined) setClauses.push(`pengirim_name = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    if (body.penerima_name !== undefined) setClauses.push(`penerima_name = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    if (body.penerima_phone !== undefined) setClauses.push(`penerima_phone = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (body.origin) setClauses.push(`origin = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (body.destination) setClauses.push(`destination = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (body.eta !== undefined) setClauses.push(`eta = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (body.status) setClauses.push(`status = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (body.total_colli !== undefined) setClauses.push(`total_colli = ${params[paramIndex++]}`);
+    if (body.qty !== undefined) setClauses.push(`qty = ${params[paramIndex++]}`);
+    if (body.satuan !== undefined) setClauses.push(`satuan = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    if (body.macam_barang !== undefined) setClauses.push(`macam_barang = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    if (body.nominal !== undefined) setClauses.push(`nominal = ${params[paramIndex++]}`);
     if (body.vehicle_plate_region !== undefined) setClauses.push(`vehicle_plate_region = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (body.service_type !== undefined) setClauses.push(`service_type = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    if (body.jenis !== undefined) setClauses.push(`jenis = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
+    if (body.keterangan !== undefined) setClauses.push(`keterangan = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     if (body.regenerate_code) setClauses.push(`public_code = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
     
     const updateQuery = `UPDATE shipments SET ${setClauses.join(', ')} WHERE id = ${body.id}`;
@@ -320,6 +400,44 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     await sql`delete from shipments where id = ${parseInt(id)}`;
     
     writeJson(res, { success: true });
+    return;
+  } else if (endpoint === 'daily-report' && req.method === 'GET') {
+    const dateFrom = url.searchParams.get('date_from');
+    const dateTo = url.searchParams.get('date_to');
+    const customerId = url.searchParams.get('customer_id');
+
+    let query = `
+      SELECT 
+        s.id, s.spb_number, s.customer_name, s.origin, s.destination,
+        s.total_colli, s.macam_barang, s.nominal, s.jenis, s.service_type,
+        s.status, s.created_at,
+        c.name as customer_display_name
+      FROM shipments s
+      LEFT JOIN customers c ON s.customer_id = c.id
+      WHERE 1=1
+    `;
+
+    if (dateFrom) {
+      query += ` AND s.created_at >= '${dateFrom}'`;
+    }
+    if (dateTo) {
+      query += ` AND s.created_at <= '${dateTo} 23:59:59'`;
+    }
+    if (customerId) {
+      query += ` AND s.customer_id = ${parseInt(customerId)}`;
+    }
+
+    query += ` ORDER BY s.created_at DESC LIMIT 1000`;
+
+    const items = await sql(query as any);
+
+    const totals = {
+      total_shipments: items.length,
+      total_colli: items.reduce((sum: number, i: { total_colli: number }) => sum + (i.total_colli || 0), 0),
+      total_nominal: items.reduce((sum: number, i: { nominal: number }) => sum + (i.nominal || 0), 0)
+    };
+
+    writeJson(res, { items, totals });
     return;
   } else {
     res.writeHead(404, corsHeaders);

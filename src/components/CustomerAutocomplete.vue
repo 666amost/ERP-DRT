@@ -20,6 +20,10 @@ const newAddress = ref('');
 const loading = ref(false);
 const selectedId = ref<number|null>(null);
 
+function closeDropdownDelayed(): void {
+  setTimeout(() => { show.value = false; }, 200);
+}
+
 async function loadCustomers() {
   try {
     const res = await fetch('/api/customers?endpoint=list');
@@ -48,7 +52,12 @@ function pick(c:Customer) {
   show.value = false;
 }
 
-watch(query, () => { filter(); if (document.activeElement && (document.activeElement as HTMLElement).tagName==='INPUT') show.value=true; });
+watch(query, () => {
+  filter();
+  // propagate typed value to parent so free typing updates v-model
+  emitUpdateModelValue(query.value);
+  if (document.activeElement && (document.activeElement as HTMLElement).tagName==='INPUT') show.value=true;
+});
 watch(() => props.modelValue, (v) => { if (v && v !== query.value) { query.value = v; const found = customers.value.find(c=>c.name===v); selectedId.value = found?found.id:null; }});
 
 async function addCustomer() {
@@ -76,7 +85,7 @@ loadCustomers();
         :placeholder="placeholder||'Pilih atau ketik customer...'"
         class="w-full px-3 py-2 border border-gray-300 rounded-lg pr-20"
         @focus="show=true"
-        @blur="setTimeout(()=>show=false,200)"
+        @blur="closeDropdownDelayed"
       >
       <button
         type="button"

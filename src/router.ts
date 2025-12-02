@@ -10,6 +10,12 @@ const BarangKeluar = () => import('./pages/BarangKeluar.vue');
 const Pelacakan = () => import('./pages/Pelacakan.vue');
 const Invoice = () => import('./pages/Invoice.vue');
 const SuratJalan = () => import('./pages/SuratJalan.vue');
+const DBL = () => import('./pages/DBL.vue');
+const Outstanding = () => import('./pages/Outstanding.vue');
+const Pelunasan = () => import('./pages/Pelunasan.vue');
+const DailyReport = () => import('./pages/DailyReport.vue');
+const DBLReport = () => import('./pages/DBLReport.vue');
+const Sales = () => import('./pages/Sales.vue');
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -23,11 +29,17 @@ export const router = createRouter({
       children: [
         { path: 'dashboard', name: 'dashboard', component: Dashboard },
         { path: 'barang-keluar', name: 'barang-keluar', component: BarangKeluar },
+        { path: 'dbl', name: 'dbl', component: DBL },
         { path: 'pelacakan', name: 'pelacakan', component: Pelacakan },
         { path: 'invoice', name: 'invoice', component: Invoice },
         { path: 'surat-jalan', name: 'surat-jalan', component: SuratJalan },
-        { path: 'admin/pod', name: 'admin-pod', component: AdminPodList }
-        ,{ path: 'admin/company', name: 'admin-company', component: AdminCompany }
+        { path: 'outstanding', name: 'outstanding', component: Outstanding },
+        { path: 'pelunasan', name: 'pelunasan', component: Pelunasan },
+        { path: 'report/daily', name: 'daily-report', component: DailyReport },
+        { path: 'report/dbl', name: 'dbl-report', component: DBLReport },
+        { path: 'report/sales', name: 'sales-report', component: Sales },
+        { path: 'admin/pod', name: 'admin-pod', component: AdminPodList },
+        { path: 'admin/company', name: 'admin-company', component: AdminCompany }
       ]
     },
     { path: '/pod/:token', name: 'pod-upload', component: PodUpload, props: true }

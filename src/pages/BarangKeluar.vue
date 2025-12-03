@@ -314,7 +314,11 @@ async function saveShipment() {
           regenerate_code: form.value.regenerate_code
         })
       });
-      if (!res.ok) throw new Error('Update failed');
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || errorData.details || 'Update failed');
+      }
     } else {
       const res = await fetch('/api/shipments?endpoint=create', {
         method: 'POST',
@@ -343,13 +347,18 @@ async function saveShipment() {
           jenis: form.value.jenis || 'FRANCO'
         })
       });
-      if (!res.ok) throw new Error('Create failed');
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || errorData.details || 'Create failed');
+      }
     }
     showModal.value = false;
-    loadShipments();
+    await loadShipments();
   } catch (e) {
     console.error('Save error:', e);
-    alert('Gagal menyimpan shipment');
+    const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+    alert(`Gagal menyimpan shipment: ${errorMessage}`);
   }
 }
 
@@ -358,11 +367,17 @@ async function deleteShipment(id: number) {
   
   try {
     const res = await fetch(`/api/shipments?endpoint=delete&id=${id}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error('Delete failed');
-    loadShipments();
+    
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(errorData.error || errorData.details || 'Delete failed');
+    }
+    
+    await loadShipments();
   } catch (e) {
     console.error('Delete error:', e);
-    alert('Gagal menghapus shipment');
+    const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+    alert(`Gagal menghapus shipment: ${errorMessage}`);
   }
 }
 

@@ -98,6 +98,14 @@ const corsHeaders = {
   'Access-Control-Allow-Credentials': 'true'
 };
 
+function generatePublicCode(plateRegion: string, destination: string, totalColli: number, sequence: number): string {
+  const plate = (plateRegion || 'XX').toUpperCase().substring(0, 2).padEnd(2, 'X');
+  const seq = String(sequence).padStart(4, '0');
+  const destCode = destination.toUpperCase().substring(0, 3).padEnd(3, 'X');
+  const colli = String(totalColli).padStart(2, '0').substring(0, 2);
+  return `STE-${plate}${seq}${destCode}${colli}`;
+}
+
 export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method === 'OPTIONS') { res.writeHead(204, corsHeaders); res.end(); return }
 
@@ -172,34 +180,52 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
       return
     } else if (endpoint === 'create' && req.method === 'POST') {
       let body: CreateShipmentBody;
-      try { body = await readJsonNode(req) as CreateShipmentBody } catch { body = null as any }
+      try { 
+        body = await readJsonNode(req) as CreateShipmentBody 
+      } catch (e) { 
+        console.error('[shipments/create] JSON parse error:', e);
+        writeJson(res, { error: 'Invalid JSON', details: String(e) }, 400); 
+        return 
+      }
       if (!body) { writeJson(res, { error: 'Invalid JSON' }, 400); return }
 
-      if (!body.origin || !body.destination || !body.total_colli) { writeJson(res, { error: 'Missing required fields' }, 400); return }
+      if (!body.origin || !body.destination || !body.total_colli) { 
+        console.error('[shipments/create] Validation error - missing fields:', { origin: body.origin, destination: body.destination, total_colli: body.total_colli });
+        writeJson(res, { error: 'Missing required fields: origin, destination, total_colli' }, 400); 
+        return 
+      }
 
       let customerId = body.customer_id || null;
       let customerName = body.customer_name || null;
       let customerAddress = body.customer_address || null;
       let shippingAddress = body.shipping_address || null;
-      if (!customerName && customerId) {
-        const c = await sql`select name from customers where id = ${customerId}` as [{ name: string }];
-        if (!c.length) { writeJson(res, { error: 'Invalid customer_id' }, 400); return }
-        customerName = c[0].name;
-      }
-      if (!customerAddress && customerId) {
-        const ca = await sql`select address from customers where id = ${customerId}` as [{ address: string }];
-        customerAddress = ca[0]?.address || null;
-      }
+      
+      try {
+        if (!customerName && customerId) {
+          const c = await sql`select name from customers where id = ${customerId}` as [{ name: string }];
+          if (!c.length) { 
+            console.error('[shipments/create] Customer not found:', customerId);
+            writeJson(res, { error: 'Invalid customer_id' }, 400); 
+            return 
+          }
+          customerName = c[0].name;
+        }
+        if (!customerAddress && customerId) {
+          const ca = await sql`select address from customers where id = ${customerId}` as [{ address: string }];
+          customerAddress = ca[0]?.address || null;
+        }
 
-      const regenerateCode = Boolean(body.regenerate_code);
-      let publicCode: string | null = null;
-      if (regenerateCode || !body.spb_number) {
-        const gen = await sql`select generate_public_code() as code` as [{ code: string }];
-        publicCode = gen[0]?.code || null;
-      }
+        const seqResult = await sql`select coalesce(max(id), 0) + 1 as next_seq from shipments` as [{ next_seq: number }];
+        const nextSeq = seqResult[0]?.next_seq || 1;
+        const publicCode = generatePublicCode(
+          body.vehicle_plate_region || 'XX',
+          body.destination,
+          body.total_colli,
+          nextSeq
+        );
 
-      const result = await sql`
-        insert into shipments (
+        const result = await sql`
+          insert into shipments (
           spb_number, customer_id, customer_name, customer_address,
           sender_name, sender_address, pengirim_name, penerima_name, penerima_phone,
           origin, destination, eta, status, total_colli, qty, satuan, berat,
@@ -232,57 +258,142 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
           ${body.jenis || null},
           ${body.keterangan || null}
         ) returning id
-      ` as [{ id: number }];
+        ` as [{ id: number }];
 
-      writeJson(res, { id: result[0].id, public_code: publicCode });
-      return
+        writeJson(res, { id: result[0].id, public_code: publicCode });
+        return
+      } catch (dbError) {
+        const errMsg = dbError instanceof Error ? dbError.message : String(dbError);
+        const errStack = dbError instanceof Error ? dbError.stack : '';
+        console.error('[shipments/create] Database error:', errMsg);
+        console.error('[shipments/create] Stack:', errStack);
+        console.error('[shipments/create] Body:', JSON.stringify(body));
+        writeJson(res, { error: 'Database error during insert', details: errMsg }, 500);
+        return
+      }
     } else if (endpoint === 'update' && req.method === 'PUT') {
       let body: UpdateShipmentBody;
-      try { body = await readJsonNode(req) as UpdateShipmentBody } catch { body = null as any }
-      if (!body || !body.id) { writeJson(res, { error: 'Missing id' }, 400); return }
-
-      const escapeStr = (val: unknown): string => {
-        if (val === null || val === undefined || val === 'null' || val === '') return 'NULL';
-        return `'${String(val).replace(/'/g, "''")}'`;
-      };
-
-      const updates: string[] = [];
-      if (body.spb_number !== undefined) updates.push(`spb_number = ${escapeStr(body.spb_number)}`);
-      if (body.customer_id !== undefined) updates.push(`customer_id = ${body.customer_id || 'NULL'}`);
-      if (body.customer_name !== undefined) updates.push(`customer_name = ${escapeStr(body.customer_name)}`);
-      if (body.customer_address !== undefined) updates.push(`customer_address = ${escapeStr(body.customer_address)}`);
-      if (body.sender_name !== undefined) updates.push(`sender_name = ${escapeStr(body.sender_name)}`);
-      if (body.sender_address !== undefined) updates.push(`sender_address = ${escapeStr(body.sender_address)}`);
-      if (body.pengirim_name !== undefined) updates.push(`pengirim_name = ${escapeStr(body.pengirim_name)}`);
-      if (body.penerima_name !== undefined) updates.push(`penerima_name = ${escapeStr(body.penerima_name)}`);
-      if (body.penerima_phone !== undefined) updates.push(`penerima_phone = ${escapeStr(body.penerima_phone)}`);
-      if (body.origin !== undefined) updates.push(`origin = ${escapeStr(body.origin)}`);
-      if (body.destination !== undefined) updates.push(`destination = ${escapeStr(body.destination)}`);
-      if (body.eta !== undefined) updates.push(`eta = ${escapeStr(body.eta)}`);
-      if (body.status !== undefined) updates.push(`status = ${escapeStr(body.status)}`);
-      if (body.total_colli !== undefined) updates.push(`total_colli = ${body.total_colli || 0}`);
-      if (body.qty !== undefined) updates.push(`qty = ${body.qty || 0}`);
-      if (body.satuan !== undefined) updates.push(`satuan = ${escapeStr(body.satuan)}`);
-      if (body.berat !== undefined) updates.push(`berat = ${body.berat || 0}`);
-      if (body.macam_barang !== undefined) updates.push(`macam_barang = ${escapeStr(body.macam_barang)}`);
-      if (body.nominal !== undefined) updates.push(`nominal = ${body.nominal || 0}`);
-      if (body.vehicle_plate_region !== undefined) updates.push(`vehicle_plate_region = ${escapeStr(body.vehicle_plate_region)}`);
-      if (body.shipping_address !== undefined) updates.push(`shipping_address = ${escapeStr(body.shipping_address)}`);
-      if (body.service_type !== undefined) updates.push(`service_type = ${escapeStr(body.service_type)}`);
-      if (body.jenis !== undefined) updates.push(`jenis = ${escapeStr(body.jenis)}`);
-      if (body.keterangan !== undefined) updates.push(`keterangan = ${escapeStr(body.keterangan)}`);
-
-      if (updates.length > 0) {
-        const updateQuery = `UPDATE shipments SET ${updates.join(', ')} WHERE id = ${body.id}` as string;
-        await sql(updateQuery as never);
+      try { 
+        body = await readJsonNode(req) as UpdateShipmentBody 
+      } catch (e) { 
+        console.error('[shipments/update] JSON parse error:', e);
+        writeJson(res, { error: 'Invalid JSON', details: String(e) }, 400); 
+        return 
+      }
+      if (!body || !body.id) { 
+        console.error('[shipments/update] Missing id:', body);
+        writeJson(res, { error: 'Missing id' }, 400); 
+        return 
       }
 
-      if (body.regenerate_code) {
-        const gen = await sql`select generate_public_code() as code` as [{ code: string }];
-        await sql`update shipments set public_code = ${gen[0]?.code || null} where id = ${body.id}`;
-      }
+      try {
+        const existingRows = await sql`select * from shipments where id = ${body.id}` as Shipment[];
+        if (!existingRows.length || !existingRows[0]) {
+          writeJson(res, { error: 'Shipment not found' }, 404);
+          return;
+        }
+        const existing: Shipment = existingRows[0];
 
-      writeJson(res, { success: true });
+        let newPublicCode: string | null = null;
+        if (body.regenerate_code) {
+          const plate = body.vehicle_plate_region ?? existing.vehicle_plate_region ?? 'XX';
+          const dest = body.destination ?? existing.destination;
+          const colli = body.total_colli ?? existing.total_colli;
+          newPublicCode = generatePublicCode(plate, dest, colli, body.id);
+        }
+
+        const spbNumber = body.spb_number !== undefined ? body.spb_number : existing.spb_number;
+        const customerId = body.customer_id !== undefined ? body.customer_id : existing.customer_id;
+        const customerName = body.customer_name !== undefined ? body.customer_name : existing.customer_name;
+        const customerAddress = body.customer_address !== undefined ? body.customer_address : existing.customer_address;
+        const senderName = body.sender_name !== undefined ? body.sender_name : existing.sender_name;
+        const senderAddress = body.sender_address !== undefined ? body.sender_address : existing.sender_address;
+        const pengirimName = body.pengirim_name !== undefined ? body.pengirim_name : existing.pengirim_name;
+        const penerimaName = body.penerima_name !== undefined ? body.penerima_name : existing.penerima_name;
+        const penerimaPhone = body.penerima_phone !== undefined ? body.penerima_phone : existing.penerima_phone;
+        const origin = body.origin !== undefined ? body.origin : existing.origin;
+        const destination = body.destination !== undefined ? body.destination : existing.destination;
+        const eta = body.eta !== undefined ? body.eta : existing.eta;
+        const status = body.status !== undefined ? body.status : existing.status;
+        const totalColli = body.total_colli !== undefined ? body.total_colli : existing.total_colli;
+        const qty = body.qty !== undefined ? body.qty : existing.qty;
+        const satuan = body.satuan !== undefined ? body.satuan : existing.satuan;
+        const berat = body.berat !== undefined ? body.berat : existing.berat;
+        const macamBarang = body.macam_barang !== undefined ? body.macam_barang : existing.macam_barang;
+        const nominal = body.nominal !== undefined ? body.nominal : existing.nominal;
+        const vehiclePlateRegion = body.vehicle_plate_region !== undefined ? body.vehicle_plate_region : existing.vehicle_plate_region;
+        const shippingAddress = body.shipping_address !== undefined ? body.shipping_address : existing.shipping_address;
+        const serviceType = body.service_type !== undefined ? body.service_type : existing.service_type;
+        const jenis = body.jenis !== undefined ? body.jenis : existing.jenis;
+        const keterangan = body.keterangan !== undefined ? body.keterangan : existing.keterangan;
+        const publicCode = newPublicCode !== null ? newPublicCode : existing.public_code;
+
+        await sql`
+          update shipments set
+            spb_number = ${spbNumber},
+            customer_id = ${customerId},
+            customer_name = ${customerName},
+            customer_address = ${customerAddress},
+            sender_name = ${senderName},
+            sender_address = ${senderAddress},
+            pengirim_name = ${pengirimName},
+            penerima_name = ${penerimaName},
+            penerima_phone = ${penerimaPhone},
+            origin = ${origin},
+            destination = ${destination},
+            eta = ${eta},
+            status = ${status},
+            total_colli = ${totalColli},
+            qty = ${qty},
+            satuan = ${satuan},
+            berat = ${berat},
+            macam_barang = ${macamBarang},
+            nominal = ${nominal},
+            vehicle_plate_region = ${vehiclePlateRegion},
+            shipping_address = ${shippingAddress},
+            service_type = ${serviceType},
+            jenis = ${jenis},
+            keterangan = ${keterangan},
+            public_code = ${publicCode},
+            updated_at = now()
+          where id = ${body.id}
+        `;
+
+        writeJson(res, { success: true, public_code: newPublicCode });
+        return
+      } catch (dbError) {
+        const errMsg = dbError instanceof Error ? dbError.message : String(dbError);
+        const errStack = dbError instanceof Error ? dbError.stack : '';
+        console.error('[shipments/update] Database error:', errMsg);
+        console.error('[shipments/update] Stack:', errStack);
+        console.error('[shipments/update] Body:', JSON.stringify(body));
+        writeJson(res, { error: 'Database error during update', details: errMsg }, 500);
+        return
+      }
+    } else if (endpoint === 'all-unpaid' && req.method === 'GET') {
+      const shipments = await sql`
+        select 
+          s.id, s.spb_number, s.public_code as tracking_code, 
+          s.customer_id, coalesce(s.customer_name, c.name) as customer_name,
+          s.macam_barang as description,
+          coalesce(s.berat, 0)::float as weight,
+          coalesce(s.qty, 1)::int as qty,
+          s.satuan as unit,
+          s.total_colli,
+          s.penerima_name as recipient_name,
+          s.shipping_address as recipient_address,
+          s.destination as destination_city,
+          coalesce(s.nominal, 0)::float as amount,
+          s.created_at,
+          s.status
+        from shipments s
+        left join customers c on c.id = s.customer_id
+        left join invoices i on i.shipment_id = s.id
+        where s.nominal > 0
+          and (i.id is null or i.status = 'cancelled')
+        order by s.created_at desc
+      `;
+      writeJson(res, { shipments });
       return
     } else if (endpoint === 'delete' && req.method === 'DELETE') {
       const id = url.searchParams.get('id');
@@ -295,6 +406,7 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
 
     writeJson(res, { error: 'Invalid endpoint' }, 404);
   } catch (err) {
-    writeJson(res, { error: 'Internal error', details: String(err) }, 500);
+    console.error('[shipments] Unhandled error:', err);
+    writeJson(res, { error: 'Internal server error', details: String(err) }, 500);
   }
 }

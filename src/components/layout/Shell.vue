@@ -33,7 +33,7 @@ const sidebarOpen = ref(false);
           </Transition>
         </router-view>
       </main>
-      <BottomNav class="print:hidden" />
+      <BottomNav />
     </div>
   </div>
 </template>

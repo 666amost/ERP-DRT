@@ -1,8 +1,6 @@
-export const config = { runtime: 'nodejs' };
-
-import { getSql } from './_lib/db.js';
+import { getSql } from '../_lib/db.js';
 import type { IncomingMessage, ServerResponse } from 'http';
-import { writeJson } from './_lib/http.js';
+import { writeJson } from '../_lib/http.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'POST') { res.writeHead(405); res.end(); return; }

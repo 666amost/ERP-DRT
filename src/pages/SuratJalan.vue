@@ -3,8 +3,10 @@ import { ref, computed, onMounted } from 'vue'
 import Button from '@/components/ui/Button.vue'
 import Badge from '@/components/ui/Badge.vue'
 import { getCompany } from '../lib/company'
+import { useFormatters } from '../composables/useFormatters'
 
 const LOGO_URL = '/brand/logo.png'
+const { formatRupiah } = useFormatters()
 
 interface Shipment {
   id: string
@@ -24,6 +26,7 @@ interface Shipment {
   status: string
   created_at: string
   dbl_id: string | null
+  nominal: number
 }
 
 interface DBLItem {
@@ -72,7 +75,8 @@ const loadShipments = async (): Promise<void> => {
           notes: s.keterangan as string || '',
           status: s.status as string || '',
           created_at: s.created_at as string || '',
-          dbl_id: s.dbl_id as string | null
+          dbl_id: s.dbl_id as string | null,
+          nominal: Number(s.nominal) || 0
         }))
     }
   } catch {
@@ -189,66 +193,68 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
       <title>Surat Jalan - ${spbNumber}</title>
       <meta charset="utf-8" />
       <style>
-        :root { --ink:#0e0e0e; --line:#1f2937; --muted:#6b7280; --paper:#fffbe6; }
-        * { box-sizing: border-box; }
-        html, body { height: 100%; }
-        body { font-family: Arial, Helvetica, sans-serif; color: var(--ink); margin:0; padding:24px; }
-        .sheet { width: 210mm; max-width: 210mm; margin:0 auto; background: var(--paper); border: 1px solid var(--line); padding: 18px 18px 14px; position: relative; }
-        .top { display:flex; align-items:flex-start; gap:16px; }
-        .brand { display:flex; gap:10px; align-items:center; }
-        .brand img { width:48px; height:48px; object-fit:contain; }
-        .brand-title { font-weight:800; letter-spacing:.4px; }
-        .brand-sub { font-size:12px; color:#1f2937; margin-top:2px; }
-        .addr { font-size:11px; color: var(--muted); margin-top:6px; white-space:pre-line; }
-        .right-box { margin-left:auto; border:1px solid var(--line); padding:8px 10px; text-align:center; min-width:230px; }
-        .right-box .title { font-weight:800; font-size:13px; letter-spacing:.5px; }
-        .right-box .spb { margin-top:6px; font-size:14px; font-weight:700; }
-        .right-box .code { margin-top:4px; font-size:11px; color: var(--muted); }
+        @page { size: 9.5in 5.5in; margin: 0; }
+        :root { --ink:#0e0e0e; --line:#1f2937; --muted:#6b7280; --paper:#fff; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; font-family: 'Courier New', Courier, monospace; font-size: 10px; color: var(--ink); }
+        body { margin: 0; padding: 4px; }
+        .sheet { width: 9.5in; height: 5.5in; max-width: 9.5in; background: var(--paper); padding: 6px 10px; position: relative; overflow: hidden; }
+        .top { display: flex; align-items: flex-start; gap: 8px; }
+        .brand { display: flex; gap: 6px; align-items: center; }
+        .brand img { width: 28px; height: 28px; object-fit: contain; }
+        .brand-title { font-weight: 700; font-size: 11px; letter-spacing: .3px; }
+        .brand-sub { font-size: 8px; color: #1f2937; }
+        .addr { font-size: 8px; color: var(--muted); margin-top: 2px; white-space: pre-line; }
+        .right-box { margin-left: auto; border: 1px solid var(--line); padding: 4px 6px; text-align: center; min-width: 140px; }
+        .right-box .title { font-weight: 700; font-size: 10px; letter-spacing: .3px; }
+        .right-box .spb { margin-top: 2px; font-size: 10px; font-weight: 700; }
+        .right-box .code { margin-top: 1px; font-size: 8px; color: var(--muted); }
 
-        .barcode { text-align:right; margin:8px 0 10px; }
-        .barcode img { width:300px; height:72px; object-fit:contain; border:1px solid #e5e7eb; padding:6px; border-radius:4px; background:#fff; }
+        .barcode { text-align: right; margin: 2px 0 4px; }
+        .barcode img { width: 150px; height: 32px; object-fit: contain; border: 1px solid #e5e7eb; padding: 2px; background: #fff; }
 
-        .row { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-top:10px; }
-        .field { border:1px solid var(--line); padding:8px; min-height:44px; }
-        .label { font-size:11px; color:var(--muted); margin-bottom:4px; text-transform:uppercase; }
-        .value { font-size:13px; }
+        .row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px; }
+        .field { border: 1px solid var(--line); padding: 3px 5px; min-height: 22px; }
+        .label { font-size: 7px; color: var(--muted); margin-bottom: 1px; text-transform: uppercase; }
+        .value { font-size: 9px; }
 
-        table { width:100%; border-collapse:collapse; margin-top:12px; }
-        th, td { border:1px solid #000; font-size:12px; padding:6px 8px; }
-        thead th { background:#f7f7f7; }
+        table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+        th, td { border: 1px solid #000; font-size: 9px; padding: 2px 4px; }
+        thead th { background: #f7f7f7; font-size: 8px; }
 
-        .bottom { display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:12px; align-items:start; }
-        .tnc { border:1px solid var(--line); padding:10px; font-size:10px; line-height:1.35; color:#111827; }
-        .tnc h4 { margin:0 0 6px; font-size:11px; }
-        .badge-note { display:inline-block; border:1px solid var(--line); padding:6px 10px; font-weight:700; margin-top:8px; border-radius:4px; }
+        .bottom { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 6px; margin-top: 4px; align-items: start; }
+        .tnc { border: 1px solid var(--line); padding: 4px; font-size: 7px; line-height: 1.2; color: #111827; }
+        .tnc h4 { margin: 0 0 2px; font-size: 8px; }
+        .badge-note { display: inline-block; border: 1px solid var(--line); padding: 2px 4px; font-weight: 700; margin-top: 3px; font-size: 7px; }
 
-        .sign-row { display:grid; grid-template-columns: repeat(3,1fr); gap:18px; margin-top:22px; }
-        .sign { text-align:center; font-size:12px; }
-        .line { border-top:1px solid #000; margin-top:60px; padding-top:4px; }
+        .sign-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
+        .sign { text-align: center; font-size: 8px; }
+        .line { border-top: 1px solid #000; margin-top: 28px; padding-top: 2px; }
 
-        .right-summary { text-align:right; font-size:12px; }
-        .right-summary .date { margin-top:8px; }
+        .right-summary { text-align: right; font-size: 9px; }
+        .right-summary .date { margin-top: 2px; }
 
         .delivered-stamp {
           position: absolute;
           top: 50%;
-          right: 40px;
-          transform: rotate(-15deg) translateY(-50%);
-          font-size: 48px;
+          left: 50%;
+          transform: translate(-50%, -50%) rotate(-15deg);
+          font-size: 36px;
           font-weight: 900;
-          color: rgba(34, 197, 94, 0.25);
-          border: 6px solid rgba(34, 197, 94, 0.25);
-          padding: 10px 30px;
-          border-radius: 12px;
+          color: rgba(34, 197, 94, 0.2);
+          border: 4px solid rgba(34, 197, 94, 0.2);
+          padding: 8px 20px;
+          border-radius: 8px;
           text-transform: uppercase;
-          letter-spacing: 4px;
+          letter-spacing: 3px;
           pointer-events: none;
         }
 
         @media print {
-          body { padding:0; }
-          .sheet { border:0; width:auto; max-width:none; padding:16mm; }
-          .delivered-stamp { color: rgba(34, 197, 94, 0.3); border-color: rgba(34, 197, 94, 0.3); }
+          html, body { width: 9.5in; height: 5.5in; }
+          body { padding: 0; }
+          .sheet { border: 0; width: 9.5in; height: 5.5in; max-width: none; padding: 4mm 6mm; page-break-after: always; }
+          .delivered-stamp { color: rgba(34, 197, 94, 0.25); border-color: rgba(34, 197, 94, 0.25); }
         }
       </style>
     </head>
@@ -312,7 +318,7 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
               <td>${shipment.total_colli}</td>
               <td>${shipment.description || 'Barang kiriman'}</td>
               <td>${shipment.total_weight || ''}</td>
-              <td></td>
+              <td>${formatRupiah(shipment.nominal)}</td>
             </tr>
           </tbody>
         </table>
@@ -406,7 +412,8 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
         total_weight: Number(s.berat) || 0,
         description: s.macam_barang as string || '',
         status: s.status as string || '',
-        created_at: s.created_at as string || ''
+        created_at: s.created_at as string || '',
+        nominal: Number(s.nominal) || 0
       }
       const deliveredStamp = shipment.status === 'DELIVERED' ? `<div class="delivered-stamp">DELIVERED</div>` : ''
       
@@ -471,7 +478,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
                 <td>${shipment.total_colli}</td>
                 <td>${shipment.description || 'Barang kiriman'}</td>
                 <td>${shipment.total_weight || ''}</td>
-                <td></td>
+                <td>${formatRupiah(shipment.nominal)}</td>
               </tr>
             </tbody>
           </table>
@@ -521,69 +528,71 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
         <title>Bulk Surat Jalan - ${dbl.dbl_number}</title>
         <meta charset="utf-8" />
         <style>
-          :root { --ink:#0e0e0e; --line:#1f2937; --muted:#6b7280; --paper:#fffbe6; }
-          * { box-sizing: border-box; }
-          html, body { height: 100%; }
-          body { font-family: Arial, Helvetica, sans-serif; color: var(--ink); margin:0; padding:24px; }
-          .sheet { width: 210mm; max-width: 210mm; margin:0 auto 20px; background: var(--paper); border: 1px solid var(--line); padding: 18px 18px 14px; position: relative; }
+          @page { size: 9.5in 5.5in; margin: 0; }
+          :root { --ink:#0e0e0e; --line:#1f2937; --muted:#6b7280; --paper:#fff; }
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          html, body { height: 100%; font-family: 'Courier New', Courier, monospace; font-size: 10px; color: var(--ink); }
+          body { margin: 0; padding: 4px; }
+          .sheet { width: 9.5in; height: 5.5in; max-width: 9.5in; background: var(--paper); padding: 6px 10px; position: relative; overflow: hidden; }
           .page-break { page-break-before: always; }
-          .dbl-banner { background: #e0e7ff; color: #3730a3; text-align: center; padding: 6px 10px; font-size: 11px; font-weight: 600; margin-bottom: 12px; border-radius: 4px; }
-          .top { display:flex; align-items:flex-start; gap:16px; }
-          .brand { display:flex; gap:10px; align-items:center; }
-          .brand img { width:48px; height:48px; object-fit:contain; }
-          .brand-title { font-weight:800; letter-spacing:.4px; }
-          .brand-sub { font-size:12px; color:#1f2937; margin-top:2px; }
-          .addr { font-size:11px; color: var(--muted); margin-top:6px; white-space:pre-line; }
-          .right-box { margin-left:auto; border:1px solid var(--line); padding:8px 10px; text-align:center; min-width:230px; }
-          .right-box .title { font-weight:800; font-size:13px; letter-spacing:.5px; }
-          .right-box .spb { margin-top:6px; font-size:14px; font-weight:700; }
-          .right-box .code { margin-top:4px; font-size:11px; color: var(--muted); }
+          .dbl-banner { background: #e0e7ff; color: #3730a3; text-align: center; padding: 2px 6px; font-size: 8px; font-weight: 600; margin-bottom: 4px; }
+          .top { display: flex; align-items: flex-start; gap: 8px; }
+          .brand { display: flex; gap: 6px; align-items: center; }
+          .brand img { width: 28px; height: 28px; object-fit: contain; }
+          .brand-title { font-weight: 700; font-size: 11px; letter-spacing: .3px; }
+          .brand-sub { font-size: 8px; color: #1f2937; }
+          .addr { font-size: 8px; color: var(--muted); margin-top: 2px; white-space: pre-line; }
+          .right-box { margin-left: auto; border: 1px solid var(--line); padding: 4px 6px; text-align: center; min-width: 140px; }
+          .right-box .title { font-weight: 700; font-size: 10px; letter-spacing: .3px; }
+          .right-box .spb { margin-top: 2px; font-size: 10px; font-weight: 700; }
+          .right-box .code { margin-top: 1px; font-size: 8px; color: var(--muted); }
 
-          .barcode { text-align:right; margin:8px 0 10px; }
-          .barcode img { width:300px; height:72px; object-fit:contain; border:1px solid #e5e7eb; padding:6px; border-radius:4px; background:#fff; }
+          .barcode { text-align: right; margin: 2px 0 4px; }
+          .barcode img { width: 150px; height: 32px; object-fit: contain; border: 1px solid #e5e7eb; padding: 2px; background: #fff; }
 
-          .row { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-top:10px; }
-          .field { border:1px solid var(--line); padding:8px; min-height:44px; }
-          .label { font-size:11px; color:var(--muted); margin-bottom:4px; text-transform:uppercase; }
-          .value { font-size:13px; }
+          .row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px; }
+          .field { border: 1px solid var(--line); padding: 3px 5px; min-height: 22px; }
+          .label { font-size: 7px; color: var(--muted); margin-bottom: 1px; text-transform: uppercase; }
+          .value { font-size: 9px; }
 
-          table { width:100%; border-collapse:collapse; margin-top:12px; }
-          th, td { border:1px solid #000; font-size:12px; padding:6px 8px; }
-          thead th { background:#f7f7f7; }
+          table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+          th, td { border: 1px solid #000; font-size: 9px; padding: 2px 4px; }
+          thead th { background: #f7f7f7; font-size: 8px; }
 
-          .bottom { display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:12px; align-items:start; }
-          .tnc { border:1px solid var(--line); padding:10px; font-size:10px; line-height:1.35; color:#111827; }
-          .tnc h4 { margin:0 0 6px; font-size:11px; }
-          .badge-note { display:inline-block; border:1px solid var(--line); padding:6px 10px; font-weight:700; margin-top:8px; border-radius:4px; }
+          .bottom { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 6px; margin-top: 4px; align-items: start; }
+          .tnc { border: 1px solid var(--line); padding: 4px; font-size: 7px; line-height: 1.2; color: #111827; }
+          .tnc h4 { margin: 0 0 2px; font-size: 8px; }
+          .badge-note { display: inline-block; border: 1px solid var(--line); padding: 2px 4px; font-weight: 700; margin-top: 3px; font-size: 7px; }
 
-          .sign-row { display:grid; grid-template-columns: repeat(3,1fr); gap:18px; margin-top:22px; }
-          .sign { text-align:center; font-size:12px; }
-          .line { border-top:1px solid #000; margin-top:60px; padding-top:4px; }
+          .sign-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
+          .sign { text-align: center; font-size: 8px; }
+          .line { border-top: 1px solid #000; margin-top: 28px; padding-top: 2px; }
 
-          .right-summary { text-align:right; font-size:12px; }
-          .right-summary .date { margin-top:8px; }
+          .right-summary { text-align: right; font-size: 9px; }
+          .right-summary .date { margin-top: 2px; }
 
           .delivered-stamp {
             position: absolute;
             top: 50%;
-            right: 40px;
-            transform: rotate(-15deg) translateY(-50%);
-            font-size: 48px;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-15deg);
+            font-size: 36px;
             font-weight: 900;
-            color: rgba(34, 197, 94, 0.25);
-            border: 6px solid rgba(34, 197, 94, 0.25);
-            padding: 10px 30px;
-            border-radius: 12px;
+            color: rgba(34, 197, 94, 0.2);
+            border: 4px solid rgba(34, 197, 94, 0.2);
+            padding: 8px 20px;
+            border-radius: 8px;
             text-transform: uppercase;
-            letter-spacing: 4px;
+            letter-spacing: 3px;
             pointer-events: none;
           }
 
           @media print {
-            body { padding:0; }
-            .sheet { border:0; width:auto; max-width:none; padding:16mm; margin-bottom: 0; }
+            html, body { width: 9.5in; height: 5.5in; }
+            body { padding: 0; }
+            .sheet { border: 0; width: 9.5in; height: 5.5in; max-width: none; padding: 4mm 6mm; margin-bottom: 0; page-break-after: always; }
             .page-break { page-break-before: always; }
-            .delivered-stamp { color: rgba(34, 197, 94, 0.3); border-color: rgba(34, 197, 94, 0.3); }
+            .delivered-stamp { color: rgba(34, 197, 94, 0.25); border-color: rgba(34, 197, 94, 0.25); }
           }
         </style>
       </head>

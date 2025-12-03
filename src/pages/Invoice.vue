@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import Button from '../components/ui/Button.vue';
 import Badge from '../components/ui/Badge.vue';
@@ -9,11 +9,6 @@ import { getCompany } from '../lib/company';
 const LOGO_URL = '/brand/logo.png';
 
 const { formatRupiah, formatDate } = useFormatters();
-
-type Customer = {
-  id: number;
-  name: string;
-};
 
 type Invoice = {
   id: number;
@@ -131,22 +126,16 @@ const discountAmount = ref<number>(0);
 const notes = ref<string>('');
 const pphPercent = ref<number>(0.5);
 const loadingUnpaidShipments = ref(false);
-const customers = ref<Customer[]>([]);
-const loadingCustomers = ref(false);
 
-async function loadCustomers(): Promise<void> {
-  loadingCustomers.value = true;
-  try {
-    const res = await fetch('/api/customers?endpoint=list');
-    const data = await res.json();
-    customers.value = data.items || [];
-  } catch (e) {
-    console.error('Failed to load customers:', e);
-    customers.value = [];
-  } finally {
-    loadingCustomers.value = false;
-  }
-}
+const uniqueCustomerNames = computed(() => {
+  const names = new Set<string>();
+  allUnpaidShipments.value.forEach(s => {
+    if (s.customer_name && s.customer_name !== '-') {
+      names.add(s.customer_name);
+    }
+  });
+  return Array.from(names).sort();
+});
 
 async function loadAllUnpaidShipments(): Promise<void> {
   loadingUnpaidShipments.value = true;
@@ -185,15 +174,12 @@ async function loadAllUnpaidShipments(): Promise<void> {
 }
 
 function getFilteredUnpaidShipments(): Item[] {
-  if (!form.value.customer_id) {
+  if (!form.value.customer_name) {
     return allUnpaidShipments.value;
   }
-  const selectedCustomer = customers.value.find(c => c.id === form.value.customer_id);
-  const customerName = selectedCustomer?.name?.toLowerCase() || '';
+  const customerName = form.value.customer_name.toLowerCase();
   return allUnpaidShipments.value.filter(s => {
-    if (s.customer_id === form.value.customer_id) return true;
-    if (customerName && s.customer_name?.toLowerCase() === customerName) return true;
-    return false;
+    return s.customer_name?.toLowerCase() === customerName;
   });
 }
 
@@ -229,13 +215,6 @@ function updateItemsFromSelection(): void {
 }
 
 function onCustomerChange(): void {
-  const customerId = form.value.customer_id;
-  if (customerId) {
-    const customer = customers.value.find(c => c.id === customerId);
-    form.value.customer_name = customer?.name || '';
-  } else {
-    form.value.customer_name = '';
-  }
   const filtered = getFilteredUnpaidShipments();
   selectedShipmentIds.value.clear();
   filtered.forEach(s => {
@@ -329,7 +308,6 @@ function openCreateModal(): void {
   discountAmount.value = 0;
   notes.value = '';
   showModal.value = true;
-  loadCustomers();
   loadAllUnpaidShipments();
 }
 
@@ -599,25 +577,33 @@ async function printInvoice(inv: Invoice): Promise<void> {
   const grand = subtotal + tax - (inv.discount_amount || 0);
   const company = await getCompany();
   const html = `<!DOCTYPE html><html><head><title>Invoice ${inv.invoice_number}</title><style>
-    body { font-family: Arial, sans-serif; padding: 32px; color: #111827; }
-    .head { display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #e5e7eb; padding-bottom:16px; margin-bottom:16px; }
-    .brand { display:flex; align-items:center; gap:10px; }
-    .brand img { height:56px; width:56px; object-fit: contain; }
-    .brand-name { font-weight:700; color:#1d4ed8; }
-    .meta { text-align:right; font-size:12px; color:#374151; }
-    table { width:100%; border-collapse:collapse; margin-top:16px; }
-    th, td { border: 1px solid #e5e7eb; padding: 10px; font-size: 13px; }
-    th { background:#f9fafb; text-align:left; }
-    .right { text-align:right; }
-    .totals { margin-top:10px; width:100%; }
-    .totals td { border:none; }
-    .footer { margin-top:24px; font-size:12px; color:#6b7280; text-align:center; }
-    @media print { body { padding: 16px; } }
-    /* align QR with totals: inline QR next to totals table */
-    .totals-row { display:flex; justify-content:space-between; gap:20px; align-items:center; margin-top:10px; }
-    .qr-inline { width:90px; height:90px; border: 1px solid #e5e7eb; padding: 6px; border-radius: 6px; background: #fff; display:flex; align-items:center; justify-content:center; }
-    .qr-inline img { width: 100%; height: auto; display:block; }
-  </style></head><body>`;
+    @page { size: 9.5in 5.5in; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: 'Courier New', Courier, monospace; font-size: 9px; color: #111827; }
+    body { margin: 0; padding: 4px; }
+    .sheet { width: 9.5in; height: 5.5in; max-width: 9.5in; background: #fff; padding: 5px 8px; position: relative; overflow: hidden; }
+    .head { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid #000; padding-bottom: 4px; margin-bottom: 4px; }
+    .brand { display: flex; align-items: center; gap: 6px; }
+    .brand img { height: 24px; width: 24px; object-fit: contain; }
+    .brand-name { font-weight: 700; font-size: 10px; }
+    .meta { text-align: right; font-size: 8px; color: #374151; }
+    .meta strong { font-size: 9px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+    th, td { border: 1px solid #000; padding: 2px 4px; font-size: 8px; }
+    th { background: #f9fafb; text-align: left; font-size: 7px; }
+    .right { text-align: right; }
+    .totals { margin-top: 4px; width: 100%; }
+    .totals td { border: none; font-size: 8px; padding: 1px 4px; }
+    .footer { margin-top: 6px; font-size: 7px; color: #6b7280; text-align: center; }
+    .totals-row { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; margin-top: 4px; }
+    .qr-inline { width: 50px; height: 50px; border: 1px solid #e5e7eb; padding: 2px; background: #fff; display: flex; align-items: center; justify-content: center; }
+    .qr-inline img { width: 100%; height: auto; display: block; }
+    @media print {
+      html, body { width: 9.5in; height: 5.5in; }
+      body { padding: 0; }
+      .sheet { border: 0; width: 9.5in; height: 5.5in; max-width: none; padding: 4mm 6mm; page-break-after: always; }
+    }
+  </style></head><body><div class="sheet">`;
   const rows = invItems.map((it: Item, idx: number) => `<tr>
       <td>${idx + 1}</td>
       <td>${(it.description || '').replace(/</g,'&lt;')}</td>
@@ -636,7 +622,7 @@ async function printInvoice(inv: Invoice): Promise<void> {
         <div><strong>${company.name}</strong></div>
         <div>${company.address}</div>
         <div>${[company.phone, company.email].filter(Boolean).join(' · ')}</div>
-        <div style="margin-top:6px;">No. Invoice: <strong>${inv.invoice_number}</strong></div>
+        <div style="margin-top:3px;">No. Invoice: <strong>${inv.invoice_number}</strong></div>
         <div>Tanggal: ${formatDate(inv.issued_at)}</div>
         <div>Customer: ${inv.customer_name}</div>
       </div>
@@ -673,7 +659,7 @@ async function printInvoice(inv: Invoice): Promise<void> {
       </table>
     </div>
     <div class="footer">${(inv.notes || '').replace(/</g,'&lt;') || 'Terima kasih. Pembayaran sesuai ketentuan yang berlaku.'}</div>
-  `);
+  </div>`);
   win.document.write('</body></html>');
   win.document.close();
   win.focus();
@@ -927,25 +913,22 @@ watch([items, taxPercent, discountAmount], () => {
             <div class="sm:col-span-2">
               <label class="block text-sm font-medium mb-1">Customer</label>
               <select
-                v-model="form.customer_id"
+                v-model="form.customer_name"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 @change="onCustomerChange"
-                :disabled="loadingCustomers"
+                :disabled="loadingUnpaidShipments"
               >
-                <option :value="null">-- Pilih Customer --</option>
-                <option v-for="c in customers" :key="c.id" :value="c.id">
-                  {{ c.name }}
+                <option value="">-- Pilih Customer --</option>
+                <option v-for="name in uniqueCustomerNames" :key="name" :value="name">
+                  {{ name }}
                 </option>
               </select>
-              <div v-if="loadingCustomers" class="text-xs text-gray-500 mt-1">
-                🔄 Memuat daftar customer...
-              </div>
               <div v-if="loadingUnpaidShipments" class="text-xs text-gray-500 mt-1">
                 🔄 Memuat SPB yang belum dibayar...
               </div>
               <div v-if="!editingId && allUnpaidShipments.length > 0" class="text-xs text-gray-500 mt-1">
                 Total {{ allUnpaidShipments.length }} SPB belum dibayar.
-                <span v-if="form.customer_id">Filter: {{ getFilteredUnpaidShipments().length }} SPB untuk "{{ form.customer_name }}"</span>
+                <span v-if="form.customer_name">Filter: {{ getFilteredUnpaidShipments().length }} SPB untuk "{{ form.customer_name }}"</span>
               </div>
             </div>
             <div class="flex flex-col gap-3">
@@ -1008,7 +991,7 @@ watch([items, taxPercent, discountAmount], () => {
             <div v-else-if="allUnpaidShipments.length === 0" class="text-center py-4 text-gray-400">
               Tidak ada SPB yang belum dibayar
             </div>
-            <div v-else-if="form.customer_id && getFilteredUnpaidShipments().length === 0" class="text-center py-4 text-gray-400">
+            <div v-else-if="form.customer_name && getFilteredUnpaidShipments().length === 0" class="text-center py-4 text-gray-400">
               Tidak ada SPB belum dibayar untuk customer ini
             </div>
             <div v-else class="overflow-x-auto max-h-60 overflow-y-auto">

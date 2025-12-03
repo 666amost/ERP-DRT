@@ -42,7 +42,7 @@ async function handleLogout() {
 </script>
 
 <template>
-  <header class="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 lg:px-6">
+  <header class="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 lg:px-6 print:hidden">
     <div class="flex-1 flex items-center gap-3">
       <div class="relative flex-1 max-w-xl">
         <input

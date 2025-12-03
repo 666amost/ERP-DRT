@@ -8,32 +8,32 @@ const sidebarOpen = ref(false);
 </script>
 
 <template>
-  <div class="min-h-screen grid lg:grid-cols-[16rem_1fr] bg-gray-50 dark:bg-gray-900">
+  <div class="min-h-screen grid lg:grid-cols-[16rem_1fr] bg-gray-50 dark:bg-gray-900 print:block print:bg-white">
     <!-- Mobile overlay -->
     <div
       v-if="sidebarOpen"
-      class="fixed inset-0 bg-black/50 z-20 lg:hidden"
+      class="fixed inset-0 bg-black/50 z-20 lg:hidden print:hidden"
       @click="sidebarOpen = false"
     />
     
     <!-- Sidebar -->
     <div
-      class="fixed lg:static inset-y-0 left-0 z-30 transform transition-transform lg:transform-none"
+      class="fixed lg:static inset-y-0 left-0 z-30 transform transition-transform lg:transform-none print:hidden"
       :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
     >
       <Sidebar @close="sidebarOpen = false" />
     </div>
 
     <div class="flex flex-col min-h-screen lg:min-h-0">
-      <Header @toggle-sidebar="sidebarOpen = !sidebarOpen" />
-      <main class="p-4 lg:p-6 flex-1 overflow-auto overflow-x-hidden">
+      <Header class="print:hidden" @toggle-sidebar="sidebarOpen = !sidebarOpen" />
+      <main class="p-4 lg:p-6 flex-1 overflow-auto overflow-x-hidden print:p-0 print:overflow-visible">
         <router-view v-slot="{ Component }">
           <Transition name="page" mode="out-in">
             <component :is="Component" />
           </Transition>
         </router-view>
       </main>
-      <BottomNav />
+      <BottomNav class="print:hidden" />
     </div>
   </div>
 </template>

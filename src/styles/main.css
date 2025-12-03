@@ -75,3 +75,41 @@ table th, table td {
   transform: translateY(0);
 }
 
+/* Print styles - hide shell components */
+@media print {
+  header, nav, .bottom-nav, [data-print-hide], [class*="print:hidden"] {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    overflow: hidden !important;
+  }
+  
+  /* Hide all fixed positioned elements */
+  [class*="fixed"] {
+    display: none !important;
+    position: static !important;
+  }
+  
+  /* But show print:block elements */
+  [class*="print:block"] {
+    display: block !important;
+    visibility: visible !important;
+    height: auto !important;
+  }
+  
+  body {
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  
+  /* Remove grid layout when printing */
+  [class*="grid-cols"] {
+    display: block !important;
+  }
+}

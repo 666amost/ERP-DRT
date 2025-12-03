@@ -455,6 +455,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       select 
         s.id, s.spb_number, s.public_code, s.customer_id, s.customer_name,
         s.origin, s.destination, s.total_colli, 
+        coalesce(s.berat, 0)::float as total_weight,
         coalesce(s.nominal, 0)::float as nominal,
         s.created_at, i.id as invoice_id, i.invoice_number
       from shipments s
@@ -492,6 +493,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           coalesce(c.name, s.customer_name, 'Unknown') as customer_name,
           count(s.id)::int as total_shipments,
           coalesce(sum(s.total_colli), 0)::int as total_colli,
+          coalesce(sum(s.berat), 0)::float as total_weight,
           coalesce(sum(s.nominal), 0)::float as total_nominal,
           coalesce(sum(case when i.status = 'paid' then i.amount else 0 end), 0)::float as total_paid,
           coalesce(sum(case when i.status in ('pending', 'partial') then i.remaining_amount else 0 end), 0)::float as total_outstanding
@@ -509,6 +511,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           coalesce(c.name, s.customer_name, 'Unknown') as customer_name,
           count(s.id)::int as total_shipments,
           coalesce(sum(s.total_colli), 0)::int as total_colli,
+          coalesce(sum(s.berat), 0)::float as total_weight,
           coalesce(sum(s.nominal), 0)::float as total_nominal,
           coalesce(sum(case when i.status = 'paid' then i.amount else 0 end), 0)::float as total_paid,
           coalesce(sum(case when i.status in ('pending', 'partial') then i.remaining_amount else 0 end), 0)::float as total_outstanding

@@ -3,14 +3,22 @@ import { ref, computed, onMounted, watch } from 'vue';
 import Button from '../components/ui/Button.vue';
 import { useFormatters } from '../composables/useFormatters';
 import { Icon } from '@iconify/vue';
+import { exportToExcel } from '../lib/excelExport';
+import { getCompany, type CompanyProfile, LOGO_URL } from '../lib/company';
+
+type MeUser = { id: number; email: string; name?: string; role?: string };
 
 const { formatRupiah, toWIBDateString } = useFormatters();
+
+const company = ref<CompanyProfile | null>(null);
+const currentUser = ref<MeUser | null>(null);
 
 type SalesItem = {
   customer_id: number;
   customer_name: string;
   total_shipments: number;
   total_colli: number;
+  total_weight: number;
   total_nominal: number;
   total_paid: number;
   total_outstanding: number;
@@ -33,9 +41,15 @@ const filteredItems = computed(() => {
 
 const totalShipments = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_shipments || 0), 0));
 const totalColli = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_colli || 0), 0));
+const totalWeight = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_weight || 0), 0));
 const totalNominal = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_nominal || 0), 0));
 const totalPaid = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_paid || 0), 0));
 const totalOutstanding = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_outstanding || 0), 0));
+
+function formatDateTime(date: Date): string {
+  return date.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }) +
+    ' ' + date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+}
 
 async function loadReport() {
   loading.value = true;
@@ -81,27 +95,42 @@ function resetFilters() {
 }
 
 function exportExcel() {
-  const headers = ['No', 'Customer', 'SPB', 'Colli', 'Total', 'Lunas', 'Outstanding'];
-  const rows = filteredItems.value.map((item, idx) => [
-    idx + 1,
-    item.customer_name || '-',
-    item.total_shipments,
-    item.total_colli,
-    item.total_nominal,
-    item.total_paid,
-    item.total_outstanding
-  ]);
+  const exportData = filteredItems.value.map((item, idx) => ({
+    no: idx + 1,
+    customer: item.customer_name || '-',
+    spb: item.total_shipments,
+    colli: item.total_colli,
+    kg: item.total_weight || 0,
+    total: item.total_nominal,
+    lunas: item.total_paid,
+    outstanding: item.total_outstanding
+  }));
 
-  let csv = headers.join(',') + '\n';
-  rows.forEach(row => {
-    csv += row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',') + '\n';
+  exportToExcel({
+    filename: `sales_report_${dateFrom.value || 'all'}_${dateTo.value || 'all'}`,
+    sheetName: 'Sales Report',
+    title: 'LAPORAN PENJUALAN',
+    subtitle: dateFrom.value && dateTo.value ? `Periode: ${dateFrom.value} - ${dateTo.value}` : 'Semua Periode',
+    columns: [
+      { header: 'No', key: 'no', width: 5, type: 'number', align: 'center' },
+      { header: 'Customer', key: 'customer', width: 25, type: 'text' },
+      { header: 'SPB', key: 'spb', width: 8, type: 'number', align: 'center' },
+      { header: 'Colli', key: 'colli', width: 8, type: 'number', align: 'center' },
+      { header: 'Kg', key: 'kg', width: 10, type: 'number', align: 'right' },
+      { header: 'Total', key: 'total', width: 15, type: 'currency', align: 'right' },
+      { header: 'Lunas', key: 'lunas', width: 15, type: 'currency', align: 'right' },
+      { header: 'Outstanding', key: 'outstanding', width: 15, type: 'currency', align: 'right' }
+    ],
+    data: exportData,
+    totals: {
+      spb: totalShipments.value,
+      colli: totalColli.value,
+      kg: totalWeight.value,
+      total: totalNominal.value,
+      lunas: totalPaid.value,
+      outstanding: totalOutstanding.value
+    }
   });
-
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = `sales_report_${dateFrom.value || 'all'}_${dateTo.value || 'all'}.csv`;
-  link.click();
 }
 
 function printReport() {
@@ -114,14 +143,28 @@ watch([dateFrom, dateTo], () => {
   }
 });
 
-onMounted(() => {
+onMounted(async () => {
   setThisMonth();
+  try {
+    company.value = await getCompany();
+  } catch (e) {
+    console.error('Failed to load company:', e);
+  }
+  try {
+    const meRes = await fetch('/api/auth?endpoint=me', { credentials: 'include' });
+    if (meRes.ok) {
+      const data = await meRes.json();
+      currentUser.value = data.user || data;
+    }
+  } catch (e) {
+    console.error('Failed to load user:', e);
+  }
 });
 </script>
 
 <template>
   <div class="space-y-4 pb-20 lg:pb-0">
-    <div class="flex items-center justify-between flex-wrap gap-3">
+    <div class="flex items-center justify-between flex-wrap gap-3 print:hidden">
       <div class="text-xl font-semibold dark:text-gray-100">Sales Report</div>
       <div class="flex gap-2">
         <Button variant="default" class="text-sm" @click="printReport">
@@ -161,30 +204,34 @@ onMounted(() => {
       </div>
     </div>
 
-    <div class="grid grid-cols-2 md:grid-cols-5 gap-4 print:hidden">
-      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
-        <div class="text-sm text-gray-500">Customer</div>
-        <div class="text-2xl font-bold text-blue-600">{{ filteredItems.length }}</div>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 print:hidden">
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+        <div class="text-xs text-gray-500 dark:text-gray-400">Customer</div>
+        <div class="text-xl font-bold text-blue-600">{{ filteredItems.length }}</div>
       </div>
-      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
-        <div class="text-sm text-gray-500">Total SPB</div>
-        <div class="text-2xl font-bold text-green-600">{{ totalShipments }}</div>
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+        <div class="text-xs text-gray-500 dark:text-gray-400">Total SPB</div>
+        <div class="text-xl font-bold text-green-600">{{ totalShipments }}</div>
       </div>
-      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
-        <div class="text-sm text-gray-500">Total Colli</div>
-        <div class="text-2xl font-bold text-orange-500">{{ totalColli }}</div>
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+        <div class="text-xs text-gray-500 dark:text-gray-400">Total Colli</div>
+        <div class="text-xl font-bold text-orange-500">{{ totalColli }}</div>
       </div>
-      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
-        <div class="text-sm text-gray-500">Total Sales</div>
-        <div class="text-2xl font-bold text-purple-600">{{ formatRupiah(totalNominal) }}</div>
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+        <div class="text-xs text-gray-500 dark:text-gray-400">Total Kg</div>
+        <div class="text-xl font-bold text-amber-600">{{ totalWeight.toFixed(1) }}</div>
       </div>
-      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
-        <div class="text-sm text-gray-500">Outstanding</div>
-        <div class="text-2xl font-bold text-red-600">{{ formatRupiah(totalOutstanding) }}</div>
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+        <div class="text-xs text-gray-500 dark:text-gray-400">Total Sales</div>
+        <div class="text-xl font-bold text-purple-600">{{ formatRupiah(totalNominal) }}</div>
+      </div>
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+        <div class="text-xs text-gray-500 dark:text-gray-400">Outstanding</div>
+        <div class="text-xl font-bold text-red-600">{{ formatRupiah(totalOutstanding) }}</div>
       </div>
     </div>
 
-    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 print:hidden">
       <div v-if="loading" class="flex items-center justify-center h-32">
         <div class="text-gray-500">Loading...</div>
       </div>
@@ -194,64 +241,128 @@ onMounted(() => {
       </div>
 
       <!-- Desktop table -->
-      <div v-else-if="true" class="hidden md:block overflow-x-auto">
+      <div v-else-if="true" class="hidden lg:block overflow-x-auto">
         <table class="w-full text-sm">
-          <thead class="bg-gray-50 dark:bg-gray-700 border-b">
+          <thead class="bg-gray-50 dark:bg-gray-700 border-b dark:border-gray-600">
             <tr>
-              <th class="px-3 py-2 text-left">No</th>
-              <th class="px-3 py-2 text-left">Customer</th>
-              <th class="px-3 py-2 text-center">SPB</th>
-              <th class="px-3 py-2 text-center">Colli</th>
-              <th class="px-3 py-2 text-right">Total</th>
-              <th class="px-3 py-2 text-right">Lunas</th>
-              <th class="px-3 py-2 text-right">Outstanding</th>
+              <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">No</th>
+              <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Customer</th>
+              <th class="px-2 py-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">SPB</th>
+              <th class="px-2 py-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">Colli</th>
+              <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Kg</th>
+              <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Total</th>
+              <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Lunas</th>
+              <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Outstanding</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
             <tr v-for="(item, idx) in filteredItems" :key="item.customer_id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
-              <td class="px-3 py-2">{{ idx + 1 }}</td>
-              <td class="px-3 py-2 font-medium">{{ item.customer_name || '-' }}</td>
-              <td class="px-3 py-2 text-center">{{ item.total_shipments }}</td>
-              <td class="px-3 py-2 text-center">{{ item.total_colli }}</td>
-              <td class="px-3 py-2 text-right">{{ formatRupiah(item.total_nominal) }}</td>
-              <td class="px-3 py-2 text-right text-green-600">{{ formatRupiah(item.total_paid) }}</td>
-              <td class="px-3 py-2 text-right text-red-600">{{ formatRupiah(item.total_outstanding) }}</td>
+              <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ idx + 1 }}</td>
+              <td class="px-2 py-2 font-medium text-gray-900 dark:text-gray-100">{{ item.customer_name || '-' }}</td>
+              <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ item.total_shipments }}</td>
+              <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ item.total_colli }}</td>
+              <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ (item.total_weight || 0).toFixed(1) }}</td>
+              <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ formatRupiah(item.total_nominal) }}</td>
+              <td class="px-2 py-2 text-right text-green-600">{{ formatRupiah(item.total_paid) }}</td>
+              <td class="px-2 py-2 text-right text-red-600">{{ formatRupiah(item.total_outstanding) }}</td>
             </tr>
           </tbody>
           <tfoot class="bg-gray-100 dark:bg-gray-700 font-semibold">
             <tr>
-              <td colspan="2" class="px-3 py-2 text-right">Total:</td>
-              <td class="px-3 py-2 text-center">{{ totalShipments }}</td>
-              <td class="px-3 py-2 text-center">{{ totalColli }}</td>
-              <td class="px-3 py-2 text-right">{{ formatRupiah(totalNominal) }}</td>
-              <td class="px-3 py-2 text-right text-green-600">{{ formatRupiah(totalPaid) }}</td>
-              <td class="px-3 py-2 text-right text-red-600">{{ formatRupiah(totalOutstanding) }}</td>
+              <td colspan="2" class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">Total:</td>
+              <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ totalShipments }}</td>
+              <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ totalColli }}</td>
+              <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ totalWeight.toFixed(1) }}</td>
+              <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ formatRupiah(totalNominal) }}</td>
+              <td class="px-2 py-2 text-right text-green-600">{{ formatRupiah(totalPaid) }}</td>
+              <td class="px-2 py-2 text-right text-red-600">{{ formatRupiah(totalOutstanding) }}</td>
             </tr>
           </tfoot>
         </table>
       </div>
 
       <!-- Mobile cards -->
-      <div v-else class="md:hidden space-y-3">
-        <div v-for="(item, idx) in filteredItems" :key="item.customer_id" class="border border-gray-200 dark:border-gray-700 rounded-xl p-4 bg-white dark:bg-gray-800">
+      <div v-else class="lg:hidden space-y-3">
+        <div v-for="(item, idx) in filteredItems" :key="item.customer_id" class="border border-gray-200 dark:border-gray-700 rounded-xl p-3 bg-white dark:bg-gray-800">
           <div class="flex items-start justify-between gap-2">
-            <div class="min-w-0">
-              <div class="text-sm font-semibold truncate dark:text-gray-100">{{ item.customer_name || '-' }}</div>
-              <div class="text-xs text-gray-500">No: {{ idx + 1 }}</div>
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{{ item.customer_name || '-' }}</div>
+              <div class="text-xs text-gray-500 dark:text-gray-400">No: {{ idx + 1 }}</div>
             </div>
           </div>
           <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
-            <div class="flex items-center gap-2"><span class="text-gray-500">SPB</span><span class="font-medium">{{ item.total_shipments }}</span></div>
-            <div class="flex items-center gap-2"><span class="text-gray-500">Colli</span><span class="font-medium">{{ item.total_colli }}</span></div>
-            <div class="flex items-center gap-2 col-span-2"><span class="text-gray-500">Total</span><span class="font-semibold">{{ formatRupiah(item.total_nominal) }}</span></div>
-            <div class="flex items-center gap-2 col-span-1"><span class="text-gray-500">Lunas</span><span class="font-semibold text-green-600">{{ formatRupiah(item.total_paid) }}</span></div>
-            <div class="flex items-center gap-2 col-span-1"><span class="text-gray-500">Outstanding</span><span class="font-semibold text-red-600">{{ formatRupiah(item.total_outstanding) }}</span></div>
+            <div class="flex items-center gap-1"><span class="text-gray-500">SPB</span><span class="font-medium text-gray-700 dark:text-gray-300">{{ item.total_shipments }}</span></div>
+            <div class="flex items-center gap-1"><span class="text-gray-500">Colli</span><span class="font-medium text-gray-700 dark:text-gray-300">{{ item.total_colli }}</span></div>
+            <div class="flex items-center gap-1"><span class="text-gray-500">Kg</span><span class="font-medium text-gray-700 dark:text-gray-300">{{ (item.total_weight || 0).toFixed(1) }}</span></div>
+            <div class="flex items-center gap-1"><span class="text-gray-500">Total</span><span class="font-semibold text-gray-700 dark:text-gray-300">{{ formatRupiah(item.total_nominal) }}</span></div>
+            <div class="flex items-center gap-1"><span class="text-gray-500">Lunas</span><span class="font-semibold text-green-600">{{ formatRupiah(item.total_paid) }}</span></div>
+            <div class="flex items-center gap-1"><span class="text-gray-500">Outstanding</span><span class="font-semibold text-red-600">{{ formatRupiah(item.total_outstanding) }}</span></div>
           </div>
         </div>
-        <div class="border-t border-gray-100 dark:border-gray-700 pt-3 text-sm font-semibold flex justify-between">
-          <span>Total</span>
-          <span>{{ formatRupiah(totalNominal) }}</span>
+        <div class="border-t border-gray-200 dark:border-gray-700 pt-3 text-sm font-semibold flex justify-between">
+          <span class="text-gray-700 dark:text-gray-300">Total</span>
+          <span class="text-gray-700 dark:text-gray-300">{{ formatRupiah(totalNominal) }}</span>
         </div>
+      </div>
+    </div>
+
+    <!-- Print View -->
+    <div class="hidden print:block">
+      <div class="print-header">
+        <div class="print-brand">
+          <img :src="LOGO_URL" alt="Logo" class="print-logo" />
+          <div class="print-brand-info">
+            <div class="print-company">{{ company?.name || 'SUMBER TRANS EXPRESS' }}</div>
+            <div class="print-address">{{ company?.address || '' }}</div>
+            <div class="print-contact">
+              <span v-if="company?.phone">Telp: {{ company.phone }}</span>
+              <span v-if="company?.email"> | Email: {{ company.email }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="print-title">LAPORAN PENJUALAN</div>
+        <div class="print-subtitle">{{ dateFrom && dateTo ? `Periode: ${dateFrom} - ${dateTo}` : 'Semua Periode' }}</div>
+      </div>
+      <table class="print-table">
+        <thead>
+          <tr>
+            <th class="text-center" style="width: 5%">No</th>
+            <th style="width: 22%">Customer</th>
+            <th class="text-center" style="width: 8%">SPB</th>
+            <th class="text-center" style="width: 8%">Colli</th>
+            <th class="text-right" style="width: 10%">Kg</th>
+            <th class="text-right" style="width: 15%">Total</th>
+            <th class="text-right" style="width: 15%">Lunas</th>
+            <th class="text-right" style="width: 15%">Outstanding</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(item, idx) in filteredItems" :key="item.customer_id">
+            <td class="text-center">{{ idx + 1 }}</td>
+            <td>{{ item.customer_name || '-' }}</td>
+            <td class="text-center">{{ item.total_shipments }}</td>
+            <td class="text-center">{{ item.total_colli }}</td>
+            <td class="text-right">{{ (item.total_weight || 0).toFixed(1) }}</td>
+            <td class="text-right">{{ formatRupiah(item.total_nominal) }}</td>
+            <td class="text-right text-green">{{ formatRupiah(item.total_paid) }}</td>
+            <td class="text-right text-red">{{ formatRupiah(item.total_outstanding) }}</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr class="total-row">
+            <td colspan="2" class="text-right">Total:</td>
+            <td class="text-center">{{ totalShipments }}</td>
+            <td class="text-center">{{ totalColli }}</td>
+            <td class="text-right">{{ totalWeight.toFixed(1) }}</td>
+            <td class="text-right">{{ formatRupiah(totalNominal) }}</td>
+            <td class="text-right text-green">{{ formatRupiah(totalPaid) }}</td>
+            <td class="text-right text-red">{{ formatRupiah(totalOutstanding) }}</td>
+          </tr>
+        </tfoot>
+      </table>
+      <div class="print-footer">
+        <div class="print-date">Dicetak: {{ formatDateTime(new Date()) }} | Oleh: {{ currentUser?.name || currentUser?.email || '-' }}</div>
+        <div class="print-summary">Total Customer: {{ filteredItems.length }} | Total SPB: {{ totalShipments }}</div>
       </div>
     </div>
   </div>
@@ -259,8 +370,140 @@ onMounted(() => {
 
 <style scoped>
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 15mm;
+  }
+
   .print\\:hidden {
     display: none !important;
+  }
+
+  .print\\:block {
+    display: block !important;
+  }
+
+  .print-header {
+    text-align: center;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #1e3a5f;
+    padding-bottom: 15px;
+  }
+
+  .print-brand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    margin-bottom: 10px;
+  }
+
+  .print-logo {
+    width: 60px;
+    height: 60px;
+    object-fit: contain;
+  }
+
+  .print-brand-info {
+    text-align: left;
+  }
+
+  .print-company {
+    font-size: 18px;
+    font-weight: bold;
+    color: #1e3a5f;
+    letter-spacing: 1px;
+  }
+
+  .print-address {
+    font-size: 11px;
+    color: #333;
+    margin-top: 2px;
+  }
+
+  .print-contact {
+    font-size: 10px;
+    color: #666;
+    margin-top: 2px;
+  }
+
+  .print-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #333;
+    margin-top: 8px;
+  }
+
+  .print-subtitle {
+    font-size: 12px;
+    color: #666;
+    margin-top: 4px;
+  }
+
+  .print-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+  }
+
+  .print-table th {
+    background-color: #1e3a5f !important;
+    color: white !important;
+    padding: 8px 6px;
+    border: 1px solid #1e3a5f;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 9px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-table td {
+    padding: 6px;
+    border: 1px solid #ddd;
+    font-size: 10px;
+  }
+
+  .print-table tbody tr:nth-child(even) {
+    background-color: #f9f9f9 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-table tfoot .total-row {
+    background-color: #e8f4fd !important;
+    font-weight: bold;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-table tfoot .total-row td {
+    border-top: 2px solid #1e3a5f;
+    padding: 8px 6px;
+  }
+
+  .text-center { text-align: center; }
+  .text-right { text-align: right; }
+  .text-left { text-align: left; }
+  .text-green { color: #16a34a !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .text-red { color: #dc2626 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  .print-footer {
+    margin-top: 20px;
+    padding-top: 10px;
+    border-top: 1px solid #ddd;
+    font-size: 10px;
+    color: #666;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .print-date {
+    font-style: italic;
+  }
+
+  .print-summary {
+    font-weight: 500;
   }
 }
 </style>

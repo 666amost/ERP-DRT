@@ -6,6 +6,8 @@ export type CompanyProfile = {
   website?: string;
 };
 
+export const LOGO_URL = '/brand/logo.png';
+
 let cachedCompany: CompanyProfile | null = null;
 
 export async function getCompany(): Promise<CompanyProfile> {

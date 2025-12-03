@@ -1,8 +1,6 @@
-export const config = { runtime: 'nodejs' };
-
 import type { IncomingMessage, ServerResponse } from 'http';
-import { getSql } from '../_lib/db.js';
-import { readJsonNode, writeJson } from '../_lib/http.js';
+import { getSql } from './db.js';
+import { readJsonNode, writeJson } from './http.js';
 
 interface DBL {
   id: number;

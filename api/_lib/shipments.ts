@@ -1,8 +1,6 @@
-export const config = { runtime: 'nodejs' };
-
-import { getSql } from '../_lib/db.js';
+import { getSql } from './db.js';
 import type { IncomingMessage, ServerResponse } from 'http';
-import { readJsonNode, writeJson } from '../_lib/http.js';
+import { readJsonNode, writeJson } from './http.js';
 
 type Shipment = {
   id: number;

@@ -1,5 +1,6 @@
 scripts/
 api/dev/
+api/setup.ts
 *.md
 .vscode/
 .git/

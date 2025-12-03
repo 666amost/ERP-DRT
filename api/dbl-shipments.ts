@@ -1,8 +1,8 @@
 export const config = { runtime: 'nodejs' };
 
 import type { IncomingMessage, ServerResponse } from 'http';
-import { dblHandler } from './routes/dbl.js';
-import { shipmentsHandler } from './routes/shipments.js';
+import { dblHandler } from './_lib/dbl.js';
+import { shipmentsHandler } from './_lib/shipments.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = new URL(req.url || '/', 'http://localhost');

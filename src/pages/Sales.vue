@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import Button from '../components/ui/Button.vue';
 import { useFormatters } from '../composables/useFormatters';
 import { Icon } from '@iconify/vue';
 
-const { formatRupiah } = useFormatters();
+const { formatRupiah, toWIBDateString } = useFormatters();
 
 type SalesItem = {
   customer_id: number;
@@ -57,8 +57,8 @@ async function loadReport() {
 
 function setThisMonth() {
   const now = new Date();
-  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+  const firstDay = toWIBDateString(new Date(now.getFullYear(), now.getMonth(), 1));
+  const lastDay = toWIBDateString(new Date(now.getFullYear(), now.getMonth() + 1, 0));
   dateFrom.value = firstDay;
   dateTo.value = lastDay;
   loadReport();
@@ -66,8 +66,8 @@ function setThisMonth() {
 
 function setLastMonth() {
   const now = new Date();
-  const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
-  const lastDay = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0, 10);
+  const firstDay = toWIBDateString(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+  const lastDay = toWIBDateString(new Date(now.getFullYear(), now.getMonth(), 0));
   dateFrom.value = firstDay;
   dateTo.value = lastDay;
   loadReport();
@@ -107,6 +107,12 @@ function exportExcel() {
 function printReport() {
   window.print();
 }
+
+watch([dateFrom, dateTo], () => {
+  if (dateFrom.value || dateTo.value) {
+    loadReport();
+  }
+});
 
 onMounted(() => {
   setThisMonth();

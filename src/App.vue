@@ -1,9 +1,9 @@
 <script setup lang="ts"></script>
 
 <template>
-  <Transition name="page" mode="out-in">
-    <router-view v-slot="{ Component }">
+  <router-view v-slot="{ Component }">
+    <Transition name="page" mode="out-in">
       <component :is="Component" />
-    </router-view>
-  </Transition>
+    </Transition>
+  </router-view>
 </template>

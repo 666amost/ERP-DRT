@@ -166,14 +166,18 @@ function openCreateModal() {
 
 async function openEditModal(dbl: DBL) {
   editingId.value = dbl.id;
+  const sanitize = (val: string | null | undefined): string => {
+    if (!val || val === 'null' || val === 'NULL') return '';
+    return val;
+  };
   form.value = {
     dbl_number: dbl.dbl_number,
     departure_date: dbl.dbl_date ? dbl.dbl_date.split('T')[0] ?? '' : '',
-    vehicle_number: dbl.vehicle_plate || '',
-    driver_name: dbl.driver_name || '',
-    driver_phone: dbl.driver_phone || '',
-    origin: dbl.origin || '',
-    destination: dbl.destination || '',
+    vehicle_number: sanitize(dbl.vehicle_plate),
+    driver_name: sanitize(dbl.driver_name),
+    driver_phone: sanitize(dbl.driver_phone),
+    origin: sanitize(dbl.origin),
+    destination: sanitize(dbl.destination),
     status: dbl.status,
     loco_amount: String(dbl.loco_amount || 0),
     tekor_amount: String(dbl.tekor_amount || 0),
@@ -183,8 +187,8 @@ async function openEditModal(dbl: DBL) {
     biaya_lain: String(dbl.biaya_lain || 0),
     administrasi: String(dbl.administrasi || 0),
     ongkos_lain: String(dbl.ongkos_lain || 0),
-    catatan: dbl.catatan || '',
-    pengurus_name: dbl.pengurus_name || ''
+    catatan: sanitize(dbl.catatan),
+    pengurus_name: sanitize(dbl.pengurus_name)
   };
   showModal.value = true;
 }

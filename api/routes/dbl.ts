@@ -1,8 +1,8 @@
 export const config = { runtime: 'nodejs' };
 
 import type { IncomingMessage, ServerResponse } from 'http';
-import { getSql } from './_lib/db.js';
-import { readJsonNode, writeJson } from './_lib/http.js';
+import { getSql } from '../_lib/db.js';
+import { readJsonNode, writeJson } from '../_lib/http.js';
 
 interface DBL {
   id: number;
@@ -70,9 +70,7 @@ interface CreateDBLBody {
   shipment_ids?: number[];
 }
 
-interface UpdateDBLBody extends Partial<CreateDBLBody> {
-  id: number;
-}
+interface UpdateDBLBody extends Partial<CreateDBLBody> { id: number }
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -81,8 +79,8 @@ const corsHeaders = {
   'Access-Control-Allow-Credentials': 'true'
 };
 
-export default async function handler(req: IncomingMessage, res: ServerResponse) {
-  if (req.method === 'OPTIONS') { res.writeHead(204, corsHeaders); res.end(); return; }
+export async function dblHandler(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (req.method === 'OPTIONS') { res.writeHead(204, corsHeaders); res.end(); return }
 
   const url = new URL(req.url || '/', 'http://localhost');
   const endpoint = url.searchParams.get('endpoint');
@@ -129,7 +127,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         total = countResult[0]?.count || 0;
       }
 
-      return writeJson(res, {
+      writeJson(res, {
         items: dbls.map(d => ({
           ...d,
           loco_amount: Number(d.loco_amount || 0),
@@ -145,19 +143,20 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         })),
         pagination: { page, limit, total, pages: Math.ceil(total / limit) }
       });
+      return
 
     } else if (endpoint === 'get' && req.method === 'GET') {
       const id = url.searchParams.get('id');
-      if (!id) return writeJson(res, { error: 'Missing id' }, 400);
+      if (!id) { writeJson(res, { error: 'Missing id' }, 400); return }
 
       const dblResult = await sql`
         select * from dbl where id = ${parseInt(id)}
       ` as DBL[];
 
-      if (!dblResult.length) return writeJson(res, { error: 'DBL not found' }, 404);
+      if (!dblResult.length) { writeJson(res, { error: 'DBL not found' }, 404); return }
 
       const dbl = dblResult[0];
-      if (!dbl) return writeJson(res, { error: 'DBL not found' }, 404);
+      if (!dbl) { writeJson(res, { error: 'DBL not found' }, 404); return }
       const items = await sql`
         select di.*, s.spb_number, s.pengirim_name, s.penerima_name, s.macam_barang, 
                s.qty, s.satuan, coalesce(s.nominal, 0)::float as nominal,
@@ -168,7 +167,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         order by di.urutan, di.id
       ` as DBLItem[];
 
-      return writeJson(res, {
+      writeJson(res, {
         ...dbl,
         loco_amount: Number(dbl.loco_amount || 0),
         tekor_amount: Number(dbl.tekor_amount || 0),
@@ -182,10 +181,11 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         total_bayar: Number(dbl.total_bayar || 0),
         items
       });
+      return
 
     } else if (endpoint === 'create' && req.method === 'POST') {
       const body = await readJsonNode(req) as CreateDBLBody | null;
-      if (!body || !body.dbl_date) return writeJson(res, { error: 'Missing dbl_date' }, 400);
+      if (!body || !body.dbl_date) { writeJson(res, { error: 'Missing dbl_date' }, 400); return }
 
       let dblNumber = body.dbl_number;
       if (!dblNumber) {
@@ -243,31 +243,37 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         }
       }
 
-      return writeJson(res, { id: dblId, dbl_number: dblNumber }, 201);
+      writeJson(res, { id: dblId, dbl_number: dblNumber }, 201);
+      return
 
     } else if (endpoint === 'update' && req.method === 'PUT') {
       const body = await readJsonNode(req) as UpdateDBLBody | null;
-      if (!body || !body.id) return writeJson(res, { error: 'Missing id' }, 400);
+      if (!body || !body.id) { writeJson(res, { error: 'Missing id' }, 400); return }
+
+      const escapeStr = (val: unknown): string => {
+        if (val === null || val === undefined || val === 'null' || val === '') return 'NULL';
+        return `'${String(val).replace(/'/g, "''")}'`;
+      };
 
       const updates: string[] = [];
-      if (body.dbl_date !== undefined) updates.push(`dbl_date = '${body.dbl_date}'`);
-      if (body.vehicle_plate !== undefined) updates.push(`vehicle_plate = '${String(body.vehicle_plate).replace(/'/g, "''")}'`);
-      if (body.driver_name !== undefined) updates.push(`driver_name = '${String(body.driver_name).replace(/'/g, "''")}'`);
-      if (body.driver_phone !== undefined) updates.push(`driver_phone = '${String(body.driver_phone).replace(/'/g, "''")}'`);
-      if (body.origin !== undefined) updates.push(`origin = '${String(body.origin).replace(/'/g, "''")}'`);
-      if (body.destination !== undefined) updates.push(`destination = '${String(body.destination).replace(/'/g, "''")}'`);
+      if (body.dbl_date !== undefined) updates.push(`dbl_date = ${body.dbl_date ? `'${body.dbl_date}'` : 'NULL'}`);
+      if (body.vehicle_plate !== undefined) updates.push(`vehicle_plate = ${escapeStr(body.vehicle_plate)}`);
+      if (body.driver_name !== undefined) updates.push(`driver_name = ${escapeStr(body.driver_name)}`);
+      if (body.driver_phone !== undefined) updates.push(`driver_phone = ${escapeStr(body.driver_phone)}`);
+      if (body.origin !== undefined) updates.push(`origin = ${escapeStr(body.origin)}`);
+      if (body.destination !== undefined) updates.push(`destination = ${escapeStr(body.destination)}`);
       if (body.status !== undefined) updates.push(`status = '${body.status}'`);
-      if (body.loco_amount !== undefined) updates.push(`loco_amount = ${body.loco_amount}`);
-      if (body.tekor_amount !== undefined) updates.push(`tekor_amount = ${body.tekor_amount}`);
-      if (body.sangu !== undefined) updates.push(`sangu = ${body.sangu}`);
-      if (body.komisi !== undefined) updates.push(`komisi = ${body.komisi}`);
-      if (body.ongkos_muatan !== undefined) updates.push(`ongkos_muatan = ${body.ongkos_muatan}`);
-      if (body.biaya_lain !== undefined) updates.push(`biaya_lain = ${body.biaya_lain}`);
-      if (body.administrasi !== undefined) updates.push(`administrasi = ${body.administrasi}`);
-      if (body.ongkos_lain !== undefined) updates.push(`ongkos_lain = ${body.ongkos_lain}`);
-      if (body.catatan !== undefined) updates.push(`catatan = '${String(body.catatan).replace(/'/g, "''")}'`);
-      if (body.pengurus_name !== undefined) updates.push(`pengurus_name = '${String(body.pengurus_name).replace(/'/g, "''")}'`);
-      if (body.supir_name !== undefined) updates.push(`supir_name = '${String(body.supir_name).replace(/'/g, "''")}'`);
+      if (body.loco_amount !== undefined) updates.push(`loco_amount = ${body.loco_amount || 0}`);
+      if (body.tekor_amount !== undefined) updates.push(`tekor_amount = ${body.tekor_amount || 0}`);
+      if (body.sangu !== undefined) updates.push(`sangu = ${body.sangu || 0}`);
+      if (body.komisi !== undefined) updates.push(`komisi = ${body.komisi || 0}`);
+      if (body.ongkos_muatan !== undefined) updates.push(`ongkos_muatan = ${body.ongkos_muatan || 0}`);
+      if (body.biaya_lain !== undefined) updates.push(`biaya_lain = ${body.biaya_lain || 0}`);
+      if (body.administrasi !== undefined) updates.push(`administrasi = ${body.administrasi || 0}`);
+      if (body.ongkos_lain !== undefined) updates.push(`ongkos_lain = ${body.ongkos_lain || 0}`);
+      if (body.catatan !== undefined) updates.push(`catatan = ${escapeStr(body.catatan)}`);
+      if (body.pengurus_name !== undefined) updates.push(`pengurus_name = ${escapeStr(body.pengurus_name)}`);
+      if (body.supir_name !== undefined) updates.push(`supir_name = ${escapeStr(body.supir_name)}`);
 
       if (body.loco_amount !== undefined || body.tekor_amount !== undefined) {
         const current = await sql`select loco_amount, tekor_amount from dbl where id = ${body.id}` as [{ loco_amount: number; tekor_amount: number }];
@@ -293,59 +299,82 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
       updates.push(`updated_at = now()`);
 
-      if (updates.length > 0) {
-        const updateQuery = `UPDATE dbl SET ${updates.join(', ')} WHERE id = ${body.id}`;
-        await sql(updateQuery as never);
-      }
-
-      if (body.shipment_ids !== undefined) {
-        await sql`update shipments set dbl_id = null where dbl_id = ${body.id}`;
-        await sql`delete from dbl_items where dbl_id = ${body.id}`;
-
-        for (let i = 0; i < body.shipment_ids.length; i++) {
-          const shipmentId = body.shipment_ids[i];
-          await sql`
-            insert into dbl_items (dbl_id, shipment_id, urutan)
-            values (${body.id}, ${shipmentId}, ${i + 1})
-          `;
-          await sql`
-            update shipments set dbl_id = ${body.id} where id = ${shipmentId}
-          `;
+      try {
+        if (updates.length > 0) {
+          const updateQuery = `UPDATE dbl SET ${updates.join(', ')} WHERE id = ${body.id}` as string;
+          await sql(updateQuery as never);
         }
-      }
 
-      return writeJson(res, { success: true });
+        if (body.status !== undefined) {
+          const statusMapping: Record<string, string> = {
+            DEPARTED: 'IN_TRANSIT',
+            ARRIVED: 'IN_TRANSIT',
+            COMPLETED: 'DELIVERED'
+          };
+          const shipmentStatus = statusMapping[body.status];
+          if (shipmentStatus) {
+            await sql`
+              UPDATE shipments 
+              SET status = ${shipmentStatus}, updated_at = now()
+              WHERE dbl_id = ${body.id}
+            `;
+          }
+        }
+
+        if (body.shipment_ids !== undefined) {
+          await sql`update shipments set dbl_id = null where dbl_id = ${body.id}`;
+          await sql`delete from dbl_items where dbl_id = ${body.id}`;
+
+          for (let i = 0; i < body.shipment_ids.length; i++) {
+            const shipmentId = body.shipment_ids[i];
+            await sql`
+              insert into dbl_items (dbl_id, shipment_id, urutan)
+              values (${body.id}, ${shipmentId}, ${i + 1})
+            `;
+            await sql`
+              update shipments set dbl_id = ${body.id} where id = ${shipmentId}
+            `;
+          }
+        }
+
+        writeJson(res, { success: true });
+        return
+      } catch (updateError) {
+        writeJson(res, { error: 'Database update failed', details: String(updateError) }, 500);
+        return
+      }
 
     } else if (endpoint === 'delete' && req.method === 'DELETE') {
       const id = url.searchParams.get('id');
-      if (!id) return writeJson(res, { error: 'Missing id' }, 400);
+      if (!id) { writeJson(res, { error: 'Missing id' }, 400); return }
 
       await sql`update shipments set dbl_id = null where dbl_id = ${parseInt(id)}`;
       await sql`delete from dbl where id = ${parseInt(id)}`;
 
-      return writeJson(res, { success: true });
+      writeJson(res, { success: true });
+      return
 
     } else if (endpoint === 'items' && req.method === 'GET') {
       const dblId = url.searchParams.get('id') || url.searchParams.get('dbl_id');
-      if (!dblId) return writeJson(res, { error: 'Missing id' }, 400);
+      if (!dblId) { writeJson(res, { error: 'Missing id' }, 400); return }
 
       const items = await sql`
-        select di.*, s.spb_number, s.pengirim_name, s.penerima_name, s.macam_barang,
-               s.qty, s.satuan, coalesce(s.nominal, 0)::float as nominal,
-               s.customer_name, s.destination, s.origin
+        select di.shipment_id as id, di.urutan, di.dbl_id,
+               s.spb_number, s.public_code, s.pengirim_name, s.penerima_name, s.macam_barang,
+               s.qty, s.satuan, s.berat, coalesce(s.nominal, 0)::float as nominal,
+               s.customer_name, s.destination, s.origin, s.total_colli, s.status, s.created_at
         from dbl_items di
         join shipments s on s.id = di.shipment_id
         where di.dbl_id = ${parseInt(dblId)}
         order by di.urutan, di.id
       ` as DBLItem[];
 
-      return writeJson(res, { items });
+      writeJson(res, { items });
+      return
 
     } else if (endpoint === 'add-shipment' && req.method === 'POST') {
       const body = await readJsonNode(req) as { dbl_id: number; shipment_id: number } | null;
-      if (!body || !body.dbl_id || !body.shipment_id) {
-        return writeJson(res, { error: 'Missing dbl_id or shipment_id' }, 400);
-      }
+      if (!body || !body.dbl_id || !body.shipment_id) { writeJson(res, { error: 'Missing dbl_id or shipment_id' }, 400); return }
 
       const maxUrutan = await sql`
         select coalesce(max(urutan), 0) + 1 as next_urutan 
@@ -360,161 +389,30 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
       await sql`update shipments set dbl_id = ${body.dbl_id}, status = 'IN_TRANSIT' where id = ${body.shipment_id}`;
 
-      return writeJson(res, { success: true });
+      writeJson(res, { success: true });
+      return
 
     } else if (endpoint === 'remove-shipment' && req.method === 'POST') {
       const body = await readJsonNode(req) as { dbl_id: number; shipment_id: number } | null;
-      if (!body || !body.dbl_id || !body.shipment_id) {
-        return writeJson(res, { error: 'Missing dbl_id or shipment_id' }, 400);
-      }
+      if (!body || !body.dbl_id || !body.shipment_id) { writeJson(res, { error: 'Missing dbl_id or shipment_id' }, 400); return }
 
       await sql`delete from dbl_items where dbl_id = ${body.dbl_id} and shipment_id = ${body.shipment_id}`;
       await sql`update shipments set dbl_id = null, status = 'LOADING' where id = ${body.shipment_id}`;
 
-      return writeJson(res, { success: true });
-
-    } else if (endpoint === 'get-shipments' && req.method === 'GET') {
-      const dblId = url.searchParams.get('dbl_id');
-      if (!dblId) return writeJson(res, { error: 'Missing dbl_id' }, 400);
-
-      const shipments = await sql`
-        select s.id, s.tracking_code, s.spb_number, s.pengirim_name as sender_name,
-               s.penerima_name as recipient_name, s.penerima_alamat as recipient_address,
-               s.penerima_telp as recipient_phone, s.origin as origin_city,
-               s.destination as destination_city, s.total_colli, s.berat as total_weight,
-               s.service_type, s.macam_barang as description, s.catatan as notes,
-               s.status, s.created_at
+      const items = await sql`
+        select di.shipment_id as id, di.urutan, di.dbl_id,
+               s.spb_number, s.public_code, s.pengirim_name, s.penerima_name, s.macam_barang,
+               s.qty, s.satuan, s.berat, coalesce(s.nominal, 0)::float as nominal,
+               s.customer_name, s.destination, s.origin, s.total_colli, s.status, s.created_at
         from dbl_items di
         join shipments s on s.id = di.shipment_id
-        where di.dbl_id = ${parseInt(dblId)}
+        where di.dbl_id = ${body.dbl_id}
         order by di.urutan, di.id
-      `;
+      ` as DBLItem[];
 
-      return writeJson(res, { shipments });
-
-    } else if (endpoint === 'available-shipments' && req.method === 'GET') {
-      const search = url.searchParams.get('search') || '';
-
-      let shipments;
-      if (search) {
-        shipments = await sql`
-          select id, spb_number, public_code, pengirim_name, penerima_name, macam_barang,
-                 qty, satuan, coalesce(nominal, 0)::float as nominal, total_colli,
-                 customer_name, origin, destination, status, created_at
-          from shipments
-          where dbl_id is null
-            and (
-              spb_number ilike ${'%' + search + '%'} or
-              public_code ilike ${'%' + search + '%'} or
-              pengirim_name ilike ${'%' + search + '%'} or
-              penerima_name ilike ${'%' + search + '%'} or
-              customer_name ilike ${'%' + search + '%'}
-            )
-          order by created_at desc
-          limit 100
-        `;
-      } else {
-        shipments = await sql`
-          select id, spb_number, public_code, pengirim_name, penerima_name, macam_barang,
-                 qty, satuan, coalesce(nominal, 0)::float as nominal, total_colli,
-                 customer_name, origin, destination, status, created_at
-          from shipments
-          where dbl_id is null
-          order by created_at desc
-          limit 100
-        `;
-      }
-
-      return writeJson(res, { items: shipments });
-
-    } else if (endpoint === 'generate-invoices' && req.method === 'POST') {
-      const body = await readJsonNode(req) as { dbl_id: number; pph_percent?: number } | null;
-      if (!body || !body.dbl_id) return writeJson(res, { error: 'Missing dbl_id' }, 400);
-
-      const dblId = body.dbl_id;
-      const pphPercent = body.pph_percent || 0;
-
-      const dblCheck = await sql`select id, status from dbl where id = ${dblId}` as [{ id: number; status: string }];
-      if (!dblCheck.length) return writeJson(res, { error: 'DBL not found' }, 404);
-
-      const shipments = await sql`
-        select s.id, s.customer_id, coalesce(s.customer_name, c.name) as customer_name,
-               coalesce(s.nominal, 0)::float as nominal, s.spb_number
-        from dbl_items di
-        join shipments s on s.id = di.shipment_id
-        left join customers c on c.id = s.customer_id
-        where di.dbl_id = ${dblId}
-          and s.invoice_generated = false
-      `;
-
-      const customerTotals = new Map<string, { customer_id: number | null; total: number; shipment_ids: number[] }>();
-      for (const s of shipments as Array<{ id: number; customer_id: number | null; customer_name: string; nominal: number }>) {
-        const key = s.customer_name || 'Unknown';
-        if (!customerTotals.has(key)) {
-          customerTotals.set(key, { customer_id: s.customer_id, total: 0, shipment_ids: [] });
-        }
-        const entry = customerTotals.get(key)!;
-        entry.total += s.nominal;
-        entry.shipment_ids.push(s.id);
-      }
-
-      const createdInvoices: Array<{ id: number; invoice_number: string; customer_name: string; amount: number }> = [];
-
-      for (const [customerName, data] of customerTotals) {
-        const subtotal = data.total;
-        const pphAmount = pphPercent > 0 ? (subtotal * pphPercent / 100) : 0;
-        const totalTagihan = subtotal - pphAmount;
-
-        const year = new Date().getFullYear();
-        const month = String(new Date().getMonth() + 1).padStart(2, '0');
-        const countResult = await sql`
-          select count(*)::int as count from invoices
-          where invoice_number like ${`%-${month}/STE-JKT/${year.toString().slice(-2)}`}
-        ` as [{ count: number }];
-        const nextNum = (countResult[0]?.count || 0) + 1;
-        const invoiceNumber = `${String(nextNum).padStart(2, '0')}-${month}/STE-JKT/${year.toString().slice(-2)}`;
-
-        const invResult = await sql`
-          insert into invoices (
-            dbl_id, invoice_number, customer_name, customer_id,
-            amount, subtotal, pph_percent, pph_amount, total_tagihan,
-            remaining_amount, status, issued_at, invoice_date
-          ) values (
-            ${dblId},
-            ${invoiceNumber},
-            ${customerName},
-            ${data.customer_id},
-            ${totalTagihan},
-            ${subtotal},
-            ${pphPercent},
-            ${pphAmount},
-            ${totalTagihan},
-            ${totalTagihan},
-            'pending',
-            now(),
-            ${new Date().toISOString().split('T')[0]}
-          ) returning id
-        ` as [{ id: number }];
-
-        const invoiceId = invResult[0].id;
-
-        for (const shipmentId of data.shipment_ids) {
-          await sql`update shipments set invoice_generated = true where id = ${shipmentId}`;
-        }
-
-        createdInvoices.push({
-          id: invoiceId,
-          invoice_number: invoiceNumber,
-          customer_name: customerName,
-          amount: totalTagihan
-        });
-      }
-
-      return writeJson(res, { success: true, invoices: createdInvoices });
-
-    }
-
-    if (endpoint === 'report' && req.method === 'GET') {
+      writeJson(res, { success: true, items });
+      return
+    } else if (endpoint === 'report' && req.method === 'GET') {
       const items = await sql`
         select 
           d.id,
@@ -523,26 +421,33 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           d.driver_name,
           d.destination,
           d.status,
-          d.created_at,
           d.dbl_date as departure_date,
-          count(di.id)::int as total_shipments,
-          coalesce(sum(s.total_colli), 0)::int as total_colli,
-          coalesce(sum(s.nominal), 0)::float as total_nominal
+          d.created_at,
+          (select count(*)::int from dbl_items where dbl_id = d.id) as total_shipments,
+          (select coalesce(sum(s.total_colli), 0)::int from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_colli,
+          (select coalesce(sum(s.nominal), 0)::float from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_nominal
         from dbl d
-        left join dbl_items di on di.dbl_id = d.id
-        left join shipments s on s.id = di.shipment_id
-        group by d.id
-        order by d.created_at desc
-        limit 500
-      `;
+        order by d.dbl_date desc, d.created_at desc
+      ` as Array<{
+        id: number;
+        dbl_number: string;
+        vehicle_plate: string | null;
+        driver_name: string | null;
+        destination: string | null;
+        status: string;
+        departure_date: string | null;
+        created_at: string;
+        total_shipments: number;
+        total_colli: number;
+        total_nominal: number;
+      }>;
+
       writeJson(res, { items });
-      return;
+      return
     }
 
-    res.writeHead(404);
-    res.end();
+    writeJson(res, { error: 'Invalid endpoint' }, 404);
   } catch (err) {
-    console.error('DBL API error:', err);
-    writeJson(res, { error: 'Internal error' }, 500);
+    writeJson(res, { error: 'Internal error', details: String(err) }, 500);
   }
 }

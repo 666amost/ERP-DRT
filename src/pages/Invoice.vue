@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import CustomerAutocomplete from '../components/CustomerAutocomplete.vue';
 import Button from '../components/ui/Button.vue';
 import Badge from '../components/ui/Badge.vue';
 import { useFormatters } from '../composables/useFormatters';
@@ -10,6 +9,11 @@ import { getCompany } from '../lib/company';
 const LOGO_URL = '/brand/logo.png';
 
 const { formatRupiah, formatDate } = useFormatters();
+
+type Customer = {
+  id: number;
+  name: string;
+};
 
 type Invoice = {
   id: number;
@@ -51,12 +55,41 @@ type CreateInvoiceForm = {
 };
 
 type Item = {
+  shipment_id?: number;
+  spb_number?: string;
+  tracking_code?: string;
   description: string;
+  weight?: number;
+  unit?: string;
   quantity: number;
+  recipient_name?: string;
+  destination_city?: string;
   unit_price: number;
+  pph_rate?: number;
   tax_type?: string;
   item_discount?: number;
   _unit_price_display?: string;
+  customer_name?: string;
+  customer_id?: number | null;
+};
+
+type UnpaidShipment = {
+  id: number;
+  spb_number: string;
+  tracking_code: string;
+  customer_id: number | null;
+  customer_name: string | null;
+  description: string;
+  weight: number;
+  qty: number;
+  unit: string;
+  total_colli: number;
+  recipient_name: string;
+  recipient_address: string;
+  destination_city: string;
+  amount: number;
+  created_at: string;
+  status: string;
 };
 
 const invoices = ref<Invoice[]>([]);
@@ -91,9 +124,126 @@ const form = ref<CreateInvoiceForm>({
 });
 
 const items = ref<Item[]>([]);
+const allUnpaidShipments = ref<Item[]>([]);
+const selectedShipmentIds = ref<Set<number>>(new Set());
 const taxPercent = ref<number>(0);
 const discountAmount = ref<number>(0);
 const notes = ref<string>('');
+const pphPercent = ref<number>(0.5);
+const loadingUnpaidShipments = ref(false);
+const customers = ref<Customer[]>([]);
+const loadingCustomers = ref(false);
+
+async function loadCustomers(): Promise<void> {
+  loadingCustomers.value = true;
+  try {
+    const res = await fetch('/api/customers?endpoint=list');
+    const data = await res.json();
+    customers.value = data.items || [];
+  } catch (e) {
+    console.error('Failed to load customers:', e);
+    customers.value = [];
+  } finally {
+    loadingCustomers.value = false;
+  }
+}
+
+async function loadAllUnpaidShipments(): Promise<void> {
+  loadingUnpaidShipments.value = true;
+  try {
+    const res = await fetch('/api/shipments?endpoint=all-unpaid');
+    const data = await res.json();
+    
+    if (data.shipments && data.shipments.length > 0) {
+      allUnpaidShipments.value = data.shipments.map((s: UnpaidShipment) => ({
+        shipment_id: s.id,
+        spb_number: s.spb_number,
+        tracking_code: s.tracking_code,
+        customer_name: s.customer_name || '-',
+        customer_id: s.customer_id,
+        description: s.description || '-',
+        weight: s.weight || 0,
+        unit: s.unit || 'Kg',
+        quantity: s.total_colli || 0,
+        recipient_name: s.recipient_name || '-',
+        destination_city: s.destination_city || '-',
+        unit_price: s.amount || 0,
+        pph_rate: pphPercent.value,
+        tax_type: 'include',
+        item_discount: 0,
+        _unit_price_display: formatRupiah(s.amount || 0)
+      }));
+    } else {
+      allUnpaidShipments.value = [];
+    }
+  } catch (e) {
+    console.error('Failed to load unpaid shipments:', e);
+    allUnpaidShipments.value = [];
+  } finally {
+    loadingUnpaidShipments.value = false;
+  }
+}
+
+function getFilteredUnpaidShipments(): Item[] {
+  if (!form.value.customer_id) {
+    return allUnpaidShipments.value;
+  }
+  const selectedCustomer = customers.value.find(c => c.id === form.value.customer_id);
+  const customerName = selectedCustomer?.name?.toLowerCase() || '';
+  return allUnpaidShipments.value.filter(s => {
+    if (s.customer_id === form.value.customer_id) return true;
+    if (customerName && s.customer_name?.toLowerCase() === customerName) return true;
+    return false;
+  });
+}
+
+function toggleShipmentSelection(shipmentId: number): void {
+  if (selectedShipmentIds.value.has(shipmentId)) {
+    selectedShipmentIds.value.delete(shipmentId);
+  } else {
+    selectedShipmentIds.value.add(shipmentId);
+  }
+  selectedShipmentIds.value = new Set(selectedShipmentIds.value);
+  updateItemsFromSelection();
+}
+
+function selectAllFiltered(): void {
+  const filtered = getFilteredUnpaidShipments();
+  filtered.forEach(s => {
+    if (s.shipment_id) selectedShipmentIds.value.add(s.shipment_id);
+  });
+  selectedShipmentIds.value = new Set(selectedShipmentIds.value);
+  updateItemsFromSelection();
+}
+
+function deselectAll(): void {
+  selectedShipmentIds.value.clear();
+  selectedShipmentIds.value = new Set(selectedShipmentIds.value);
+  updateItemsFromSelection();
+}
+
+function updateItemsFromSelection(): void {
+  items.value = allUnpaidShipments.value.filter(s => s.shipment_id && selectedShipmentIds.value.has(s.shipment_id));
+  const subtotal = items.value.reduce((sum, it) => sum + (it.unit_price || 0), 0);
+  form.value.amount = String(subtotal);
+}
+
+function onCustomerChange(): void {
+  const customerId = form.value.customer_id;
+  if (customerId) {
+    const customer = customers.value.find(c => c.id === customerId);
+    form.value.customer_name = customer?.name || '';
+  } else {
+    form.value.customer_name = '';
+  }
+  const filtered = getFilteredUnpaidShipments();
+  selectedShipmentIds.value.clear();
+  filtered.forEach(s => {
+    if (s.shipment_id) selectedShipmentIds.value.add(s.shipment_id);
+  });
+  selectedShipmentIds.value = new Set(selectedShipmentIds.value);
+  updateItemsFromSelection();
+}
 
 async function loadItemsForInvoice(id: number | null): Promise<void> {
   if (!id) {
@@ -121,30 +271,6 @@ async function saveItemsForInvoice(invoiceId: number): Promise<void> {
       notes: notes.value || undefined
     })
   });
-}
-
-function addItem(): void {
-  items.value = [...items.value, { description: '', quantity: 1, unit_price: 0, tax_type: 'include', item_discount: 0, _unit_price_display: '' }];
-}
-
-function onInvUnitPriceFocus(it: { unit_price?: number; _unit_price_display?: string }) {
-  it._unit_price_display = it.unit_price !== undefined ? String(it.unit_price) : '';
-}
-
-function onInvUnitPriceInput(it: { _unit_price_display?: string }, e: Event) {
-  const target = e.target as HTMLInputElement | null;
-  if (target) it._unit_price_display = target.value;
-}
-
-function onInvUnitPriceBlur(it: { unit_price?: number; _unit_price_display?: string }, e: Event) {
-  const target = e.target as HTMLInputElement | null;
-  const rawVal = String(it._unit_price_display || (target?.value || '')).replace(/[^0-9.,-]/g,'').replace(/,/g,'');
-  it.unit_price = Number(rawVal || 0);
-  it._unit_price_display = formatRupiah(it.unit_price || 0);
-}
-
-function removeItem(index: number): void {
-  items.value = items.value.filter((_, i: number) => i !== index);
 }
 
 function calcSubtotal(): number {
@@ -193,14 +319,18 @@ function filterInvoices() {
   }
 }
 
-function openCreateModal() {
+function openCreateModal(): void {
   editingId.value = null;
   form.value = { customer_name: '', customer_id: null, amount: '', status: 'pending' };
-  items.value = [{ description: '', quantity: 1, unit_price: 0, tax_type: 'include', item_discount: 0 }];
+  items.value = [];
+  allUnpaidShipments.value = [];
+  selectedShipmentIds.value = new Set();
   taxPercent.value = 0;
   discountAmount.value = 0;
   notes.value = '';
   showModal.value = true;
+  loadCustomers();
+  loadAllUnpaidShipments();
 }
 
 async function openEditModal(invoice: Invoice) {
@@ -222,17 +352,15 @@ async function openEditModal(invoice: Invoice) {
 }
 
 async function saveInvoice() {
-  const amount = parseFloat(form.value.amount);
-  if ((!form.value.customer_name && !form.value.customer_id) || isNaN(amount)) {
-    alert('Isi semua field dengan benar');
+  const amount = parseFloat(form.value.amount) || 0;
+  if (!form.value.customer_name && !form.value.customer_id) {
+    alert('Pilih customer terlebih dahulu');
     return;
   }
 
   try {
     const recomputed = calcTotal();
-    if (!isNaN(recomputed) && recomputed > 0) {
-      form.value.amount = String(recomputed);
-    }
+    const finalAmount = !isNaN(recomputed) && recomputed > 0 ? recomputed : amount;
     if (editingId.value) {
       const res = await fetch('/api/invoices?endpoint=update', {
         method: 'PUT',
@@ -241,7 +369,7 @@ async function saveInvoice() {
           id: editingId.value,
           customer_name: form.value.customer_name,
           customer_id: form.value.customer_id || undefined,
-          amount: recomputed || amount,
+          amount: finalAmount,
           status: form.value.status,
           tax_percent: taxPercent.value,
           discount_amount: discountAmount.value,
@@ -257,14 +385,17 @@ async function saveInvoice() {
         body: JSON.stringify({
           customer_name: form.value.customer_name,
           customer_id: form.value.customer_id || undefined,
-          amount: recomputed || amount,
+          amount: finalAmount,
           status: form.value.status,
           tax_percent: taxPercent.value,
           discount_amount: discountAmount.value,
           notes: notes.value || undefined
         })
       });
-      if (!res.ok) throw new Error('Create failed');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Create failed');
+      }
       try {
         const created = await res.json();
         const newId: number | undefined = created?.id ?? created?.invoice?.id;
@@ -272,7 +403,6 @@ async function saveInvoice() {
           await saveItemsForInvoice(newId);
         }
       } catch (err) {
-        // ignore parse error but log for debug
         console.warn('Create invoice parse error', err);
       }
     }
@@ -280,7 +410,7 @@ async function saveInvoice() {
     loadInvoices();
   } catch (e) {
     console.error('Save error:', e);
-    alert('Gagal menyimpan invoice');
+    alert(e instanceof Error ? e.message : 'Gagal menyimpan invoice');
   }
 }
 
@@ -795,11 +925,28 @@ watch([items, taxPercent, discountAmount], () => {
         <div class="space-y-3">
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
             <div class="sm:col-span-2">
-              <CustomerAutocomplete
-                v-model="form.customer_name"
-                label="Customer"
-                @selected="(c: { id: number; name: string }) => { form.customer_id = c.id; form.customer_name = c.name; }"
-              />
+              <label class="block text-sm font-medium mb-1">Customer</label>
+              <select
+                v-model="form.customer_id"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                @change="onCustomerChange"
+                :disabled="loadingCustomers"
+              >
+                <option :value="null">-- Pilih Customer --</option>
+                <option v-for="c in customers" :key="c.id" :value="c.id">
+                  {{ c.name }}
+                </option>
+              </select>
+              <div v-if="loadingCustomers" class="text-xs text-gray-500 mt-1">
+                🔄 Memuat daftar customer...
+              </div>
+              <div v-if="loadingUnpaidShipments" class="text-xs text-gray-500 mt-1">
+                🔄 Memuat SPB yang belum dibayar...
+              </div>
+              <div v-if="!editingId && allUnpaidShipments.length > 0" class="text-xs text-gray-500 mt-1">
+                Total {{ allUnpaidShipments.length }} SPB belum dibayar.
+                <span v-if="form.customer_id">Filter: {{ getFilteredUnpaidShipments().length }} SPB untuk "{{ form.customer_name }}"</span>
+              </div>
             </div>
             <div class="flex flex-col gap-3">
               <div>
@@ -833,130 +980,244 @@ watch([items, taxPercent, discountAmount], () => {
               </div>
             </div>
           </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Item</label>
-            <div class="space-y-2">
-              <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 text-xs text-gray-500 font-medium px-2">
-                <div class="sm:col-span-4">Deskripsi</div>
-                <div class="sm:col-span-1">Qty</div>
-                <div class="sm:col-span-2">Harga</div>
-                <div class="sm:col-span-2">PPN</div>
-                <div class="sm:col-span-2">Diskon</div>
-                <div class="sm:col-span-1"></div>
-              </div>
-              <div
-                v-for="(it, idx) in items"
-                :key="idx"
-                class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center"
-              >
-                <input
-                  v-model="it.description"
-                  class="col-span-1 sm:col-span-4 px-3 py-2 border border-gray-300 rounded-lg"
-                  placeholder="Deskripsi"
-                >
-                <input
-                  v-model.number="it.quantity"
-                  type="number"
-                  min="0"
-                  class="col-span-1 sm:col-span-1 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                  placeholder="Qty"
-                >
-                <input
-                  :value="it._unit_price_display || (it.unit_price !== undefined ? String(it.unit_price) : '')"
-                  @focus="onInvUnitPriceFocus(it)"
-                  @blur="onInvUnitPriceBlur(it, $event)"
-                  @input="onInvUnitPriceInput(it, $event)"
-                  type="text"
-                  class="col-span-1 sm:col-span-2 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                >
-                <select
-                  v-model="it.tax_type"
-                  class="col-span-1 sm:col-span-2 px-3 py-2 border border-gray-300 rounded-lg"
-                >
-                  <option value="include">
-                    PPN Incl
-                  </option>
-                  <option value="exclude">
-                    PPN Excl
-                  </option>
-                  <option value="exempt">
-                    Exempt
-                  </option>
-                </select>
-                <input
-                  v-model.number="it.item_discount"
-                  type="number"
-                  min="0"
-                  class="col-span-1 sm:col-span-2 px-3 py-2 border border-gray-300 rounded-lg text-right"
-                >
+          <div v-if="!editingId">
+            <div class="flex items-center justify-between mb-2">
+              <label class="block text-sm font-medium">Daftar SPB yang belum dibayar</label>
+              <div class="flex gap-2">
                 <button
                   type="button"
-                  class="col-span-1 sm:col-span-1 px-3 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100"
-                  @click="removeItem(idx)"
+                  class="px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded text-xs"
+                  @click="selectAllFiltered"
+                  :disabled="getFilteredUnpaidShipments().length === 0"
                 >
-                  X
+                  ✓ Pilih Semua ({{ getFilteredUnpaidShipments().length }})
                 </button>
-              </div>
-              <div class="flex flex-col sm:flex-row justify-between items-center text-sm gap-2">
                 <button
                   type="button"
-                  class="px-3 py-2 rounded-lg bg-primary-light text-primary hover:bg-blue-100 w-full sm:w-auto"
-                  @click="addItem"
+                  class="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-xs"
+                  @click="deselectAll"
+                  :disabled="selectedShipmentIds.size === 0"
                 >
-                  + Tambah Item
+                  ✕ Hapus Semua ({{ selectedShipmentIds.size }})
                 </button>
-                <div class="font-semibold">
-                  Subtotal: {{ formatRupiah(calcSubtotal()) }} · Total: {{ formatRupiah(calcTotal()) }}
-                </div>
               </div>
             </div>
+            <div v-if="loadingUnpaidShipments" class="text-center py-4 text-gray-500">
+              <span class="animate-pulse">🔄 Memuat SPB yang belum dibayar...</span>
+            </div>
+            <div v-else-if="allUnpaidShipments.length === 0" class="text-center py-4 text-gray-400">
+              Tidak ada SPB yang belum dibayar
+            </div>
+            <div v-else-if="form.customer_id && getFilteredUnpaidShipments().length === 0" class="text-center py-4 text-gray-400">
+              Tidak ada SPB belum dibayar untuk customer ini
+            </div>
+            <div v-else class="overflow-x-auto max-h-60 overflow-y-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th class="px-2 py-2 text-center text-xs font-medium w-10">✓</th>
+                    <th class="px-2 py-2 text-left text-xs font-medium">No. SPB / RESI</th>
+                    <th class="px-2 py-2 text-left text-xs font-medium">Customer</th>
+                    <th class="px-2 py-2 text-left text-xs font-medium">Nama Barang</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">QTY</th>
+                    <th class="px-2 py-2 text-left text-xs font-medium">Penerima</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">Tagihan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="it in getFilteredUnpaidShipments()"
+                    :key="it.shipment_id"
+                    class="border-t hover:bg-gray-50 cursor-pointer"
+                    :class="{ 'bg-blue-50': selectedShipmentIds.has(it.shipment_id!) }"
+                    @click="toggleShipmentSelection(it.shipment_id!)"
+                  >
+                    <td class="px-2 py-2 text-center">
+                      <input
+                        type="checkbox"
+                        :checked="selectedShipmentIds.has(it.shipment_id!)"
+                        @click.stop="toggleShipmentSelection(it.shipment_id!)"
+                        class="h-4 w-4"
+                      />
+                    </td>
+                    <td class="px-2 py-2">
+                      <div class="text-xs font-mono">
+                        <div>{{ it.spb_number || '-' }}</div>
+                        <div class="text-gray-500">{{ it.tracking_code || '-' }}</div>
+                      </div>
+                    </td>
+                    <td class="px-2 py-2">
+                      <div class="text-xs">{{ it.customer_name || '-' }}</div>
+                    </td>
+                    <td class="px-2 py-2 text-xs">{{ it.description || '-' }}</td>
+                    <td class="px-2 py-2 text-right text-xs">{{ it.quantity || 0 }}</td>
+                    <td class="px-2 py-2">
+                      <div class="text-xs">
+                        <div>{{ it.recipient_name || '-' }}</div>
+                        <div class="text-gray-500">{{ it.destination_city || '-' }}</div>
+                      </div>
+                    </td>
+                    <td class="px-2 py-2 text-right text-xs font-semibold">
+                      {{ formatRupiah(it.unit_price || 0) }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div v-if="!editingId && items.length > 0">
+            <label class="block text-sm font-medium mb-2">SPB Terpilih ({{ items.length }})</label>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-green-50">
+                  <tr>
+                    <th class="px-2 py-2 text-left text-xs font-medium">No. SPB / RESI</th>
+                    <th class="px-2 py-2 text-left text-xs font-medium">Customer</th>
+                    <th class="px-2 py-2 text-left text-xs font-medium">Nama Barang</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">Berat</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">QTY</th>
+                    <th class="px-2 py-2 text-left text-xs font-medium">Penerima</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">Tagihan</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">PPh ({{ pphPercent }}%)</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="it in items"
+                    :key="it.shipment_id"
+                    class="border-t"
+                  >
+                    <td class="px-2 py-2">
+                      <div class="text-xs font-mono">
+                        <div>{{ it.spb_number || '-' }}</div>
+                        <div class="text-gray-500">{{ it.tracking_code || '-' }}</div>
+                      </div>
+                    </td>
+                    <td class="px-2 py-2 text-xs">{{ it.customer_name || '-' }}</td>
+                    <td class="px-2 py-2 text-xs">{{ it.description || '-' }}</td>
+                    <td class="px-2 py-2 text-right text-xs">{{ it.weight || 0 }} {{ it.unit || 'Kg' }}</td>
+                    <td class="px-2 py-2 text-right text-xs">{{ it.quantity || 0 }}</td>
+                    <td class="px-2 py-2">
+                      <div class="text-xs">
+                        <div>{{ it.recipient_name || '-' }}</div>
+                        <div class="text-gray-500">{{ it.destination_city || '-' }}</div>
+                      </div>
+                    </td>
+                    <td class="px-2 py-2 text-right text-xs font-semibold">
+                      {{ formatRupiah(it.unit_price || 0) }}
+                    </td>
+                    <td class="px-2 py-2 text-right text-xs text-red-600">
+                      -{{ formatRupiah((it.unit_price || 0) * (pphPercent / 100)) }}
+                    </td>
+                    <td class="px-2 py-2 text-right text-xs font-semibold">
+                      {{ formatRupiah((it.unit_price || 0) * (1 - pphPercent / 100)) }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div v-if="editingId">
+            <label class="block text-sm font-medium mb-2">Daftar SPB</label>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-2 py-2 text-left text-xs font-medium">No. SPB / RESI</th>
+                    <th class="px-2 py-2 text-left text-xs font-medium">Customer</th>
+                    <th class="px-2 py-2 text-left text-xs font-medium">Nama Barang</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">Berat</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">QTY</th>
+                    <th class="px-2 py-2 text-left text-xs font-medium">Penerima</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">Tagihan</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">PPh ({{ pphPercent }}%)</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="it in items"
+                    :key="it.shipment_id"
+                    class="border-t"
+                  >
+                    <td class="px-2 py-2">
+                      <div class="text-xs font-mono">
+                        <div>{{ it.spb_number || '-' }}</div>
+                        <div class="text-gray-500">{{ it.tracking_code || '-' }}</div>
+                      </div>
+                    </td>
+                    <td class="px-2 py-2 text-xs">{{ it.customer_name || '-' }}</td>
+                    <td class="px-2 py-2 text-xs">{{ it.description || '-' }}</td>
+                    <td class="px-2 py-2 text-right text-xs">{{ it.weight || 0 }} {{ it.unit || 'Kg' }}</td>
+                    <td class="px-2 py-2 text-right text-xs">{{ it.quantity || 0 }}</td>
+                    <td class="px-2 py-2">
+                      <div class="text-xs">
+                        <div>{{ it.recipient_name || '-' }}</div>
+                        <div class="text-gray-500">{{ it.destination_city || '-' }}</div>
+                      </div>
+                    </td>
+                    <td class="px-2 py-2 text-right text-xs font-semibold">
+                      {{ formatRupiah(it.unit_price || 0) }}
+                    </td>
+                    <td class="px-2 py-2 text-right text-xs text-red-600">
+                      -{{ formatRupiah((it.unit_price || 0) * (pphPercent / 100)) }}
+                    </td>
+                    <td class="px-2 py-2 text-right text-xs font-semibold">
+                      {{ formatRupiah((it.unit_price || 0) * (1 - pphPercent / 100)) }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
             <div>
-              <label class="block text-sm font-medium mb-1">PPN (%)</label>
+              <label class="block text-sm font-medium mb-1">PPh Rate (%)</label>
               <input
-                v-model.number="taxPercent"
+                v-model.number="pphPercent"
                 type="number"
+                step="0.1"
                 min="0"
-                step="0.01"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-right"
-                placeholder="11"
-              >
+                max="100"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              />
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1">Diskon</label>
-              <input
-                v-model.number="discountAmount"
-                type="number"
-                min="0"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-right"
-                placeholder="0"
-              >
+              <label class="block text-sm font-medium mb-1">Catatan</label>
+              <textarea
+                v-model="notes"
+                rows="2"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="Catatan tambahan..."
+              ></textarea>
             </div>
           </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Catatan</label>
-            <textarea
-              v-model="notes"
-              rows="3"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
-              placeholder="Catatan tambahan ditampilkan di bagian bawah invoice"
-            />
+
+          <div class="bg-gray-50 p-4 rounded-lg space-y-2">
+            <div class="flex justify-between text-sm">
+              <span>Subtotal:</span>
+              <span class="font-semibold">{{ formatRupiah(calcSubtotal()) }}</span>
+            </div>
+            <div class="flex justify-between text-sm text-red-600">
+              <span>PPh ({{ pphPercent }}%):</span>
+              <span class="font-semibold">-{{ formatRupiah(calcSubtotal() * (pphPercent / 100)) }}</span>
+            </div>
+            <div class="flex justify-between text-lg font-bold border-t pt-2">
+              <span>Total Tagihan:</span>
+              <span>{{ formatRupiah(calcSubtotal() * (1 - pphPercent / 100)) }}</span>
+            </div>
           </div>
-        </div>
-        <div class="flex gap-2 justify-end">
-          <Button
-            variant="default"
-            @click="showModal = false"
-          >
-            Batal
-          </Button>
-          <Button
-            variant="primary"
-            @click="saveInvoice"
-          >
-            Simpan
-          </Button>
+
+          <div class="flex justify-end gap-2 pt-4 border-t">
+            <Button variant="secondary" @click="showModal = false">
+              Batal
+            </Button>
+            <Button variant="primary" @click="saveInvoice">
+              {{ editingId ? 'Update' : 'Simpan' }} Invoice
+            </Button>
+          </div>
         </div>
       </div>
     </div>

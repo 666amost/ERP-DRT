@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import Button from '../components/ui/Button.vue';
 import Badge from '../components/ui/Badge.vue';
 import { useFormatters } from '../composables/useFormatters';
 import { Icon } from '@iconify/vue';
 
-const { formatDate, formatRupiah } = useFormatters();
+const { formatDate, formatRupiah, toWIBDateString } = useFormatters();
 
 type ShipmentReport = {
   id: number;
@@ -96,15 +96,15 @@ async function loadReport() {
 }
 
 function setToday() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toWIBDateString();
   dateFrom.value = today;
   dateTo.value = today;
 }
 
 function setThisMonth() {
   const now = new Date();
-  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+  const firstDay = toWIBDateString(new Date(now.getFullYear(), now.getMonth(), 1));
+  const lastDay = toWIBDateString(new Date(now.getFullYear(), now.getMonth() + 1, 0));
   dateFrom.value = firstDay;
   dateTo.value = lastDay;
 }
@@ -161,6 +161,12 @@ function getStatusVariant(status: string): 'default' | 'info' | 'warning' | 'suc
   };
   return variants[status] || 'default';
 }
+
+watch([dateFrom, dateTo], () => {
+  if (dateFrom.value || dateTo.value) {
+    loadReport();
+  }
+});
 
 onMounted(() => {
   setToday();

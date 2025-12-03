@@ -2,6 +2,8 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
+    { "source": "/api/dbl(.*)", "destination": "/api/dbl-shipments" },
+    { "source": "/api/shipments(.*)", "destination": "/api/dbl-shipments" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]

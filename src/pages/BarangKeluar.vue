@@ -177,8 +177,7 @@ const jenisOptions = [
 
 const statusOptions = [
   { value: 'LOADING', label: 'Loading', variant: 'warning' },
-  { value: 'IN_TRANSIT', label: 'In Transit', variant: 'info' },
-  { value: 'DELIVERED', label: 'Delivered', variant: 'success' }
+  { value: 'IN_TRANSIT', label: 'In Transit', variant: 'info' }
 ];
 
 const allStatusOptions = [

@@ -39,7 +39,12 @@ const server = createServer(async (req, res) => {
   }
   
   if (pathname.startsWith('/api/')) {
-    const apiPath = pathname.replace('/api/', '');
+    let apiPath = pathname.replace('/api/', '');
+    
+    if (apiPath.startsWith('dbl') || apiPath.startsWith('shipments')) {
+      apiPath = 'dbl-shipments';
+    }
+    
     const handlerPath = join(__dirname, 'api', `${apiPath}.ts`);
     
     if (existsSync(handlerPath)) {

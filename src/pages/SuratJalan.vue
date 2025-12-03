@@ -2,6 +2,9 @@
 import { ref, computed, onMounted } from 'vue'
 import Button from '@/components/ui/Button.vue'
 import Badge from '@/components/ui/Badge.vue'
+import { getCompany } from '../lib/company'
+
+const LOGO_URL = '/brand/logo.png'
 
 interface Shipment {
   id: string
@@ -47,12 +50,30 @@ const dblLoading = ref(false)
 const loadShipments = async (): Promise<void> => {
   loading.value = true
   try {
-    const res = await fetch('/api/shipments')
+    const res = await fetch('/api/shipments?endpoint=list&limit=100')
     const data = await res.json()
-    if (data.shipments) {
-      shipments.value = data.shipments.filter((s: Shipment) => 
-        ['IN_TRANSIT', 'DELIVERED'].includes(s.status)
-      )
+    if (data.items) {
+      shipments.value = data.items
+        .filter((s: Shipment) => ['IN_TRANSIT', 'DELIVERED'].includes(s.status))
+        .map((s: Record<string, unknown>) => ({
+          id: String(s.id),
+          tracking_code: s.public_code as string || '',
+          spb_number: s.spb_number as string || '',
+          sender_name: s.sender_name as string || s.customer_name as string || '',
+          recipient_name: s.penerima_name as string || '',
+          recipient_address: s.shipping_address as string || '',
+          recipient_phone: s.penerima_phone as string || '',
+          origin_city: s.origin as string || '',
+          destination_city: s.destination as string || '',
+          total_colli: Number(s.total_colli) || 0,
+          total_weight: Number(s.berat) || 0,
+          service_type: s.service_type as string || 'CARGO',
+          description: s.macam_barang as string || '',
+          notes: s.keterangan as string || '',
+          status: s.status as string || '',
+          created_at: s.created_at as string || '',
+          dbl_id: s.dbl_id as string | null
+        }))
     }
   } catch {
     console.error('Failed to load shipments')
@@ -64,12 +85,23 @@ const loadShipments = async (): Promise<void> => {
 const loadDBLList = async (): Promise<void> => {
   dblLoading.value = true
   try {
-    const res = await fetch('/api/dbl')
+    const res = await fetch('/api/dbl?endpoint=list&limit=100')
     const data = await res.json()
-    if (data.dbl_list) {
-      dblList.value = data.dbl_list.filter((d: DBLItem) => 
-        d.status === 'IN_TRANSIT' || d.shipment_count > 0
-      )
+    if (data.items) {
+      dblList.value = data.items
+        .filter((d: DBLItem) => d.status === 'IN_TRANSIT' || d.status === 'READY' || (d.shipment_count && d.shipment_count > 0))
+        .map((d: Record<string, unknown>) => ({
+          id: String(d.id),
+          dbl_number: d.dbl_number as string || '',
+          dbl_date: d.dbl_date as string || '',
+          vehicle_plate: d.vehicle_plate as string || '',
+          driver_name: d.driver_name as string || '',
+          destination_city: d.destination as string || '',
+          status: d.status as string || '',
+          shipment_count: Number(d.shipment_count) || 0,
+          total_colli: 0,
+          total_weight: 0
+        }))
     }
   } catch {
     console.error('Failed to load DBL list')
@@ -118,248 +150,440 @@ const formatDate = (dateStr: string): string => {
   })
 }
 
-const printDeliveryNote = (shipment: Shipment): void => {
-  const printWindow = window.open('', '_blank')
-  if (!printWindow) return
+const formatDateLong = (dateStr: string): string => {
+  if (!dateStr) return '-'
+  return new Date(dateStr).toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
+  })
+}
 
-  const content = `
+const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
+  const company = await getCompany()
+  const publicCode = shipment.tracking_code || ''
+  
+  await new Promise<void>((resolve) => {
+    const img = new Image()
+    img.onload = () => resolve()
+    img.onerror = () => resolve()
+    img.src = `/api/blob?endpoint=generate&code=${publicCode}&type=barcode`
+  })
+
+  const printWindow = window.open('', '_blank')
+  if (!printWindow) {
+    alert('Popup blocked. Please allow popups for this site.')
+    return
+  }
+  
+  const deliveredStamp = shipment.status === 'DELIVERED' ? `
+    <div class="delivered-stamp">DELIVERED</div>
+  ` : ''
+
+  const spbNumber = shipment.spb_number || '-'
+
+  const html = `
     <!DOCTYPE html>
     <html>
     <head>
-      <title>Surat Jalan - ${shipment.spb_number || shipment.tracking_code}</title>
+      <title>Surat Jalan - ${spbNumber}</title>
+      <meta charset="utf-8" />
       <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; padding: 20px; font-size: 12px; }
-        .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
-        .header h1 { font-size: 18px; margin-bottom: 5px; }
-        .header p { font-size: 10px; color: #666; }
-        .title { text-align: center; font-size: 16px; font-weight: bold; margin: 15px 0; text-decoration: underline; }
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-        .info-section { border: 1px solid #ccc; padding: 10px; }
-        .info-section h3 { font-size: 12px; border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-bottom: 8px; }
-        .info-row { display: flex; margin-bottom: 4px; }
-        .info-label { width: 100px; font-weight: bold; }
-        .info-value { flex: 1; }
-        .goods-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-        .goods-table th, .goods-table td { border: 1px solid #000; padding: 8px; text-align: left; }
-        .goods-table th { background: #f0f0f0; }
-        .signature-section { display: flex; justify-content: space-between; margin-top: 40px; }
-        .signature-box { text-align: center; width: 150px; }
-        .signature-line { border-top: 1px solid #000; margin-top: 60px; padding-top: 5px; }
-        .status-badge { 
-          display: inline-block; 
-          padding: 4px 12px; 
-          background: ${shipment.status === 'DELIVERED' ? '#22c55e' : '#3b82f6'}; 
-          color: white; 
-          font-weight: bold; 
-          font-size: 10px;
-          border-radius: 4px;
-          transform: rotate(-15deg);
+        :root { --ink:#0e0e0e; --line:#1f2937; --muted:#6b7280; --paper:#fffbe6; }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+        body { font-family: Arial, Helvetica, sans-serif; color: var(--ink); margin:0; padding:24px; }
+        .sheet { width: 210mm; max-width: 210mm; margin:0 auto; background: var(--paper); border: 1px solid var(--line); padding: 18px 18px 14px; position: relative; }
+        .top { display:flex; align-items:flex-start; gap:16px; }
+        .brand { display:flex; gap:10px; align-items:center; }
+        .brand img { width:48px; height:48px; object-fit:contain; }
+        .brand-title { font-weight:800; letter-spacing:.4px; }
+        .brand-sub { font-size:12px; color:#1f2937; margin-top:2px; }
+        .addr { font-size:11px; color: var(--muted); margin-top:6px; white-space:pre-line; }
+        .right-box { margin-left:auto; border:1px solid var(--line); padding:8px 10px; text-align:center; min-width:230px; }
+        .right-box .title { font-weight:800; font-size:13px; letter-spacing:.5px; }
+        .right-box .spb { margin-top:6px; font-size:14px; font-weight:700; }
+        .right-box .code { margin-top:4px; font-size:11px; color: var(--muted); }
+
+        .barcode { text-align:right; margin:8px 0 10px; }
+        .barcode img { width:300px; height:72px; object-fit:contain; border:1px solid #e5e7eb; padding:6px; border-radius:4px; background:#fff; }
+
+        .row { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-top:10px; }
+        .field { border:1px solid var(--line); padding:8px; min-height:44px; }
+        .label { font-size:11px; color:var(--muted); margin-bottom:4px; text-transform:uppercase; }
+        .value { font-size:13px; }
+
+        table { width:100%; border-collapse:collapse; margin-top:12px; }
+        th, td { border:1px solid #000; font-size:12px; padding:6px 8px; }
+        thead th { background:#f7f7f7; }
+
+        .bottom { display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:12px; align-items:start; }
+        .tnc { border:1px solid var(--line); padding:10px; font-size:10px; line-height:1.35; color:#111827; }
+        .tnc h4 { margin:0 0 6px; font-size:11px; }
+        .badge-note { display:inline-block; border:1px solid var(--line); padding:6px 10px; font-weight:700; margin-top:8px; border-radius:4px; }
+
+        .sign-row { display:grid; grid-template-columns: repeat(3,1fr); gap:18px; margin-top:22px; }
+        .sign { text-align:center; font-size:12px; }
+        .line { border-top:1px solid #000; margin-top:60px; padding-top:4px; }
+
+        .right-summary { text-align:right; font-size:12px; }
+        .right-summary .date { margin-top:8px; }
+
+        .delivered-stamp {
           position: absolute;
-          top: 15px;
-          right: 20px;
+          top: 50%;
+          right: 40px;
+          transform: rotate(-15deg) translateY(-50%);
+          font-size: 48px;
+          font-weight: 900;
+          color: rgba(34, 197, 94, 0.25);
+          border: 6px solid rgba(34, 197, 94, 0.25);
+          padding: 10px 30px;
+          border-radius: 12px;
+          text-transform: uppercase;
+          letter-spacing: 4px;
+          pointer-events: none;
         }
-        .header-wrapper { position: relative; }
-        @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+
+        @media print {
+          body { padding:0; }
+          .sheet { border:0; width:auto; max-width:none; padding:16mm; }
+          .delivered-stamp { color: rgba(34, 197, 94, 0.3); border-color: rgba(34, 197, 94, 0.3); }
+        }
       </style>
     </head>
     <body>
-      <div class="header-wrapper">
-        <div class="status-badge">${shipment.status}</div>
-        <div class="header">
-          <h1>PT. SINAR TERANG EXPRESS</h1>
-          <p>Jasa Pengiriman Barang Antar Kota</p>
+      <div class="sheet">
+        ${deliveredStamp}
+        <div class="top">
+          <div>
+            <div class="brand">
+              <img src="${LOGO_URL}" alt="Logo" />
+              <div>
+                <div class="brand-title">${company?.name ?? 'PERUSAHAAN LOGISTIK'}</div>
+                <div class="brand-sub">Melayani: Pengiriman ke Seluruh Indonesia</div>
+              </div>
+            </div>
+            <div class="addr">${company?.address ?? ''}</div>
+          </div>
+          <div class="right-box">
+            <div class="title">SURAT PENGANTAR BARANG</div>
+            <div class="spb">No. SPB: ${spbNumber}</div>
+            <div class="code">Kode: ${publicCode}</div>
+          </div>
         </div>
-      </div>
-      <div class="title">SURAT JALAN</div>
-      <div class="info-grid">
-        <div class="info-section">
-          <h3>PENGIRIM</h3>
-          <div class="info-row"><span class="info-label">Nama</span><span class="info-value">: ${shipment.sender_name || '-'}</span></div>
-          <div class="info-row"><span class="info-label">Kota Asal</span><span class="info-value">: ${shipment.origin_city || '-'}</span></div>
+
+        <div class="barcode">
+          <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode" alt="Barcode" />
         </div>
-        <div class="info-section">
-          <h3>PENERIMA</h3>
-          <div class="info-row"><span class="info-label">Nama</span><span class="info-value">: ${shipment.recipient_name || '-'}</span></div>
-          <div class="info-row"><span class="info-label">Alamat</span><span class="info-value">: ${shipment.recipient_address || '-'}</span></div>
-          <div class="info-row"><span class="info-label">Telepon</span><span class="info-value">: ${shipment.recipient_phone || '-'}</span></div>
-          <div class="info-row"><span class="info-label">Kota Tujuan</span><span class="info-value">: ${shipment.destination_city || '-'}</span></div>
+
+        <div class="row">
+          <div class="field">
+            <div class="label">Pengirim</div>
+            <div class="value">${shipment.sender_name || '-'}</div>
+          </div>
+          <div class="field">
+            <div class="label">Kepada Yth</div>
+            <div class="value">${shipment.recipient_name || '-'}</div>
+          </div>
         </div>
-      </div>
-      <table class="goods-table">
-        <thead>
-          <tr>
-            <th>No. SPB</th>
-            <th>No. Resi</th>
-            <th>Tanggal</th>
-            <th>Layanan</th>
-            <th>Colli</th>
-            <th>Berat (Kg)</th>
-            <th>Keterangan</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>${shipment.spb_number || '-'}</td>
-            <td>${shipment.tracking_code}</td>
-            <td>${formatDate(shipment.created_at)}</td>
-            <td>${shipment.service_type || 'REGULAR'}</td>
-            <td>${shipment.total_colli || 0}</td>
-            <td>${shipment.total_weight || 0}</td>
-            <td>${shipment.description || '-'}</td>
-          </tr>
-        </tbody>
-      </table>
-      <p><strong>Catatan:</strong> ${shipment.notes || '-'}</p>
-      <div class="signature-section">
-        <div class="signature-box">
-          <p>Pengirim</p>
-          <div class="signature-line">(${shipment.sender_name || '..................'})</div>
+        <div class="row" style="margin-top:8px;">
+          <div class="field">
+            <div class="label">Dari</div>
+            <div class="value">${shipment.origin_city}</div>
+          </div>
+          <div class="field">
+            <div class="label">Tanggal</div>
+            <div class="value">${formatDateLong(shipment.created_at)}</div>
+          </div>
         </div>
-        <div class="signature-box">
-          <p>Kurir</p>
-          <div class="signature-line">(..................)</div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width:12%">Banyaknya</th>
+              <th>Nama barang menurut keterangan pengirim</th>
+              <th style="width:14%">Berat Barang</th>
+              <th style="width:16%">Ongkos Kirim</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>${shipment.total_colli}</td>
+              <td>${shipment.description || 'Barang kiriman'}</td>
+              <td>${shipment.total_weight || ''}</td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="bottom">
+          <div>
+            <div class="tnc">
+              <h4>Persyaratan Pengiriman</h4>
+              <div>
+                1) Pengirim menjamin isi barang sesuai dengan keterangan.<br/>
+                2) Kerusakan/kehilangan akibat force majeure tidak menjadi tanggung jawab pengangkut.<br/>
+                3) Barang mudah pecah/cepat rusak harus diberi pengaman memadai.<br/>
+                4) Klaim disertai bukti sah dan diajukan selambat-lambatnya 3x24 jam setelah diterima.<br/>
+                5) Perhitungan berat berdasarkan Kg/M3 yang lebih besar.
+              </div>
+              <div class="badge-note">Isi dalam tidak diperiksa</div>
+            </div>
+          </div>
+          <div class="right-summary">
+            <div><strong>Jumlah</strong></div>
+            <div class="date">${shipment.destination_city}, ${formatDate(shipment.created_at)}</div>
+          </div>
         </div>
-        <div class="signature-box">
-          <p>Penerima</p>
-          <div class="signature-line">(${shipment.recipient_name || '..................'})</div>
+
+        <div class="sign-row">
+          <div class="sign">
+            <div>Pengirim</div>
+            <div class="line">(..............................)</div>
+          </div>
+          <div class="sign">
+            <div>Yang Menerima</div>
+            <div class="line">(..............................)</div>
+          </div>
+          <div class="sign">
+            <div>Hormat kami</div>
+            <div class="line">(..............................)</div>
+          </div>
         </div>
       </div>
     </body>
     </html>
   `
-  printWindow.document.write(content)
+  printWindow.document.write(html)
   printWindow.document.close()
-  printWindow.print()
+  printWindow.focus()
+  setTimeout(() => {
+    printWindow.print()
+  }, 250)
 }
 
 const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
   try {
-    const res = await fetch(`/api/dbl?endpoint=get-shipments&dbl_id=${dbl.id}`)
+    const res = await fetch(`/api/dbl?endpoint=items&id=${dbl.id}`)
     const data = await res.json()
-    if (!data.shipments || data.shipments.length === 0) {
+    if (!data.items || data.items.length === 0) {
       alert('Tidak ada SPB dalam DBL ini')
       return
     }
 
-    const dblShipments: Shipment[] = data.shipments
+    const company = await getCompany()
+    
+    const barcodePromises = data.items.map((s: Record<string, unknown>) => {
+      const publicCode = s.public_code as string || ''
+      return new Promise<void>((resolve) => {
+        const img = new Image()
+        img.onload = () => resolve()
+        img.onerror = () => resolve()
+        img.src = `/api/blob?endpoint=generate&code=${publicCode}&type=barcode`
+      })
+    })
+    await Promise.all(barcodePromises)
+
     const printWindow = window.open('', '_blank')
-    if (!printWindow) return
+    if (!printWindow) {
+      alert('Popup blocked. Please allow popups for this site.')
+      return
+    }
 
     let pagesHtml = ''
-    dblShipments.forEach((shipment, index) => {
+    data.items.forEach((s: Record<string, unknown>, index: number) => {
+      const spbNumber = s.spb_number as string || '-'
+      const publicCode = s.public_code as string || ''
+      const shipment = {
+        spb_number: spbNumber,
+        tracking_code: publicCode,
+        sender_name: s.pengirim_name as string || s.customer_name as string || '',
+        recipient_name: s.penerima_name as string || '',
+        origin_city: s.origin as string || '',
+        destination_city: s.destination as string || '',
+        total_colli: Number(s.total_colli) || 0,
+        total_weight: Number(s.berat) || 0,
+        description: s.macam_barang as string || '',
+        status: s.status as string || '',
+        created_at: s.created_at as string || ''
+      }
+      const deliveredStamp = shipment.status === 'DELIVERED' ? `<div class="delivered-stamp">DELIVERED</div>` : ''
+      
       pagesHtml += `
-        <div class="page ${index > 0 ? 'page-break' : ''}">
-          <div class="header-wrapper">
-            <div class="status-badge">${shipment.status}</div>
-            <div class="header">
-              <h1>PT. SINAR TERANG EXPRESS</h1>
-              <p>Jasa Pengiriman Barang Antar Kota</p>
+        <div class="sheet ${index > 0 ? 'page-break' : ''}">
+          ${deliveredStamp}
+          <div class="dbl-banner">DBL: ${dbl.dbl_number} | Kendaraan: ${dbl.vehicle_plate} | Sopir: ${dbl.driver_name}</div>
+          <div class="top">
+            <div>
+              <div class="brand">
+                <img src="${LOGO_URL}" alt="Logo" />
+                <div>
+                  <div class="brand-title">${company?.name ?? 'PERUSAHAAN LOGISTIK'}</div>
+                  <div class="brand-sub">Melayani: Pengiriman ke Seluruh Indonesia</div>
+                </div>
+              </div>
+              <div class="addr">${company?.address ?? ''}</div>
+            </div>
+            <div class="right-box">
+              <div class="title">SURAT PENGANTAR BARANG</div>
+              <div class="spb">No. SPB: ${spbNumber}</div>
+              <div class="code">Kode: ${publicCode}</div>
             </div>
           </div>
-          <div class="title">SURAT JALAN</div>
-          <div class="dbl-info">DBL: ${dbl.dbl_number} | Kendaraan: ${dbl.vehicle_plate} | Sopir: ${dbl.driver_name}</div>
-          <div class="info-grid">
-            <div class="info-section">
-              <h3>PENGIRIM</h3>
-              <div class="info-row"><span class="info-label">Nama</span><span class="info-value">: ${shipment.sender_name || '-'}</span></div>
-              <div class="info-row"><span class="info-label">Kota Asal</span><span class="info-value">: ${shipment.origin_city || '-'}</span></div>
+
+          <div class="barcode">
+            <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode" alt="Barcode" />
+          </div>
+
+          <div class="row">
+            <div class="field">
+              <div class="label">Pengirim</div>
+              <div class="value">${shipment.sender_name || '-'}</div>
             </div>
-            <div class="info-section">
-              <h3>PENERIMA</h3>
-              <div class="info-row"><span class="info-label">Nama</span><span class="info-value">: ${shipment.recipient_name || '-'}</span></div>
-              <div class="info-row"><span class="info-label">Alamat</span><span class="info-value">: ${shipment.recipient_address || '-'}</span></div>
-              <div class="info-row"><span class="info-label">Telepon</span><span class="info-value">: ${shipment.recipient_phone || '-'}</span></div>
-              <div class="info-row"><span class="info-label">Kota Tujuan</span><span class="info-value">: ${shipment.destination_city || '-'}</span></div>
+            <div class="field">
+              <div class="label">Kepada Yth</div>
+              <div class="value">${shipment.recipient_name || '-'}</div>
             </div>
           </div>
-          <table class="goods-table">
+          <div class="row" style="margin-top:8px;">
+            <div class="field">
+              <div class="label">Dari</div>
+              <div class="value">${shipment.origin_city}</div>
+            </div>
+            <div class="field">
+              <div class="label">Tanggal</div>
+              <div class="value">${formatDateLong(shipment.created_at)}</div>
+            </div>
+          </div>
+
+          <table>
             <thead>
               <tr>
-                <th>No. SPB</th>
-                <th>No. Resi</th>
-                <th>Tanggal</th>
-                <th>Layanan</th>
-                <th>Colli</th>
-                <th>Berat (Kg)</th>
-                <th>Keterangan</th>
+                <th style="width:12%">Banyaknya</th>
+                <th>Nama barang menurut keterangan pengirim</th>
+                <th style="width:14%">Berat Barang</th>
+                <th style="width:16%">Ongkos Kirim</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td>${shipment.spb_number || '-'}</td>
-                <td>${shipment.tracking_code}</td>
-                <td>${formatDate(shipment.created_at)}</td>
-                <td>${shipment.service_type || 'REGULAR'}</td>
-                <td>${shipment.total_colli || 0}</td>
-                <td>${shipment.total_weight || 0}</td>
-                <td>${shipment.description || '-'}</td>
+                <td>${shipment.total_colli}</td>
+                <td>${shipment.description || 'Barang kiriman'}</td>
+                <td>${shipment.total_weight || ''}</td>
+                <td></td>
               </tr>
             </tbody>
           </table>
-          <p><strong>Catatan:</strong> ${shipment.notes || '-'}</p>
-          <div class="signature-section">
-            <div class="signature-box">
-              <p>Pengirim</p>
-              <div class="signature-line">(${shipment.sender_name || '..................'})</div>
+
+          <div class="bottom">
+            <div>
+              <div class="tnc">
+                <h4>Persyaratan Pengiriman</h4>
+                <div>
+                  1) Pengirim menjamin isi barang sesuai dengan keterangan.<br/>
+                  2) Kerusakan/kehilangan akibat force majeure tidak menjadi tanggung jawab pengangkut.<br/>
+                  3) Barang mudah pecah/cepat rusak harus diberi pengaman memadai.<br/>
+                  4) Klaim disertai bukti sah dan diajukan selambat-lambatnya 3x24 jam setelah diterima.<br/>
+                  5) Perhitungan berat berdasarkan Kg/M3 yang lebih besar.
+                </div>
+                <div class="badge-note">Isi dalam tidak diperiksa</div>
+              </div>
             </div>
-            <div class="signature-box">
-              <p>Kurir</p>
-              <div class="signature-line">(..................)</div>
+            <div class="right-summary">
+              <div><strong>Jumlah</strong></div>
+              <div class="date">${shipment.destination_city}, ${formatDate(shipment.created_at)}</div>
             </div>
-            <div class="signature-box">
-              <p>Penerima</p>
-              <div class="signature-line">(${shipment.recipient_name || '..................'})</div>
+          </div>
+
+          <div class="sign-row">
+            <div class="sign">
+              <div>Pengirim</div>
+              <div class="line">(..............................)</div>
+            </div>
+            <div class="sign">
+              <div>Yang Menerima</div>
+              <div class="line">(..............................)</div>
+            </div>
+            <div class="sign">
+              <div>Hormat kami</div>
+              <div class="line">(..............................)</div>
             </div>
           </div>
         </div>
       `
     })
 
-    const content = `
+    const html = `
       <!DOCTYPE html>
       <html>
       <head>
         <title>Bulk Surat Jalan - ${dbl.dbl_number}</title>
+        <meta charset="utf-8" />
         <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: Arial, sans-serif; font-size: 12px; }
-          .page { padding: 20px; }
+          :root { --ink:#0e0e0e; --line:#1f2937; --muted:#6b7280; --paper:#fffbe6; }
+          * { box-sizing: border-box; }
+          html, body { height: 100%; }
+          body { font-family: Arial, Helvetica, sans-serif; color: var(--ink); margin:0; padding:24px; }
+          .sheet { width: 210mm; max-width: 210mm; margin:0 auto 20px; background: var(--paper); border: 1px solid var(--line); padding: 18px 18px 14px; position: relative; }
           .page-break { page-break-before: always; }
-          .header { text-align: center; margin-bottom: 15px; border-bottom: 2px solid #000; padding-bottom: 10px; }
-          .header h1 { font-size: 18px; margin-bottom: 5px; }
-          .header p { font-size: 10px; color: #666; }
-          .title { text-align: center; font-size: 16px; font-weight: bold; margin: 10px 0; text-decoration: underline; }
-          .dbl-info { text-align: center; font-size: 11px; color: #444; margin-bottom: 15px; background: #f5f5f5; padding: 5px; }
-          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
-          .info-section { border: 1px solid #ccc; padding: 10px; }
-          .info-section h3 { font-size: 11px; border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-bottom: 8px; }
-          .info-row { display: flex; margin-bottom: 3px; font-size: 11px; }
-          .info-label { width: 80px; font-weight: bold; }
-          .info-value { flex: 1; }
-          .goods-table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 11px; }
-          .goods-table th, .goods-table td { border: 1px solid #000; padding: 6px; text-align: left; }
-          .goods-table th { background: #f0f0f0; }
-          .signature-section { display: flex; justify-content: space-between; margin-top: 30px; }
-          .signature-box { text-align: center; width: 120px; font-size: 10px; }
-          .signature-line { border-top: 1px solid #000; margin-top: 50px; padding-top: 5px; }
-          .status-badge { 
-            display: inline-block; 
-            padding: 3px 10px; 
-            background: #22c55e; 
-            color: white; 
-            font-weight: bold; 
-            font-size: 9px;
-            border-radius: 3px;
-            transform: rotate(-15deg);
+          .dbl-banner { background: #e0e7ff; color: #3730a3; text-align: center; padding: 6px 10px; font-size: 11px; font-weight: 600; margin-bottom: 12px; border-radius: 4px; }
+          .top { display:flex; align-items:flex-start; gap:16px; }
+          .brand { display:flex; gap:10px; align-items:center; }
+          .brand img { width:48px; height:48px; object-fit:contain; }
+          .brand-title { font-weight:800; letter-spacing:.4px; }
+          .brand-sub { font-size:12px; color:#1f2937; margin-top:2px; }
+          .addr { font-size:11px; color: var(--muted); margin-top:6px; white-space:pre-line; }
+          .right-box { margin-left:auto; border:1px solid var(--line); padding:8px 10px; text-align:center; min-width:230px; }
+          .right-box .title { font-weight:800; font-size:13px; letter-spacing:.5px; }
+          .right-box .spb { margin-top:6px; font-size:14px; font-weight:700; }
+          .right-box .code { margin-top:4px; font-size:11px; color: var(--muted); }
+
+          .barcode { text-align:right; margin:8px 0 10px; }
+          .barcode img { width:300px; height:72px; object-fit:contain; border:1px solid #e5e7eb; padding:6px; border-radius:4px; background:#fff; }
+
+          .row { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-top:10px; }
+          .field { border:1px solid var(--line); padding:8px; min-height:44px; }
+          .label { font-size:11px; color:var(--muted); margin-bottom:4px; text-transform:uppercase; }
+          .value { font-size:13px; }
+
+          table { width:100%; border-collapse:collapse; margin-top:12px; }
+          th, td { border:1px solid #000; font-size:12px; padding:6px 8px; }
+          thead th { background:#f7f7f7; }
+
+          .bottom { display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:12px; align-items:start; }
+          .tnc { border:1px solid var(--line); padding:10px; font-size:10px; line-height:1.35; color:#111827; }
+          .tnc h4 { margin:0 0 6px; font-size:11px; }
+          .badge-note { display:inline-block; border:1px solid var(--line); padding:6px 10px; font-weight:700; margin-top:8px; border-radius:4px; }
+
+          .sign-row { display:grid; grid-template-columns: repeat(3,1fr); gap:18px; margin-top:22px; }
+          .sign { text-align:center; font-size:12px; }
+          .line { border-top:1px solid #000; margin-top:60px; padding-top:4px; }
+
+          .right-summary { text-align:right; font-size:12px; }
+          .right-summary .date { margin-top:8px; }
+
+          .delivered-stamp {
             position: absolute;
-            top: 10px;
-            right: 15px;
+            top: 50%;
+            right: 40px;
+            transform: rotate(-15deg) translateY(-50%);
+            font-size: 48px;
+            font-weight: 900;
+            color: rgba(34, 197, 94, 0.25);
+            border: 6px solid rgba(34, 197, 94, 0.25);
+            padding: 10px 30px;
+            border-radius: 12px;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            pointer-events: none;
           }
-          .header-wrapper { position: relative; }
-          @media print { 
-            body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } 
+
+          @media print {
+            body { padding:0; }
+            .sheet { border:0; width:auto; max-width:none; padding:16mm; margin-bottom: 0; }
             .page-break { page-break-before: always; }
+            .delivered-stamp { color: rgba(34, 197, 94, 0.3); border-color: rgba(34, 197, 94, 0.3); }
           }
         </style>
       </head>
@@ -368,9 +592,12 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
       </body>
       </html>
     `
-    printWindow.document.write(content)
+    printWindow.document.write(html)
     printWindow.document.close()
-    printWindow.print()
+    printWindow.focus()
+    setTimeout(() => {
+      printWindow.print()
+    }, 250)
   } catch {
     console.error('Failed to print bulk surat jalan')
   }
@@ -383,38 +610,57 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="p-4 md:p-6">
-    <div class="flex items-center gap-2 mb-6">
-      <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-      <h1 class="text-2xl font-bold">Surat Jalan</h1>
-    </div>
-
-    <div class="grid grid-cols-2 gap-2 mb-4">
-      <button
-        class="px-4 py-2 rounded-lg font-medium transition-colors"
-        :class="activeTab === 'spb' ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'"
-        @click="activeTab = 'spb'"
-      >
-        📄 SPB Individual
-      </button>
-      <button
-        class="px-4 py-2 rounded-lg font-medium transition-colors"
-        :class="activeTab === 'dbl' ? 'bg-primary text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'"
-        @click="activeTab = 'dbl'"
-      >
-        🚚 Per DBL (Bulk)
-      </button>
-    </div>
-
-    <div v-if="activeTab === 'spb'">
-      <div class="mb-4">
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Cari SPB, Resi, Pengirim, Penerima, Tujuan..."
-          class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-gray-800 dark:border-gray-600"
-        />
+  <div class="p-4 md:p-6 max-w-7xl mx-auto">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 mb-6">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="p-2 bg-primary/10 rounded-lg">
+            <svg class="h-7 w-7 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+          </div>
+          <div>
+            <h1 class="text-2xl font-bold">Surat Jalan</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400">Cetak dokumen pengiriman</p>
+          </div>
+        </div>
       </div>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm mb-6">
+      <div class="grid grid-cols-2 gap-0 border-b dark:border-gray-700">
+        <button
+          class="px-6 py-4 font-medium transition-all relative"
+          :class="activeTab === 'spb' ? 'text-primary border-b-2 border-primary bg-primary/5' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'"
+          @click="activeTab = 'spb'"
+        >
+          <span class="flex items-center gap-2">
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+            <span>SPB Individual</span>
+          </span>
+        </button>
+        <button
+          class="px-6 py-4 font-medium transition-all relative"
+          :class="activeTab === 'dbl' ? 'text-primary border-b-2 border-primary bg-primary/5' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'"
+          @click="activeTab = 'dbl'"
+        >
+          <span class="flex items-center gap-2">
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+            <span>Per DBL (Bulk)</span>
+          </span>
+        </button>
+      </div>
+
+      <div v-if="activeTab === 'spb'" class="p-6">
+        <div class="mb-6">
+          <div class="relative">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            <input
+              v-model="searchQuery"
+              type="text"
+              placeholder="Cari SPB, Resi, Pengirim, Penerima, Tujuan..."
+              class="w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-gray-700 dark:border-gray-600"
+            />
+          </div>
+        </div>
 
         <div v-if="loading" class="text-center py-8 text-gray-500 dark:text-gray-400">
           Memuat data...
@@ -430,7 +676,7 @@ onMounted(() => {
               <thead class="bg-gray-100 dark:bg-gray-800">
                 <tr>
                   <th class="px-4 py-3 text-left text-sm font-medium">No. SPB</th>
-                  <th class="px-4 py-3 text-left text-sm font-medium">No. Resi</th>
+                  <th class="px-4 py-3 text-left text-sm font-medium">Kode</th>
                   <th class="px-4 py-3 text-left text-sm font-medium">Pengirim</th>
                   <th class="px-4 py-3 text-left text-sm font-medium">Penerima</th>
                   <th class="px-4 py-3 text-left text-sm font-medium">Tujuan</th>
@@ -438,8 +684,8 @@ onMounted(() => {
                   <th class="px-4 py-3 text-center text-sm font-medium">Aksi</th>
                 </tr>
               </thead>
-              <tbody class="divide-y dark:divide-gray-700">
-                <tr v-for="shipment in filteredShipments" :key="shipment.id" class="hover:bg-gray-50 dark:hover:bg-gray-800">
+              <tbody class="divide-y dark:divide-gray-700 bg-white dark:bg-gray-800">
+                <tr v-for="shipment in filteredShipments" :key="shipment.id" class="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
                   <td class="px-4 py-3 text-sm font-mono">{{ shipment.spb_number || '-' }}</td>
                   <td class="px-4 py-3 text-sm font-mono">{{ shipment.tracking_code }}</td>
                   <td class="px-4 py-3 text-sm">{{ shipment.sender_name || '-' }}</td>
@@ -451,8 +697,9 @@ onMounted(() => {
                     </Badge>
                   </td>
                   <td class="px-4 py-3 text-center">
-                    <Button variant="secondary" @click="printDeliveryNote(shipment)">
-                      🖨️ Print
+                    <Button variant="primary" @click="printDeliveryNote(shipment)">
+                      <svg class="h-4 w-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                      Print
                     </Button>
                   </td>
                 </tr>
@@ -465,12 +712,12 @@ onMounted(() => {
           <div
             v-for="shipment in filteredShipments"
             :key="shipment.id"
-            class="border rounded-lg p-4 space-y-2"
+            class="bg-white dark:bg-gray-800 border rounded-lg p-4 space-y-3 shadow-sm hover:shadow-md transition-shadow"
           >
             <div class="flex justify-between items-start">
               <div>
-                <p class="font-mono text-sm font-medium">{{ shipment.spb_number || shipment.tracking_code }}</p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">{{ shipment.tracking_code }}</p>
+                <p class="font-mono text-sm font-medium">SPB: {{ shipment.spb_number || '-' }}</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 font-mono">{{ shipment.tracking_code }}</p>
               </div>
               <Badge :variant="getStatusVariant(shipment.status)">
                 {{ shipment.status }}
@@ -480,24 +727,26 @@ onMounted(() => {
               <p><span class="text-gray-500 dark:text-gray-400">Dari:</span> {{ shipment.sender_name || '-' }}</p>
               <p><span class="text-gray-500 dark:text-gray-400">Ke:</span> {{ shipment.recipient_name || '-' }} - {{ shipment.destination_city || '-' }}</p>
             </div>
-            <Button variant="secondary" block @click="printDeliveryNote(shipment)">
-              🖨️ Print Surat Jalan
+            <Button variant="primary" block @click="printDeliveryNote(shipment)">
+              <svg class="h-4 w-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+              Print Surat Jalan
             </Button>
           </div>
         </div>
     </div>
 
-    <div v-if="activeTab === 'dbl'">
-      <div class="mb-4">
-        <input
-          v-model="dblSearchQuery"
-          type="text"
-          placeholder="Cari No. DBL, Plat Kendaraan, Sopir, Tujuan..."
-            class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-gray-800 dark:border-gray-600"
-          />
-        </div>
-
-        <div v-if="dblLoading" class="text-center py-8 text-gray-500 dark:text-gray-400">
+      <div v-if="activeTab === 'dbl'" class="p-6">
+        <div class="mb-6">
+          <div class="relative">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            <input
+              v-model="dblSearchQuery"
+              type="text"
+              placeholder="Cari No. DBL, Plat Kendaraan, Sopir, Tujuan..."
+              class="w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-gray-700 dark:border-gray-600"
+            />
+          </div>
+        </div>        <div v-if="dblLoading" class="text-center py-8 text-gray-500 dark:text-gray-400">
           Memuat data DBL...
         </div>
 
@@ -520,8 +769,8 @@ onMounted(() => {
                   <th class="px-4 py-3 text-center text-sm font-medium">Aksi</th>
                 </tr>
               </thead>
-              <tbody class="divide-y dark:divide-gray-700">
-                <tr v-for="dbl in filteredDBL" :key="dbl.id" class="hover:bg-gray-50 dark:hover:bg-gray-800">
+              <tbody class="divide-y dark:divide-gray-700 bg-white dark:bg-gray-800">
+                <tr v-for="dbl in filteredDBL" :key="dbl.id" class="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
                   <td class="px-4 py-3 text-sm font-mono font-medium">{{ dbl.dbl_number }}</td>
                   <td class="px-4 py-3 text-sm">{{ formatDate(dbl.dbl_date) }}</td>
                   <td class="px-4 py-3 text-sm font-mono">{{ dbl.vehicle_plate || '-' }}</td>
@@ -541,7 +790,8 @@ onMounted(() => {
                       :disabled="dbl.shipment_count === 0"
                       @click="printBulkSuratJalan(dbl)"
                     >
-                      🖨️ Print {{ dbl.shipment_count }} SPB
+                      <svg class="h-4 w-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                      Print {{ dbl.shipment_count }} SPB
                     </Button>
                   </td>
                 </tr>
@@ -554,7 +804,7 @@ onMounted(() => {
           <div
             v-for="dbl in filteredDBL"
             :key="dbl.id"
-            class="border rounded-lg p-4 space-y-3"
+            class="bg-white dark:bg-gray-800 border rounded-lg p-4 space-y-3 shadow-sm hover:shadow-md transition-shadow"
           >
             <div class="flex justify-between items-start">
               <div>
@@ -577,11 +827,13 @@ onMounted(() => {
                 :disabled="dbl.shipment_count === 0"
                 @click="printBulkSuratJalan(dbl)"
               >
-                🖨️ Print Semua
+                <svg class="h-4 w-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                Print Semua
               </Button>
             </div>
           </div>
         </div>
+      </div>
     </div>
   </div>
 </template>

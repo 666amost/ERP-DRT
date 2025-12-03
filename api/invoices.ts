@@ -200,7 +200,10 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     try { body = await readJsonNode(req) as CreateInvoiceBody; } catch { body = null as any; }
     if (!body) { writeJson(res, { error: 'Invalid JSON' }, 400); return; }
     
-    if ((!body.customer_name && !body.customer_id) || !body.amount) { writeJson(res, { error: 'Missing required fields' }, 400); return; }
+    if (!body.customer_name && !body.customer_id) { writeJson(res, { error: 'Customer harus diisi' }, 400); return; }
+    
+    const amount = body.amount !== undefined ? Number(body.amount) : 0;
+    if (!amount || amount <= 0) { writeJson(res, { error: 'Nominal/Amount harus diisi dan lebih dari 0' }, 400); return; }
     
     const year = new Date().getFullYear();
     const countResult = await sql`
@@ -226,7 +229,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         ${invoiceNumber},
         ${customerName},
         ${customerId},
-        ${body.amount},
+        ${amount},
         ${body.status || 'pending'},
         now(),
         ${body.tax_percent || 0},
@@ -456,8 +459,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         s.created_at, i.id as invoice_id, i.invoice_number
       from shipments s
       left join invoices i on i.shipment_id = s.id
-      where (i.id is null or i.status in ('pending', 'partial'))
-        and s.status != 'DELIVERED'
+      where s.nominal > 0
+        and (i.id is null or i.status in ('pending', 'partial'))
       order by s.created_at desc
     `;
     writeJson(res, { items });
@@ -485,35 +488,34 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     if (fromDate && toDate) {
       items = await sql`
         select 
-          c.id as customer_id,
-          c.name as customer_name,
+          coalesce(s.customer_id, 0) as customer_id,
+          coalesce(c.name, s.customer_name, 'Unknown') as customer_name,
           count(s.id)::int as total_shipments,
           coalesce(sum(s.total_colli), 0)::int as total_colli,
           coalesce(sum(s.nominal), 0)::float as total_nominal,
           coalesce(sum(case when i.status = 'paid' then i.amount else 0 end), 0)::float as total_paid,
           coalesce(sum(case when i.status in ('pending', 'partial') then i.remaining_amount else 0 end), 0)::float as total_outstanding
-        from customers c
-        left join shipments s on s.customer_id = c.id and s.created_at >= ${fromDate} and s.created_at <= ${toDate + 'T23:59:59'}
-        left join invoices i on i.customer_id = c.id
-        group by c.id, c.name
-        having count(s.id) > 0
+        from shipments s
+        left join customers c on c.id = s.customer_id
+        left join invoices i on i.customer_id = s.customer_id
+        where s.created_at >= ${fromDate} and s.created_at <= ${toDate + 'T23:59:59'}
+        group by s.customer_id, c.name, s.customer_name
         order by total_nominal desc
       `;
     } else {
       items = await sql`
         select 
-          c.id as customer_id,
-          c.name as customer_name,
+          coalesce(s.customer_id, 0) as customer_id,
+          coalesce(c.name, s.customer_name, 'Unknown') as customer_name,
           count(s.id)::int as total_shipments,
           coalesce(sum(s.total_colli), 0)::int as total_colli,
           coalesce(sum(s.nominal), 0)::float as total_nominal,
           coalesce(sum(case when i.status = 'paid' then i.amount else 0 end), 0)::float as total_paid,
           coalesce(sum(case when i.status in ('pending', 'partial') then i.remaining_amount else 0 end), 0)::float as total_outstanding
-        from customers c
-        left join shipments s on s.customer_id = c.id
-        left join invoices i on i.customer_id = c.id
-        group by c.id, c.name
-        having count(s.id) > 0
+        from shipments s
+        left join customers c on c.id = s.customer_id
+        left join invoices i on i.customer_id = s.customer_id
+        group by s.customer_id, c.name, s.customer_name
         order by total_nominal desc
       `;
     }

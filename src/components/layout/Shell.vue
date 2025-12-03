@@ -27,11 +27,11 @@ const sidebarOpen = ref(false);
     <div class="flex flex-col min-h-screen lg:min-h-0">
       <Header @toggle-sidebar="sidebarOpen = !sidebarOpen" />
       <main class="p-4 lg:p-6 flex-1 overflow-auto overflow-x-hidden">
-        <Transition name="page" mode="out-in">
-          <router-view v-slot="{ Component }">
+        <router-view v-slot="{ Component }">
+          <Transition name="page" mode="out-in">
             <component :is="Component" />
-          </router-view>
-        </Transition>
+          </Transition>
+        </router-view>
       </main>
       <BottomNav />
     </div>

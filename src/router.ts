@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import { useAuth, ROLE_PERMISSIONS, type UserRole } from './composables/useAuth';
 
 const Shell = () => import('./components/layout/Shell.vue');
 const Login = () => import('./pages/Login.vue');
@@ -16,11 +17,15 @@ const Pelunasan = () => import('./pages/Pelunasan.vue');
 const DailyReport = () => import('./pages/DailyReport.vue');
 const DBLReport = () => import('./pages/DBLReport.vue');
 const Sales = () => import('./pages/Sales.vue');
+const Unauthorized = () => import('./pages/Unauthorized.vue');
+
+type PermissionKey = keyof typeof ROLE_PERMISSIONS.admin;
 
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/login', name: 'login', component: Login },
+    { path: '/unauthorized', name: 'unauthorized', component: Unauthorized },
     { path: '/', redirect: '/login' },
     {
       path: '/',
@@ -31,15 +36,15 @@ export const router = createRouter({
         { path: 'barang-keluar', name: 'barang-keluar', component: BarangKeluar },
         { path: 'dbl', name: 'dbl', component: DBL },
         { path: 'pelacakan', name: 'pelacakan', component: Pelacakan },
-        { path: 'invoice', name: 'invoice', component: Invoice },
+        { path: 'invoice', name: 'invoice', component: Invoice, meta: { requiresAuth: true, permission: 'canViewKeuangan' as PermissionKey } },
         { path: 'surat-jalan', name: 'surat-jalan', component: SuratJalan },
-        { path: 'outstanding', name: 'outstanding', component: Outstanding },
-        { path: 'pelunasan', name: 'pelunasan', component: Pelunasan },
+        { path: 'outstanding', name: 'outstanding', component: Outstanding, meta: { requiresAuth: true, permission: 'canViewKeuangan' as PermissionKey } },
+        { path: 'pelunasan', name: 'pelunasan', component: Pelunasan, meta: { requiresAuth: true, permission: 'canPelunasan' as PermissionKey } },
         { path: 'report/daily', name: 'daily-report', component: DailyReport },
         { path: 'report/dbl', name: 'dbl-report', component: DBLReport },
-        { path: 'report/sales', name: 'sales-report', component: Sales },
-        { path: 'admin/pod', name: 'admin-pod', component: AdminPodList },
-        { path: 'admin/company', name: 'admin-company', component: AdminCompany }
+        { path: 'report/sales', name: 'sales-report', component: Sales, meta: { requiresAuth: true, permission: 'canViewSalesReport' as PermissionKey } },
+        { path: 'admin/pod', name: 'admin-pod', component: AdminPodList, meta: { requiresAuth: true, permission: 'canViewSettings' as PermissionKey } },
+        { path: 'admin/company', name: 'admin-company', component: AdminCompany, meta: { requiresAuth: true, permission: 'canViewSettings' as PermissionKey } }
       ]
     },
     { path: '/pod/:token', name: 'pod-upload', component: PodUpload, props: true }
@@ -51,6 +56,21 @@ router.beforeEach(async (to, _from, next) => {
     try {
       const res = await fetch('/api/auth?endpoint=me', { credentials: 'include' });
       if (res.ok) {
+        const data = await res.json();
+        const user = data.user;
+        const role: UserRole = user?.role || 'staff';
+        const permissions = ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.staff;
+        
+        if (to.meta.permission) {
+          const requiredPermission = to.meta.permission as PermissionKey;
+          if (!permissions[requiredPermission]) {
+            next('/unauthorized');
+            return;
+          }
+        }
+        
+        const { setUser } = useAuth();
+        setUser(user);
         next();
       } else {
         next('/login');

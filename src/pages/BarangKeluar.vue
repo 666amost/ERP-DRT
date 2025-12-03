@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
 import Button from '../components/ui/Button.vue';
 import Badge from '../components/ui/Badge.vue';
 import CustomerAutocomplete from '../components/CustomerAutocomplete.vue';
 import CityAutocomplete from '../components/CityAutocomplete.vue';
 import { useFormatters } from '../composables/useFormatters';
+import { useAuth } from '../composables/useAuth';
 import { getCompany } from '../lib/company';
 import { Icon } from '@iconify/vue';
 import JsBarcode from 'jsbarcode';
 const LOGO_URL = '/brand/logo.png';
+
+const { permissions, fetchUser } = useAuth();
+const canDelete = computed(() => permissions.value.canDeleteShipment);
+const canEdit = computed(() => permissions.value.canEditShipment);
 
 function toInputDate(val: string | null | undefined): string {
   if (!val) return '';
@@ -524,6 +529,7 @@ async function printLabel() {
 }
 
 onMounted(() => {
+  fetchUser();
   loadShipments();
 });
 </script>
@@ -601,8 +607,8 @@ onMounted(() => {
                 <td class="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 min-w-0">{{ ship.eta ? formatDate(ship.eta) : '-' }}</td>
                 <td class="px-3 py-2 text-right space-x-2 min-w-0">
                   <Button variant="success" class="px-3 py-1 h-8 text-xs min-w-[84px]" @click="viewBarcode(ship)" title="Barcode">Barcode</Button>
-                  <Button variant="primary" class="px-3 py-1 h-8 text-xs min-w-[84px]" @click="openEditModal(ship)" title="Edit">Edit</Button>
-                  <Button variant="default" class="px-3 py-1 h-8 text-xs min-w-[84px] text-red-600 hover:text-red-700 bg-red-50 dark:bg-red-900/20" @click="deleteShipment(ship.id)" title="Delete">Delete</Button>
+                  <Button v-if="canEdit" variant="primary" class="px-3 py-1 h-8 text-xs min-w-[84px]" @click="openEditModal(ship)" title="Edit">Edit</Button>
+                  <Button v-if="canDelete" variant="default" class="px-3 py-1 h-8 text-xs min-w-[84px] text-red-600 hover:text-red-700 bg-red-50 dark:bg-red-900/20" @click="deleteShipment(ship.id)" title="Delete">Delete</Button>
                 </td>
               </tr>
             </tbody>
@@ -667,8 +673,8 @@ onMounted(() => {
                 </div>
                 <div class="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-700 min-w-0">
                   <Button block variant="success" @click="viewBarcode(s)" title="Barcode">Barcode</Button>
-                  <Button block variant="primary" @click="openEditModal(s)" title="Edit">Edit</Button>
-                  <Button block variant="default" class="text-red-600 hover:text-red-700 bg-red-50 rounded-lg" @click="deleteShipment(s.id)" title="Hapus">Hapus</Button>
+                  <Button v-if="canEdit" block variant="primary" @click="openEditModal(s)" title="Edit">Edit</Button>
+                  <Button v-if="canDelete" block variant="default" class="text-red-600 hover:text-red-700 bg-red-50 rounded-lg" @click="deleteShipment(s.id)" title="Hapus">Hapus</Button>
                 </div>
               </div>
             </div>

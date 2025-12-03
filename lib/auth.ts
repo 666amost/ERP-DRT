@@ -6,7 +6,7 @@ export type User = {
   id: number;
   email: string;
   name: string | null;
-  role: 'admin' | 'user';
+  role: 'admin' | 'staff' | 'accounting';
   password_hash: string;
 };
 

@@ -72,29 +72,46 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
+import { useAuth } from '../../composables/useAuth';
 
 const route = useRoute();
 const router = useRouter();
 const showMore = ref(false);
+
+const { permissions, fetchUser } = useAuth();
 
 type NavItem = {
   name: string;
   to: string;
   label: string;
   icon: string;
+  requirePermission?: 'canViewKeuangan' | 'canViewSalesReport' | 'canPelunasan' | 'canViewSettings';
 };
 
-const navItems: NavItem[] = [
+type MoreMenuItem = {
+  to: string;
+  label: string;
+  icon: string;
+  requirePermission?: 'canViewKeuangan' | 'canViewSalesReport' | 'canPelunasan' | 'canViewSettings';
+};
+
+type MoreMenuGroup = {
+  title: string;
+  items: MoreMenuItem[];
+  requirePermission?: 'canViewKeuangan' | 'canViewSalesReport' | 'canPelunasan' | 'canViewSettings';
+};
+
+const allNavItems: NavItem[] = [
   { name: 'dashboard', to: '/dashboard', label: 'Dasbor', icon: 'mdi:view-dashboard-outline' },
   { name: 'barang-keluar', to: '/barang-keluar', label: 'Keluar', icon: 'mdi:archive-arrow-down-outline' },
   { name: 'dbl', to: '/dbl', label: 'DBL', icon: 'mdi:clipboard-list-outline' },
-  { name: 'invoice', to: '/invoice', label: 'Invoice', icon: 'mdi:receipt-text-outline' },
+  { name: 'invoice', to: '/invoice', label: 'Invoice', icon: 'mdi:receipt-text-outline', requirePermission: 'canViewKeuangan' },
 ];
 
-const moreMenuGroups = [
+const allMoreMenuGroups: MoreMenuGroup[] = [
   {
     title: 'Operasional',
     items: [
@@ -104,9 +121,10 @@ const moreMenuGroups = [
   },
   {
     title: 'Keuangan',
+    requirePermission: 'canViewKeuangan',
     items: [
       { to: '/outstanding', label: 'Outstanding', icon: 'mdi:clock-alert-outline' },
-      { to: '/pelunasan', label: 'Pelunasan', icon: 'mdi:cash-check' },
+      { to: '/pelunasan', label: 'Pelunasan', icon: 'mdi:cash-check', requirePermission: 'canPelunasan' },
     ]
   },
   {
@@ -114,16 +132,48 @@ const moreMenuGroups = [
     items: [
       { to: '/report/daily', label: 'Daily SPB', icon: 'mdi:file-chart-outline' },
       { to: '/report/dbl', label: 'DBL Report', icon: 'mdi:truck-delivery-outline' },
-      { to: '/report/sales', label: 'Sales', icon: 'mdi:chart-bar' },
+      { to: '/report/sales', label: 'Sales', icon: 'mdi:chart-bar', requirePermission: 'canViewSalesReport' },
     ]
   },
   {
     title: 'Pengaturan',
+    requirePermission: 'canViewSettings',
     items: [
       { to: '/admin/company', label: 'Company', icon: 'mdi:office-building' },
     ]
   }
 ];
+
+const navItems = computed(() => {
+  const p = permissions.value;
+  return allNavItems.filter(item => {
+    if (item.requirePermission) {
+      return p[item.requirePermission];
+    }
+    return true;
+  });
+});
+
+const moreMenuGroups = computed(() => {
+  const p = permissions.value;
+  return allMoreMenuGroups
+    .filter(group => {
+      if (group.requirePermission) {
+        return p[group.requirePermission];
+      }
+      return true;
+    })
+    .map(group => ({
+      ...group,
+      items: group.items.filter(item => {
+        if (item.requirePermission) {
+          return p[item.requirePermission];
+        }
+        return true;
+      })
+    }))
+    .filter(group => group.items.length > 0);
+});
 
 function isActive(to: string): boolean {
   return route.path === to || route.path.startsWith(to + '/');
@@ -138,6 +188,10 @@ function navigateTo(to: string) {
   showMore.value = false;
   router.push({ path: to });
 }
+
+onMounted(() => {
+  fetchUser();
+});
 </script>
 
 <style scoped>

@@ -2,6 +2,7 @@
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import { computed, ref, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
+import { useAuth } from '../../composables/useAuth';
 
 type SubItem = { to: string; label: string };
 type MenuItem = { 
@@ -9,9 +10,16 @@ type MenuItem = {
   label: string; 
   icon: string; 
   children?: SubItem[];
+  requirePermission?: 'canViewKeuangan' | 'canViewSalesReport' | 'canPelunasan' | 'canViewSettings';
 };
 
-const menuGroups = [
+type MenuGroup = {
+  title: string;
+  items: MenuItem[];
+  requirePermission?: 'canViewKeuangan' | 'canViewSalesReport' | 'canPelunasan' | 'canViewSettings';
+};
+
+const allMenuGroups: MenuGroup[] = [
   {
     title: 'MENU UTAMA',
     items: [
@@ -20,31 +28,57 @@ const menuGroups = [
       { to: '/dbl', label: 'DBL/Manifes', icon: 'mdi:clipboard-list-outline' },
       { to: '/surat-jalan', label: 'Surat Jalan', icon: 'mdi:file-document-outline' },
       { to: '/pelacakan', label: 'Pelacakan', icon: 'mdi:truck-outline' },
-    ] as MenuItem[]
+    ]
   },
   {
     title: 'KEUANGAN',
+    requirePermission: 'canViewKeuangan',
     items: [
       { to: '/invoice', label: 'Invoice', icon: 'mdi:receipt-text-outline' },
       { to: '/outstanding', label: 'Outstanding', icon: 'mdi:clock-alert-outline' },
-      { to: '/pelunasan', label: 'Pelunasan', icon: 'mdi:cash-check' },
-    ] as MenuItem[]
+      { to: '/pelunasan', label: 'Pelunasan', icon: 'mdi:cash-check', requirePermission: 'canPelunasan' },
+    ]
   },
   {
     title: 'REPORT',
     items: [
       { to: '/report/daily', label: 'Daily Report (SPB)', icon: 'mdi:file-chart-outline' },
       { to: '/report/dbl', label: 'DBL Report', icon: 'mdi:truck-delivery-outline' },
-      { to: '/report/sales', label: 'Sales Report', icon: 'mdi:chart-bar' },
-    ] as MenuItem[]
+      { to: '/report/sales', label: 'Sales Report', icon: 'mdi:chart-bar', requirePermission: 'canViewSalesReport' },
+    ]
   },
   {
     title: 'PENGATURAN',
+    requirePermission: 'canViewSettings',
     items: [
       { to: '/admin/company', label: 'Company', icon: 'mdi:office-building' },
-    ] as MenuItem[]
+    ]
   }
 ];
+
+const { user, permissions, fetchUser } = useAuth();
+const currentUser = computed(() => user.value);
+
+const menuGroups = computed(() => {
+  const p = permissions.value;
+  return allMenuGroups
+    .filter(group => {
+      if (group.requirePermission) {
+        return p[group.requirePermission];
+      }
+      return true;
+    })
+    .map(group => ({
+      ...group,
+      items: group.items.filter(item => {
+        if (item.requirePermission) {
+          return p[item.requirePermission];
+        }
+        return true;
+      })
+    }))
+    .filter(group => group.items.length > 0);
+});
 
 const route = useRoute();
 const router = useRouter();
@@ -74,17 +108,8 @@ function handleClick() {
   emit('close');
 }
 
-type MeUser = { id: number; email: string; name: string | null; role: 'admin' | 'user' };
-const currentUser = ref<MeUser | null>(null);
-
-onMounted(async () => {
-  try {
-    const res = await fetch('/api/auth?endpoint=me', { credentials: 'include' });
-    if (res.ok) {
-      const data = await res.json() as { user: MeUser };
-      currentUser.value = data.user;
-    }
-  } catch { /* noop */ }
+onMounted(() => {
+  fetchUser();
 });
 
 function initials(name: string | null | undefined, email: string | null | undefined): string {

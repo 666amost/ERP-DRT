@@ -518,7 +518,7 @@ onMounted(() => {
     <div class="w-full max-w-6xl mx-auto min-w-0">
       <div class="hidden lg:flex items-center justify-between flex-wrap gap-3">
         <div class="text-xl font-semibold dark:text-gray-100">
-          Barang Keluar (Shipments)
+          SPB (Barang Masuk)
         </div>
         <Button
           variant="primary"
@@ -548,6 +548,7 @@ onMounted(() => {
             <thead class="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
               <tr>
                 <th class="px-3 py-2 w-28 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Kode</th>
+                <th class="px-3 py-2 w-28 text-left text-xs font-medium text-gray-600 dark:text-gray-300">SPB</th>
                 <th class="px-3 py-2 w-56 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Customer</th>
                 <th class="px-3 py-2 w-48 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Rute</th>
                 <th class="px-3 py-2 w-16 text-center text-xs font-medium text-gray-600 dark:text-gray-300">Colli</th>
@@ -558,13 +559,18 @@ onMounted(() => {
             </thead>
             <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
               <tr v-if="shipments.length === 0">
-                <td colspan="7" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">Belum ada shipment</td>
+                <td colspan="8" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">Belum ada shipment</td>
               </tr>
               <tr v-for="ship in shipments" :key="ship.id" class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
                 <td class="px-3 py-2 text-sm font-medium dark:text-gray-200">
                   <div class="flex items-center gap-3">
                     <div class="min-w-[72px]">{{ ship.public_code }}</div>
                   </div>
+                </td>
+                <td class="px-3 py-2 text-sm dark:text-gray-300 min-w-0">
+                  <span class="inline-block text-[11px] leading-tight bg-black text-white rounded px-1.5 py-0.5">
+                    {{ ship.spb_number || `SPB-${ship.id}` }}
+                  </span>
                 </td>
                 <td class="px-3 py-2 text-sm dark:text-gray-300 min-w-0">
                   <div class="font-medium truncate">{{ ship.customer_name || '-' }}</div>
@@ -620,6 +626,11 @@ onMounted(() => {
                 <div class="flex items-start justify-between gap-2">
                   <div class="flex-1 min-w-0">
                     <div class="text-sm font-semibold dark:text-gray-100 truncate">{{ s.public_code }}</div>
+                    <div class="mt-0.5">
+                      <span class="inline-block text-[11px] leading-tight bg-black text-white rounded px-1.5 py-0.5">
+                        SPB: {{ s.spb_number || `SPB-${s.id}` }}
+                      </span>
+                    </div>
                     <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{{ s.customer_name || '-' }}</div>
                     <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">{{ s.customer_address || '' }}</div>
                   </div>

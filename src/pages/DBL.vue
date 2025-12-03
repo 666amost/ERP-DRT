@@ -580,18 +580,31 @@ onMounted(() => {
 
       <div class="lg:hidden space-y-3 mt-4">
         <div v-for="dbl in dblList" :key="dbl.id" class="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
-          <div class="flex justify-between items-start mb-2">
+          <div class="flex justify-between items-start">
             <div class="font-medium dark:text-gray-200">{{ dbl.dbl_number || 'DBL-' + dbl.id }}</div>
             <Badge :variant="getStatusVariant(dbl.status)">
               {{ statusOptions.find(o => o.value === dbl.status)?.label || dbl.status }}
             </Badge>
           </div>
-          <div class="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-            <div>{{ dbl.origin || '-' }} → {{ dbl.destination || '-' }}</div>
-            <div>{{ dbl.vehicle_plate || '-' }} | {{ dbl.driver_name || '-' }}</div>
-            <div>{{ dbl.shipment_count || 0 }} resi | {{ formatRupiah(dbl.total_nominal || 0) }}</div>
+          <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {{ dbl.dbl_date ? formatDate(dbl.dbl_date) : '-' }}
           </div>
-          <div class="flex gap-2 mt-3 pt-2 border-t border-gray-100 dark:border-gray-700">
+          <div class="mt-2 text-sm text-gray-700 dark:text-gray-300 space-y-1">
+            <div class="font-medium">{{ dbl.origin || '-' }} → {{ dbl.destination || '-' }}</div>
+            <div class="flex flex-wrap gap-2">
+              <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">
+                {{ dbl.vehicle_plate || '-' }}
+              </span>
+              <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">
+                {{ dbl.driver_name || '-' }}
+              </span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded-full bg-black text-white">{{ dbl.shipment_count || 0 }} resi</span>
+              <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">{{ formatRupiah(dbl.total_nominal || 0) }}</span>
+            </div>
+          </div>
+          <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 grid grid-cols-2 gap-2">
             <Button block variant="success" @click="openShipmentModal(dbl)">Resi</Button>
             <Button block variant="warning" @click="printDaftarMuat(dbl)">Print</Button>
             <Button block variant="info" @click="openInvoiceModal(dbl)">Invoice</Button>

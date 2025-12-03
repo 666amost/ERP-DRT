@@ -43,15 +43,6 @@ async function handleLogout() {
 
 <template>
   <header class="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 lg:px-6">
-    <button
-      class="hidden md:grid h-10 w-10 place-items-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 mr-2"
-      @click="$emit('toggleSidebar')"
-    >
-      <Icon
-        icon="mdi:menu"
-        class="text-[24px] dark:text-gray-200"
-      />
-    </button>
     <div class="flex-1 flex items-center gap-3">
       <div class="relative flex-1 max-w-xl">
         <input
@@ -71,11 +62,11 @@ async function handleLogout() {
     </div>
     <button
       class="h-10 w-10 grid place-items-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200 ml-2"
-      :title="theme.value === 'dark' ? 'Light mode' : 'Dark mode'"
+      :title="theme === 'dark' ? 'Light mode' : 'Dark mode'"
       @click="toggle()"
     >
       <Icon
-        :icon="theme.value === 'dark' ? 'mdi:weather-sunny' : 'mdi:moon-waning-crescent'"
+        :icon="theme === 'dark' ? 'mdi:weather-sunny' : 'mdi:moon-waning-crescent'"
         class="text-[18px] dark:text-gray-200 transition-transform hover:scale-110"
       />
     </button>

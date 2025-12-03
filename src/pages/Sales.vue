@@ -193,7 +193,8 @@ onMounted(() => {
         Tidak ada data untuk periode ini
       </div>
 
-      <div v-else class="overflow-x-auto">
+      <!-- Desktop table -->
+      <div v-else-if="true" class="hidden md:block overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-gray-50 dark:bg-gray-700 border-b">
             <tr>
@@ -228,6 +229,29 @@ onMounted(() => {
             </tr>
           </tfoot>
         </table>
+      </div>
+
+      <!-- Mobile cards -->
+      <div v-else class="md:hidden space-y-3">
+        <div v-for="(item, idx) in filteredItems" :key="item.customer_id" class="border border-gray-200 dark:border-gray-700 rounded-xl p-4 bg-white dark:bg-gray-800">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div class="text-sm font-semibold truncate dark:text-gray-100">{{ item.customer_name || '-' }}</div>
+              <div class="text-xs text-gray-500">No: {{ idx + 1 }}</div>
+            </div>
+          </div>
+          <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
+            <div class="flex items-center gap-2"><span class="text-gray-500">SPB</span><span class="font-medium">{{ item.total_shipments }}</span></div>
+            <div class="flex items-center gap-2"><span class="text-gray-500">Colli</span><span class="font-medium">{{ item.total_colli }}</span></div>
+            <div class="flex items-center gap-2 col-span-2"><span class="text-gray-500">Total</span><span class="font-semibold">{{ formatRupiah(item.total_nominal) }}</span></div>
+            <div class="flex items-center gap-2 col-span-1"><span class="text-gray-500">Lunas</span><span class="font-semibold text-green-600">{{ formatRupiah(item.total_paid) }}</span></div>
+            <div class="flex items-center gap-2 col-span-1"><span class="text-gray-500">Outstanding</span><span class="font-semibold text-red-600">{{ formatRupiah(item.total_outstanding) }}</span></div>
+          </div>
+        </div>
+        <div class="border-t border-gray-100 dark:border-gray-700 pt-3 text-sm font-semibold flex justify-between">
+          <span>Total</span>
+          <span>{{ formatRupiah(totalNominal) }}</span>
+        </div>
       </div>
     </div>
   </div>

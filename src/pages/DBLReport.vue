@@ -152,7 +152,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-4 pb-20 lg:pb-0">
+  <div class="space-y-4 pb-24 lg:pb-0">
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div class="text-xl font-semibold dark:text-gray-100">DBL Report</div>
       <div class="flex gap-2">
@@ -201,7 +201,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 print:hidden">
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 print:hidden">
       <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
         <div class="text-sm text-gray-500">Total DBL</div>
         <div class="text-2xl font-bold text-blue-600">{{ totalDBL }}</div>
@@ -229,48 +229,74 @@ onMounted(() => {
         Tidak ada data DBL untuk periode ini
       </div>
 
-      <div v-else class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead class="bg-gray-50 dark:bg-gray-700 border-b">
-            <tr>
-              <th class="px-2 py-2 text-left">No</th>
-              <th class="px-2 py-2 text-left">Tanggal</th>
-              <th class="px-2 py-2 text-left">No. DBL</th>
-              <th class="px-2 py-2 text-left">Plat</th>
-              <th class="px-2 py-2 text-left">Driver</th>
-              <th class="px-2 py-2 text-left">Tujuan</th>
-              <th class="px-2 py-2 text-center">SPB</th>
-              <th class="px-2 py-2 text-center">Colli</th>
-              <th class="px-2 py-2 text-right">Nominal</th>
-              <th class="px-2 py-2 text-center">Status</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-            <tr v-for="(item, idx) in filteredItems" :key="item.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
-              <td class="px-2 py-2">{{ idx + 1 }}</td>
-              <td class="px-2 py-2">{{ formatDate(item.departure_date || item.created_at) }}</td>
-              <td class="px-2 py-2 font-medium">{{ item.dbl_number || '-' }}</td>
-              <td class="px-2 py-2">{{ item.vehicle_plate || '-' }}</td>
-              <td class="px-2 py-2">{{ item.driver_name || '-' }}</td>
-              <td class="px-2 py-2">{{ item.destination || '-' }}</td>
-              <td class="px-2 py-2 text-center">{{ item.total_shipments }}</td>
-              <td class="px-2 py-2 text-center">{{ item.total_colli }}</td>
-              <td class="px-2 py-2 text-right">{{ formatRupiah(item.total_nominal) }}</td>
-              <td class="px-2 py-2 text-center">
-                <Badge :variant="getStatusVariant(item.status)">{{ item.status }}</Badge>
-              </td>
-            </tr>
-          </tbody>
-          <tfoot class="bg-gray-100 dark:bg-gray-700 font-semibold">
-            <tr>
-              <td colspan="6" class="px-2 py-2 text-right">Total:</td>
-              <td class="px-2 py-2 text-center">{{ totalShipments }}</td>
-              <td class="px-2 py-2 text-center">{{ totalColli }}</td>
-              <td class="px-2 py-2 text-right">{{ formatRupiah(totalNominal) }}</td>
-              <td></td>
-            </tr>
-          </tfoot>
-        </table>
+      <div v-else>
+        <!-- Desktop table -->
+        <div class="hidden md:block overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 dark:bg-gray-700 border-b">
+              <tr>
+                <th class="px-2 py-2 text-left">No</th>
+                <th class="px-2 py-2 text-left">Tanggal</th>
+                <th class="px-2 py-2 text-left">No. DBL</th>
+                <th class="px-2 py-2 text-left">Plat</th>
+                <th class="px-2 py-2 text-left">Driver</th>
+                <th class="px-2 py-2 text-left">Tujuan</th>
+                <th class="px-2 py-2 text-center">SPB</th>
+                <th class="px-2 py-2 text-center">Colli</th>
+                <th class="px-2 py-2 text-right">Nominal</th>
+                <th class="px-2 py-2 text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+              <tr v-for="(item, idx) in filteredItems" :key="item.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <td class="px-2 py-2">{{ idx + 1 }}</td>
+                <td class="px-2 py-2">{{ formatDate(item.departure_date || item.created_at) }}</td>
+                <td class="px-2 py-2 font-medium">{{ item.dbl_number || '-' }}</td>
+                <td class="px-2 py-2">{{ item.vehicle_plate || '-' }}</td>
+                <td class="px-2 py-2">{{ item.driver_name || '-' }}</td>
+                <td class="px-2 py-2">{{ item.destination || '-' }}</td>
+                <td class="px-2 py-2 text-center">{{ item.total_shipments }}</td>
+                <td class="px-2 py-2 text-center">{{ item.total_colli }}</td>
+                <td class="px-2 py-2 text-right">{{ formatRupiah(item.total_nominal) }}</td>
+                <td class="px-2 py-2 text-center">
+                  <Badge :variant="getStatusVariant(item.status)">{{ item.status }}</Badge>
+                </td>
+              </tr>
+            </tbody>
+            <tfoot class="bg-gray-100 dark:bg-gray-700 font-semibold">
+              <tr>
+                <td colspan="6" class="px-2 py-2 text-right">Total:</td>
+                <td class="px-2 py-2 text-center">{{ totalShipments }}</td>
+                <td class="px-2 py-2 text-center">{{ totalColli }}</td>
+                <td class="px-2 py-2 text-right">{{ formatRupiah(totalNominal) }}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <!-- Mobile cards -->
+        <div class="md:hidden space-y-3">
+          <div v-for="item in filteredItems" :key="item.id" class="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+            <div class="flex justify-between items-start">
+              <div class="font-medium dark:text-gray-200">{{ item.dbl_number || '-' }}</div>
+              <Badge :variant="getStatusVariant(item.status)">{{ item.status }}</Badge>
+            </div>
+            <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ formatDate(item.departure_date || item.created_at) }}</div>
+            <div class="mt-2 text-sm text-gray-700 dark:text-gray-300 space-y-1">
+              <div class="font-medium">{{ item.destination || '-' }}</div>
+              <div class="flex flex-wrap gap-2">
+                <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">{{ item.vehicle_plate || '-' }}</span>
+                <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">{{ item.driver_name || '-' }}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded-full bg-black text-white">{{ item.total_shipments }} SPB</span>
+                <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">{{ item.total_colli }} colli</span>
+                <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">{{ formatRupiah(item.total_nominal) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

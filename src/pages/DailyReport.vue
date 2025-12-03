@@ -248,45 +248,68 @@ onMounted(() => {
         Tidak ada data untuk periode ini
       </div>
 
-      <div v-else class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead class="bg-gray-50 dark:bg-gray-700 border-b">
-            <tr>
-              <th class="px-2 py-2 text-left">No</th>
-              <th class="px-2 py-2 text-left">Tanggal</th>
-              <th class="px-2 py-2 text-left">Kode</th>
-              <th class="px-2 py-2 text-left">Customer</th>
-              <th class="px-2 py-2 text-left">Rute</th>
-              <th class="px-2 py-2 text-center">Colli</th>
-              <th class="px-2 py-2 text-right">Nominal</th>
-              <th class="px-2 py-2 text-center">Jenis</th>
-              <th class="px-2 py-2 text-center">Status</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-            <tr v-for="(item, idx) in filteredItems" :key="item.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
-              <td class="px-2 py-2">{{ idx + 1 }}</td>
-              <td class="px-2 py-2">{{ formatDate(item.created_at) }}</td>
-              <td class="px-2 py-2 font-medium">{{ item.public_code || '-' }}</td>
-              <td class="px-2 py-2">{{ item.customer_name || '-' }}</td>
-              <td class="px-2 py-2">{{ item.origin }} → {{ item.destination }}</td>
-              <td class="px-2 py-2 text-center">{{ item.total_colli }}</td>
-              <td class="px-2 py-2 text-right">{{ formatRupiah(item.nominal) }}</td>
-              <td class="px-2 py-2 text-center">{{ item.jenis || '-' }}</td>
-              <td class="px-2 py-2 text-center">
-                <Badge :variant="getStatusVariant(item.status)">{{ item.status }}</Badge>
-              </td>
-            </tr>
-          </tbody>
-          <tfoot class="bg-gray-100 dark:bg-gray-700 font-semibold">
-            <tr>
-              <td colspan="5" class="px-2 py-2 text-right">Total:</td>
-              <td class="px-2 py-2 text-center">{{ totalColli }}</td>
-              <td class="px-2 py-2 text-right">{{ formatRupiah(totalNominal) }}</td>
-              <td colspan="2"></td>
-            </tr>
-          </tfoot>
-        </table>
+      <div v-else>
+        <!-- Desktop table -->
+        <div class="hidden md:block overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 dark:bg-gray-700 border-b">
+              <tr>
+                <th class="px-2 py-2 text-left">No</th>
+                <th class="px-2 py-2 text-left">Tanggal</th>
+                <th class="px-2 py-2 text-left">Kode</th>
+                <th class="px-2 py-2 text-left">Customer</th>
+                <th class="px-2 py-2 text-left">Rute</th>
+                <th class="px-2 py-2 text-center">Colli</th>
+                <th class="px-2 py-2 text-right">Nominal</th>
+                <th class="px-2 py-2 text-center">Jenis</th>
+                <th class="px-2 py-2 text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+              <tr v-for="(item, idx) in filteredItems" :key="item.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <td class="px-2 py-2">{{ idx + 1 }}</td>
+                <td class="px-2 py-2">{{ formatDate(item.created_at) }}</td>
+                <td class="px-2 py-2 font-medium">{{ item.public_code || '-' }}</td>
+                <td class="px-2 py-2">{{ item.customer_name || '-' }}</td>
+                <td class="px-2 py-2">{{ item.origin }} → {{ item.destination }}</td>
+                <td class="px-2 py-2 text-center">{{ item.total_colli }}</td>
+                <td class="px-2 py-2 text-right">{{ formatRupiah(item.nominal) }}</td>
+                <td class="px-2 py-2 text-center">{{ item.jenis || '-' }}</td>
+                <td class="px-2 py-2 text-center">
+                  <Badge :variant="getStatusVariant(item.status)">{{ item.status }}</Badge>
+                </td>
+              </tr>
+            </tbody>
+            <tfoot class="bg-gray-100 dark:bg-gray-700 font-semibold">
+              <tr>
+                <td colspan="5" class="px-2 py-2 text-right">Total:</td>
+                <td class="px-2 py-2 text-center">{{ totalColli }}</td>
+                <td class="px-2 py-2 text-right">{{ formatRupiah(totalNominal) }}</td>
+                <td colspan="2"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <!-- Mobile cards -->
+        <div class="md:hidden space-y-3">
+          <div v-for="item in filteredItems" :key="item.id" class="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+            <div class="flex justify-between items-start">
+              <div class="font-medium dark:text-gray-200">{{ item.public_code || '-' }}</div>
+              <Badge :variant="getStatusVariant(item.status)">{{ item.status }}</Badge>
+            </div>
+            <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ formatDate(item.created_at) }}</div>
+            <div class="mt-2 text-sm text-gray-700 dark:text-gray-300 space-y-1">
+              <div class="font-medium">{{ item.origin }} → {{ item.destination }}</div>
+              <div class="text-xs text-gray-500">{{ item.customer_name || '-' }}</div>
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded-full bg-black text-white">{{ item.total_colli }} colli</span>
+                <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">{{ formatRupiah(item.nominal) }}</span>
+                <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">{{ item.jenis || '-' }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterLink, useRoute, useRouter } from 'vue-router';
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 
 type SubItem = { to: string; label: string };
@@ -16,7 +16,7 @@ const menuGroups = [
     title: 'MENU UTAMA',
     items: [
       { to: '/dashboard', label: 'Dasbor', icon: 'mdi:view-dashboard-outline' },
-      { to: '/barang-keluar', label: 'Barang Keluar', icon: 'mdi:archive-arrow-down-outline' },
+      { to: '/barang-keluar', label: 'SPB', icon: 'mdi:archive-arrow-down-outline' },
       { to: '/dbl', label: 'DBL/Manifes', icon: 'mdi:clipboard-list-outline' },
       { to: '/surat-jalan', label: 'Surat Jalan', icon: 'mdi:file-document-outline' },
       { to: '/pelacakan', label: 'Pelacakan', icon: 'mdi:truck-outline' },
@@ -73,6 +73,28 @@ async function handleLogout() {
 function handleClick() {
   emit('close');
 }
+
+type MeUser = { id: number; email: string; name: string | null; role: 'admin' | 'user' };
+const currentUser = ref<MeUser | null>(null);
+
+onMounted(async () => {
+  try {
+    const res = await fetch('/api/auth?endpoint=me', { credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json() as { user: MeUser };
+      currentUser.value = data.user;
+    }
+  } catch { /* noop */ }
+});
+
+function initials(name: string | null | undefined, email: string | null | undefined): string {
+  const base = (name && name.trim()) ? name!.trim() : ((email || '').split('@')[0] || '');
+  const parts = base.split(/\s+/).filter(Boolean);
+  const first = (parts[0] || '').charAt(0);
+  const second = (parts[1] || '').charAt(0);
+  const inits = `${first}${second}`.toUpperCase();
+  return inits || (first.toUpperCase() || 'US');
+}
 </script>
 
 <template>
@@ -121,10 +143,10 @@ function handleClick() {
           <div v-show="expandedGroups[group.title]" class="space-y-0.5 mt-1">
             <RouterLink
               v-for="item in group.items"
-              :key="item.to"
-              :to="item.to!"
+              :key="item.to || item.label"
+              :to="item.to || '/'"
               class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 hover:translate-x-1"
-              :class="isActive(item.to!).value ? 'bg-primary-light text-primary-dark shadow-sm font-medium' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
+              :class="isActive(item.to || '/').value ? 'bg-primary-light text-primary-dark shadow-sm font-medium' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
               @click="handleClick"
             >
               <Icon
@@ -141,14 +163,14 @@ function handleClick() {
     <div class="p-3 border-t border-gray-100 dark:border-gray-700">
       <div class="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700">
         <div class="h-8 w-8 rounded-full bg-violet-500 text-white grid place-items-center text-xs font-medium">
-          AD
+          {{ initials(currentUser?.name || null, currentUser?.email || null) }}
         </div>
         <div class="flex-1 text-xs min-w-0">
           <div class="font-medium truncate">
-            Admin User
+            {{ currentUser?.name || (currentUser?.email || '').split('@')[0] || 'User' }}
           </div>
           <div class="text-gray-500 truncate">
-            admin@company.com
+            {{ currentUser?.email || '-' }}
           </div>
         </div>
         <button

@@ -66,7 +66,7 @@ export async function getValidSession(sql: Sql, id: string): Promise<(Session & 
   ` as (Session & { user: User })[];
   const row = rows[0];
   if (!row) return null;
-  type RowWithUser = Session & { user_id2: number; email: string; name: string | null; role: 'admin' | 'user'; password_hash: string };
+  type RowWithUser = Session & { user_id2: number; email: string; name: string | null; role: 'admin' | 'staff' | 'accounting'; password_hash: string };
   const r = row as unknown as RowWithUser;
   const user: User = {
     id: r.user_id2,

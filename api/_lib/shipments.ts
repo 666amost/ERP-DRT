@@ -374,7 +374,7 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
       const shipments = await sql`
         select 
           s.id, s.spb_number, s.public_code as tracking_code, 
-          s.customer_id, coalesce(s.customer_name, c.name) as customer_name,
+          s.customer_id, coalesce(s.customer_name, c.name, 'Tanpa Customer') as customer_name,
           s.macam_barang as description,
           coalesce(s.berat, 0)::float as weight,
           coalesce(s.qty, 1)::int as qty,

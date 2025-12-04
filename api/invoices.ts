@@ -69,6 +69,7 @@ type InvoiceItem = {
 
 type CreateInvoiceBody = {
   shipment_id?: number;
+  spb_number?: string;
   dbl_id?: number;
   customer_name?: string;
   customer_id?: number;
@@ -76,6 +77,8 @@ type CreateInvoiceBody = {
   subtotal?: number;
   pph_percent?: number;
   pph_amount?: number;
+  paid_amount?: number;
+  remaining_amount?: number;
   status?: string;
   invoice_date?: string;
   due_date?: string;
@@ -93,6 +96,8 @@ type UpdateInvoiceBody = {
   subtotal?: number;
   pph_percent?: number;
   pph_amount?: number;
+  paid_amount?: number;
+  remaining_amount?: number;
   status?: string;
   invoice_date?: string;
   due_date?: string;
@@ -208,12 +213,21 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     if (!amount || amount <= 0) { writeJson(res, { error: 'Nominal/Amount harus diisi dan lebih dari 0' }, 400); return; }
     
     const year = new Date().getFullYear();
-    const countResult = await sql`
-      select count(*)::int as count from invoices
-      where invoice_number like ${`INV-${year}-%`}
-    ` as [{ count: number }];
+    const prefix = `INV-${year}-`;
+    const maxResult = await sql`
+      select invoice_number from invoices
+      where invoice_number like ${prefix + '%'}
+      order by invoice_number desc
+      limit 1
+    ` as [{ invoice_number: string }] | [];
     
-    const nextNum = (countResult[0]?.count || 0) + 1;
+    let nextNum = 1;
+    if (maxResult.length > 0 && maxResult[0].invoice_number) {
+      const match = maxResult[0].invoice_number.match(/INV-\d{4}-(\d+)/);
+      if (match && match[1]) {
+        nextNum = parseInt(match[1], 10) + 1;
+      }
+    }
     const invoiceNumber = `INV-${year}-${String(nextNum).padStart(4, '0')}`;
     
     let customerName = body.customer_name;
@@ -223,15 +237,23 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       if (!c.length) { writeJson(res, { error: 'Invalid customer_id' }, 400); return; }
       customerName = c[0].name;
     }
-    // If shipment_id provided, try to set spb_number on invoice
-    let spb: string | null = null;
-    if (body.shipment_id) {
+    let spb: string | null = body.spb_number || null;
+    if (!spb && body.shipment_id) {
       const s = await sql`select spb_number from shipments where id = ${body.shipment_id}` as [{ spb_number: string | null }];
       spb = s[0]?.spb_number || null;
     }
+    
+    const subtotal = body.subtotal || amount;
+    const pphPercent = body.pph_percent || 0;
+    const pphAmount = body.pph_amount || 0;
+    const paidAmount = body.paid_amount || 0;
+    const remainingAmount = body.remaining_amount !== undefined ? body.remaining_amount : (amount - paidAmount);
+    
     const result = await sql`
       insert into invoices (
-        shipment_id, invoice_number, spb_number, customer_name, customer_id, amount, status, issued_at, tax_percent, discount_amount, notes
+        shipment_id, invoice_number, spb_number, customer_name, customer_id, 
+        amount, subtotal, pph_percent, pph_amount, total_tagihan,
+        paid_amount, remaining_amount, status, issued_at, notes
       ) values (
         ${body.shipment_id || null},
         ${invoiceNumber},
@@ -239,16 +261,29 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         ${customerName},
         ${customerId},
         ${amount},
+        ${subtotal},
+        ${pphPercent},
+        ${pphAmount},
+        ${amount},
+        ${paidAmount},
+        ${remainingAmount},
         ${body.status || 'partial'},
         now(),
-        ${body.tax_percent || 0},
-        ${body.discount_amount || 0},
         ${body.notes || null}
       )
       returning id
     ` as [{ id: number }];
     
-    writeJson(res, { id: result[0].id, invoice_number: invoiceNumber }, 201);
+    const invoiceId = result[0].id;
+    
+    if (paidAmount > 0) {
+      await sql`
+        insert into invoice_payments (invoice_id, amount, payment_date, payment_method, notes)
+        values (${invoiceId}, ${paidAmount}, now(), 'TRANSFER', 'Pembayaran awal saat buat invoice')
+      `;
+    }
+    
+    writeJson(res, { id: invoiceId, invoice_number: invoiceNumber }, 201);
     return;
   } else if (endpoint === 'update' && req.method === 'PUT') {
     let body: UpdateInvoiceBody;
@@ -266,38 +301,62 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       customerName = c[0].name;
     }
 
-    // Build a safe dynamic update using tagged template parts
-    const updates: any[] = [];
-    const values: any[] = [];
+    const current = await sql`
+      select amount, subtotal, pph_percent, pph_amount, paid_amount, remaining_amount, status 
+      from invoices where id = ${body.id}
+    ` as [{ amount: number; subtotal: number; pph_percent: number; pph_amount: number; paid_amount: number; remaining_amount: number; status: string }];
+    
+    if (!current.length) { writeJson(res, { error: 'Invoice not found' }, 404); return; }
 
-    if (customerName) { updates.push(sql`customer_name = ${customerName}`); }
-    if (customerId !== undefined) { updates.push(sql`customer_id = ${customerId}`); }
-    if (body.amount !== undefined) { updates.push(sql`amount = ${body.amount}`); }
-    if (body.tax_percent !== undefined) { updates.push(sql`tax_percent = ${body.tax_percent}`); }
-    if (body.discount_amount !== undefined) { updates.push(sql`discount_amount = ${body.discount_amount}`); }
-    if (body.notes !== undefined) { updates.push(sql`notes = ${body.notes || null}`); }
-    if (body.status) {
-      updates.push(sql`status = ${body.status}`);
-      if (body.status === 'paid') {
-        updates.push(sql`paid_at = now()`);
-      }
+    const newAmount = body.amount !== undefined ? Number(body.amount) : Number(current[0].amount || 0);
+    const newSubtotal = body.subtotal !== undefined ? Number(body.subtotal) : Number(current[0].subtotal || newAmount);
+    const newPphPercent = body.pph_percent !== undefined ? Number(body.pph_percent) : Number(current[0].pph_percent || 0);
+    const newPphAmount = body.pph_amount !== undefined ? Number(body.pph_amount) : Number(current[0].pph_amount || 0);
+    const newPaidAmount = body.paid_amount !== undefined ? Number(body.paid_amount) : Number(current[0].paid_amount || 0);
+    const newRemaining = body.remaining_amount !== undefined ? Number(body.remaining_amount) : Math.max(0, newAmount - newPaidAmount);
+    
+    let newStatus = body.status || current[0].status;
+    if (newRemaining <= 0 && newPaidAmount > 0) {
+      newStatus = 'paid';
+    } else if (newPaidAmount > 0 && newRemaining > 0) {
+      newStatus = 'partial';
+    } else if (newPaidAmount === 0) {
+      newStatus = 'pending';
     }
 
-    if (!updates.length) { writeJson(res, { error: 'No fields to update' }, 400); return; }
-
-    // Compose the SET clause
-    const setSql = updates.reduce((acc, part, idx) => idx === 0 ? sql`${part}` : sql`${acc}, ${part}`, sql``);
-    await sql`update invoices set ${setSql} where id = ${body.id}`;
-
-    // Post-update adjustments for amounts depending on status
-    if (body.status === 'paid') {
-      await sql`update invoices set paid_amount = coalesce(amount, 0), remaining_amount = 0 where id = ${body.id}`;
-    } else if (body.status === 'partial') {
-      const rows = await sql`select coalesce(amount,0)::float as amount, coalesce(paid_amount,0)::float as paid_amount from invoices where id = ${body.id}` as [{ amount: number; paid_amount: number }];
-      const amt = rows[0]?.amount || 0;
-      const paid = rows[0]?.paid_amount || 0;
-      const remaining = Math.max(0, amt - paid);
-      await sql`update invoices set remaining_amount = ${remaining} where id = ${body.id}`;
+    if (newStatus === 'paid') {
+      await sql`
+        update invoices set
+          customer_name = coalesce(${customerName || null}, customer_name),
+          customer_id = coalesce(${customerId || null}, customer_id),
+          amount = ${newAmount},
+          subtotal = ${newSubtotal},
+          pph_percent = ${newPphPercent},
+          pph_amount = ${newPphAmount},
+          total_tagihan = ${newAmount},
+          paid_amount = ${newPaidAmount},
+          remaining_amount = ${newRemaining},
+          notes = ${body.notes !== undefined ? (body.notes || null) : null},
+          status = ${newStatus},
+          paid_at = coalesce(paid_at, now())
+        where id = ${body.id}
+      `;
+    } else {
+      await sql`
+        update invoices set
+          customer_name = coalesce(${customerName || null}, customer_name),
+          customer_id = coalesce(${customerId || null}, customer_id),
+          amount = ${newAmount},
+          subtotal = ${newSubtotal},
+          pph_percent = ${newPphPercent},
+          pph_amount = ${newPphAmount},
+          total_tagihan = ${newAmount},
+          paid_amount = ${newPaidAmount},
+          remaining_amount = ${newRemaining},
+          notes = ${body.notes !== undefined ? (body.notes || null) : null},
+          status = ${newStatus}
+        where id = ${body.id}
+      `;
     }
 
     writeJson(res, { success: true });
@@ -312,7 +371,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         ii.description, 
         ii.quantity::float as quantity, 
         ii.unit_price::float as unit_price, 
-        ii.tax_type, 
+        ii.tax_type,
         ii.item_discount::float as item_discount,
         s.spb_number,
         s.public_code as tracking_code
@@ -372,7 +431,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       return;
     }
 
-    const invCheck = await sql`select id, total_tagihan, remaining_amount from invoices where id = ${body.invoice_id}` as Array<{ id: number; total_tagihan: number; remaining_amount: number }>;
+    const invCheck = await sql`select id, amount, total_tagihan, paid_amount, remaining_amount from invoices where id = ${body.invoice_id}` as Array<{ id: number; amount: number; total_tagihan: number; paid_amount: number; remaining_amount: number }>;
     if (!invCheck.length) { writeJson(res, { error: 'Invoice not found' }, 404); return; }
 
     const result = await sql`
@@ -389,21 +448,52 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       ) returning id
     ` as [{ id: number }];
 
-    writeJson(res, { id: result[0].id, success: true }, 201);
+    const invoiceAmount = Number(invCheck[0].total_tagihan || invCheck[0].amount || 0);
+    const currentPaid = Number(invCheck[0].paid_amount || 0);
+    const newPaidAmount = currentPaid + Number(body.amount);
+    const newRemainingAmount = Math.max(0, invoiceAmount - newPaidAmount);
+    let newStatus = 'partial';
+    if (newRemainingAmount <= 0) {
+      newStatus = 'paid';
+    } else if (newPaidAmount > 0) {
+      newStatus = 'partial';
+    }
+
+    if (newStatus === 'paid') {
+      await sql`
+        update invoices set 
+          paid_amount = ${newPaidAmount},
+          remaining_amount = ${newRemainingAmount},
+          status = ${newStatus},
+          paid_at = now()
+        where id = ${body.invoice_id}
+      `;
+    } else {
+      await sql`
+        update invoices set 
+          paid_amount = ${newPaidAmount},
+          remaining_amount = ${newRemainingAmount},
+          status = ${newStatus}
+        where id = ${body.invoice_id}
+      `;
+    }
+
+    writeJson(res, { id: result[0].id, success: true, paid_amount: newPaidAmount, remaining_amount: newRemainingAmount, status: newStatus }, 201);
     return;
   } else if (endpoint === 'delete-payment' && req.method === 'DELETE') {
-    const id = url.searchParams.get('id');
-    if (!id) { writeJson(res, { error: 'Missing id' }, 400); return; }
+    const paymentId = url.searchParams.get('payment_id') || url.searchParams.get('id');
+    if (!paymentId) { writeJson(res, { error: 'Missing payment_id' }, 400); return; }
 
-    await sql`delete from invoice_payments where id = ${parseInt(id)}`;
+    await sql`delete from invoice_payments where id = ${parseInt(paymentId)}`;
     writeJson(res, { success: true });
     return;
   } else if (endpoint === 'update-pph' && req.method === 'PUT') {
-    let body: { id: number; pph_percent: number };
-    try { body = await readJsonNode(req) as { id: number; pph_percent: number }; } catch { body = null as unknown as { id: number; pph_percent: number }; }
-    if (!body || !body.id) { writeJson(res, { error: 'Missing id' }, 400); return; }
+    let body: { id?: number; invoice_id?: number; pph_percent: number };
+    try { body = await readJsonNode(req) as { id?: number; invoice_id?: number; pph_percent: number }; } catch { body = null as unknown as { id?: number; invoice_id?: number; pph_percent: number }; }
+    const invoiceId = body?.id || body?.invoice_id;
+    if (!body || !invoiceId) { writeJson(res, { error: 'Missing id or invoice_id' }, 400); return; }
 
-    const inv = await sql`select subtotal, paid_amount from invoices where id = ${body.id}` as [{ subtotal: number; paid_amount: number }];
+    const inv = await sql`select subtotal, paid_amount from invoices where id = ${invoiceId}` as [{ subtotal: number; paid_amount: number }];
     if (!inv.length) { writeJson(res, { error: 'Invoice not found' }, 404); return; }
 
     const subtotal = Number(inv[0].subtotal || 0);
@@ -425,7 +515,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         amount = ${totalTagihan},
         remaining_amount = ${remaining},
         status = ${status}
-      where id = ${body.id}
+      where id = ${invoiceId}
     `;
 
     writeJson(res, { success: true, pph_amount: pphAmount, total_tagihan: totalTagihan, remaining_amount: remaining, status });

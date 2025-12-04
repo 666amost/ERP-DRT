@@ -128,11 +128,12 @@ const discountAmount = ref<number>(0);
 const notes = ref<string>('');
 const pphPercent = ref<number>(0.5);
 const loadingUnpaidShipments = ref(false);
+const manualAmountMode = ref(false);
 
 const uniqueCustomerNames = computed(() => {
   const names = new Set<string>();
   allUnpaidShipments.value.forEach(s => {
-    if (s.customer_name && s.customer_name !== '-') {
+    if (s.customer_name) {
       names.add(s.customer_name);
     }
   });
@@ -212,8 +213,10 @@ function deselectAll(): void {
 
 function updateItemsFromSelection(): void {
   items.value = allUnpaidShipments.value.filter(s => s.shipment_id && selectedShipmentIds.value.has(s.shipment_id));
-  const subtotal = items.value.reduce((sum, it) => sum + (it.unit_price || 0), 0);
-  form.value.amount = String(subtotal);
+  if (!manualAmountMode.value) {
+    const subtotal = items.value.reduce((sum, it) => sum + (it.unit_price || 0), 0);
+    form.value.amount = String(subtotal);
+  }
 }
 
 function onCustomerChange(): void {
@@ -256,17 +259,18 @@ async function saveItemsForInvoice(invoiceId: number): Promise<void> {
 
 function calcSubtotal(): number {
   return items.value.reduce((acc: number, it: Item) => {
-    const lineTotal = (it.quantity || 0) * (it.unit_price || 0);
-    const line = Math.max(0, lineTotal - (it.item_discount || 0));
-    return acc + line;
+    return acc + (it.unit_price || 0);
   }, 0);
+}
+
+function calcPph(): number {
+  return calcSubtotal() * (pphPercent.value / 100);
 }
 
 function calcTotal(): number {
   const subtotal = calcSubtotal();
-  const tax = (taxPercent.value || 0) * subtotal / 100;
-  const total = subtotal + tax - (discountAmount.value || 0);
-  return Math.max(0, total);
+  const pph = calcPph();
+  return Math.max(0, subtotal - pph);
 }
 
 async function loadInvoices() {
@@ -302,19 +306,21 @@ function filterInvoices() {
 
 function openCreateModal(): void {
   editingId.value = null;
-  form.value = { customer_name: '', customer_id: null, amount: '', status: 'pending' };
+  form.value = { customer_name: '', customer_id: null, amount: '', status: 'partial' };
   items.value = [];
   allUnpaidShipments.value = [];
   selectedShipmentIds.value = new Set();
   taxPercent.value = 0;
   discountAmount.value = 0;
   notes.value = '';
+  manualAmountMode.value = false;
   showModal.value = true;
   loadAllUnpaidShipments();
 }
 
 async function openEditModal(invoice: Invoice) {
   editingId.value = invoice.id;
+  manualAmountMode.value = true;
   form.value = {
     customer_name: invoice.customer_name,
     customer_id: invoice.customer_id,
@@ -332,15 +338,39 @@ async function openEditModal(invoice: Invoice) {
 }
 
 async function saveInvoice() {
-  const amount = parseFloat(form.value.amount) || 0;
+  const inputAmount = parseFloat(form.value.amount) || 0;
   if (!form.value.customer_name && !form.value.customer_id) {
-    alert('Pilih customer terlebih dahulu');
-    return;
+    if (items.value.length > 0 && items.value[0].customer_name) {
+      form.value.customer_name = items.value[0].customer_name;
+    } else {
+      alert('Pilih customer terlebih dahulu');
+      return;
+    }
+  }
+
+  const subtotal = calcSubtotal();
+  const pphAmount = calcPph();
+  const totalTagihan = calcTotal();
+  
+  let paidAmount = 0;
+  let remainingAmount = totalTagihan;
+  let finalStatus = form.value.status;
+  
+  if (manualAmountMode.value && inputAmount > 0) {
+    paidAmount = inputAmount;
+    remainingAmount = Math.max(0, totalTagihan - paidAmount);
+    if (remainingAmount <= 0) {
+      finalStatus = 'paid';
+    } else if (paidAmount > 0) {
+      finalStatus = 'partial';
+    }
+  } else if (form.value.status === 'paid') {
+    paidAmount = totalTagihan;
+    remainingAmount = 0;
   }
 
   try {
-    const recomputed = calcTotal();
-    const finalAmount = !isNaN(recomputed) && recomputed > 0 ? recomputed : amount;
+    const firstSpbNumber = items.value[0]?.spb_number || null;
     if (editingId.value) {
       const res = await fetch('/api/invoices?endpoint=update', {
         method: 'PUT',
@@ -349,10 +379,13 @@ async function saveInvoice() {
           id: editingId.value,
           customer_name: form.value.customer_name,
           customer_id: form.value.customer_id || undefined,
-          amount: finalAmount,
-          status: form.value.status,
-          tax_percent: taxPercent.value,
-          discount_amount: discountAmount.value,
+          amount: totalTagihan,
+          subtotal: subtotal,
+          pph_percent: pphPercent.value,
+          pph_amount: pphAmount,
+          paid_amount: paidAmount,
+          remaining_amount: remainingAmount,
+          status: finalStatus,
           notes: notes.value || undefined
         })
       });
@@ -364,12 +397,16 @@ async function saveInvoice() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           shipment_id: items.value[0]?.shipment_id || null,
+          spb_number: firstSpbNumber,
           customer_name: form.value.customer_name,
           customer_id: form.value.customer_id || undefined,
-          amount: finalAmount,
-          status: form.value.status,
-          tax_percent: taxPercent.value,
-          discount_amount: discountAmount.value,
+          amount: totalTagihan,
+          subtotal: subtotal,
+          pph_percent: pphPercent.value,
+          pph_amount: pphAmount,
+          paid_amount: paidAmount,
+          remaining_amount: remainingAmount,
+          status: finalStatus,
           notes: notes.value || undefined
         })
       });
@@ -571,32 +608,39 @@ async function printInvoice(inv: Invoice): Promise<void> {
     invItems = (data.items || []) as Item[];
   } catch (e) {
     console.warn('Failed to load items:', e);
-    // Fallback to current modal items when available
     invItems = items.value && items.value.length ? items.value : [];
   }
   if (!invItems || invItems.length === 0) {
-    // As a final fallback, render a single line with invoice amount
-    invItems = [{ description: 'Jasa pengiriman', quantity: 1, unit_price: inv.amount, tax_type: 'include', item_discount: 0 }];
+    invItems = [{ 
+      description: 'Jasa pengiriman', 
+      quantity: 1, 
+      unit_price: inv.amount, 
+      tax_type: 'include', 
+      item_discount: 0,
+      spb_number: inv.spb_number || ''
+    }];
   }
   
   const subtotal = invItems.reduce((acc: number, it: Item) => {
-    const line = (it.quantity || 0) * (it.unit_price || 0) - (it.item_discount || 0);
-    return acc + line;
+    return acc + (it.unit_price || 0);
   }, 0);
-  const tax = ((inv.tax_percent || 0) * subtotal) / 100;
-  const grand = subtotal + tax - (inv.discount_amount || 0);
+  const pphAmount = (inv.pph_percent || 0) * subtotal / 100;
+  const grand = subtotal - pphAmount;
   const company = await getCompany();
   
   const rows = invItems.map((it: Item) => {
-    const spbOrTracking = (it.spb_number || it.tracking_code || '').replace(/</g,'&lt;');
-    const hasSpb = it.spb_number && it.spb_number.trim();
+    const spbDisplay = it.spb_number || inv.spb_number || '';
+    const trackingDisplay = it.tracking_code || '';
+    const displaySpb = spbDisplay || trackingDisplay || '-';
+    const itemPph = (inv.pph_percent || 0) * (it.unit_price || 0) / 100;
+    const itemTotal = (it.unit_price || 0) - itemPph;
     return `<tr>
-      <td style="padding: 4px 3px; border: 1px solid #000; text-align: center; font-size: 10px; width: 4%;">${hasSpb ? (it.spb_number as string) : (it.tracking_code || '')}</td>
-      <td style="padding: 4px 3px; border: 1px solid #000; font-size: 9px; width: 24%;">${hasSpb ? `<strong>${spbOrTracking}</strong><br>` : ''}${(it.description || '').replace(/</g,'&lt;')}</td>
+      <td style="padding: 4px 3px; border: 1px solid #000; text-align: center; font-size: 10px; width: 12%;">${displaySpb.replace(/</g,'&lt;')}</td>
+      <td style="padding: 4px 3px; border: 1px solid #000; font-size: 9px; width: 24%;">${(it.description || '').replace(/</g,'&lt;')}</td>
       <td style="padding: 4px 3px; border: 1px solid #000; text-align: center; font-size: 10px; width: 8%;">${it.quantity}</td>
       <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-size: 10px; width: 13%;">${formatRupiah(it.unit_price)}</td>
-      <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-size: 10px; width: 13%;">${formatRupiah(it.item_discount || 0)}</td>
-      <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-size: 10px; font-weight: 600; width: 15%;">${formatRupiah((it.quantity || 0) * (it.unit_price || 0) - (it.item_discount || 0))}</td>
+      <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-size: 10px; width: 13%;">${formatRupiah(itemPph)}</td>
+      <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-size: 10px; font-weight: 600; width: 15%;">${formatRupiah(itemTotal)}</td>
     </tr>`;
   }).join('');
 
@@ -858,8 +902,8 @@ async function printInvoice(inv: Invoice): Promise<void> {
             <th style="width: 24%;">No. SPB / Deskripsi</th>
             <th style="width: 8%;">Qty</th>
             <th style="width: 13%;">Harga Satuan</th>
-            <th style="width: 13%;">Diskon</th>
-            <th style="width: 15%;">Subtotal</th>
+            <th style="width: 13%;">PPh</th>
+            <th style="width: 15%;">Total</th>
           </tr>
         </thead>
         <tbody>
@@ -872,13 +916,9 @@ async function printInvoice(inv: Invoice): Promise<void> {
           <div>Subtotal</div>
           <div>${formatRupiah(subtotal)}</div>
         </div>
-        ${inv.tax_percent ? `<div class="totals-row">
-          <div>PPN (${inv.tax_percent}%)</div>
-          <div>${formatRupiah(tax)}</div>
-        </div>` : ''}
-        ${inv.discount_amount ? `<div class="totals-row">
-          <div>Diskon</div>
-          <div>-${formatRupiah(inv.discount_amount)}</div>
+        ${inv.pph_percent ? `<div class="totals-row">
+          <div>PPh (${inv.pph_percent}%)</div>
+          <div>-${formatRupiah(pphAmount)}</div>
         </div>` : ''}
         <div class="totals-row total">
           <div>TOTAL</div>
@@ -965,10 +1005,12 @@ async function printInvoiceReceipt(inv: Invoice): Promise<void> {
   setTimeout(() => { win.print(); }, 250);
 }
 
-watch([items, taxPercent, discountAmount], () => {
-  const total = calcTotal();
-  if (!isNaN(total)) {
-    form.value.amount = String(total);
+watch([items, pphPercent], () => {
+  if (!manualAmountMode.value) {
+    const total = calcTotal();
+    if (!isNaN(total)) {
+      form.value.amount = String(total);
+    }
   }
 }, { deep: true });
 </script>
@@ -1252,14 +1294,22 @@ watch([items, taxPercent, discountAmount], () => {
             </div>
             <div class="flex flex-col gap-3">
               <div>
-                <label class="block text-sm font-medium mb-1">Amount</label>
+                <div class="flex items-center justify-between mb-1">
+                  <label class="block text-sm font-medium">Dibayar (Rp)</label>
+                  <label class="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
+                    <input type="checkbox" v-model="manualAmountMode" class="h-3 w-3" />
+                    Partial
+                  </label>
+                </div>
                 <input
                   v-model="form.amount"
                   type="number"
                   min="0"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  :class="{ 'bg-gray-50': !manualAmountMode, 'bg-white': manualAmountMode }"
                   inputmode="numeric"
                   placeholder="1000000"
+                  @input="manualAmountMode = true"
                 >
               </div>
               <div>
@@ -1500,12 +1550,22 @@ watch([items, taxPercent, discountAmount], () => {
             </div>
             <div class="flex justify-between text-sm text-red-600">
               <span>PPh ({{ pphPercent }}%):</span>
-              <span class="font-semibold">-{{ formatRupiah(calcSubtotal() * (pphPercent / 100)) }}</span>
+              <span class="font-semibold">-{{ formatRupiah(calcPph()) }}</span>
             </div>
             <div class="flex justify-between text-lg font-bold border-t pt-2">
               <span>Total Tagihan:</span>
-              <span>{{ formatRupiah(calcSubtotal() * (1 - pphPercent / 100)) }}</span>
+              <span>{{ formatRupiah(calcTotal()) }}</span>
             </div>
+            <template v-if="manualAmountMode && parseFloat(form.amount) > 0">
+              <div class="flex justify-between text-sm text-green-600 border-t pt-2">
+                <span>Dibayar:</span>
+                <span class="font-semibold">{{ formatRupiah(parseFloat(form.amount) || 0) }}</span>
+              </div>
+              <div class="flex justify-between text-sm text-orange-600">
+                <span>Sisa:</span>
+                <span class="font-semibold">{{ formatRupiah(Math.max(0, calcTotal() - (parseFloat(form.amount) || 0))) }}</span>
+              </div>
+            </template>
           </div>
 
           <div class="flex justify-end gap-2 pt-4 border-t">

@@ -568,11 +568,22 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         s.origin, s.destination, s.total_colli, 
         coalesce(s.berat, 0)::float as total_weight,
         coalesce(s.nominal, 0)::float as nominal,
-        s.created_at, i.id as invoice_id, i.invoice_number
+        s.created_at,
+        i.id as invoice_id, 
+        i.invoice_number,
+        coalesce(i.remaining_amount, s.nominal)::float as remaining_amount,
+        coalesce(i.status, 'no_invoice') as invoice_status
       from shipments s
-      left join invoices i on i.shipment_id = s.id
+      left join invoice_items ii on ii.shipment_id = s.id
+      left join invoices i on i.id = ii.invoice_id
       where s.nominal > 0
-        and (i.id is null or i.status = 'partial')
+        and (
+          i.id is null 
+          or i.status in ('pending', 'partial')
+        )
+      group by s.id, s.spb_number, s.public_code, s.customer_id, s.customer_name,
+               s.origin, s.destination, s.total_colli, s.berat, s.nominal, s.created_at,
+               i.id, i.invoice_number, i.remaining_amount, i.status
       order by s.created_at desc
     `;
     writeJson(res, { items });
@@ -581,9 +592,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const payments = await sql`
       select 
         ip.id, ip.invoice_id, i.invoice_number, i.customer_name,
-        i.amount as original_amount,
+        coalesce(i.amount, 0)::float as original_amount,
         coalesce(i.discount_amount, 0)::float as discount,
-        ip.amount as final_amount,
+        coalesce(ip.amount, 0)::float as final_amount,
         ip.payment_date, ip.payment_method, ip.notes
       from invoice_payments ip
       join invoices i on i.id = ip.invoice_id

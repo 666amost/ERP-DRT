@@ -23,9 +23,11 @@ type OutstandingItem = {
   total_colli: number;
   total_weight: number;
   nominal: number;
+  remaining_amount: number;
   created_at: string;
   invoice_id: number | null;
   invoice_number: string | null;
+  invoice_status: string | null;
 };
 
 const items = ref<OutstandingItem[]>([]);
@@ -64,7 +66,7 @@ const filteredItems = computed(() => {
   return result;
 });
 
-const totalOutstanding = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.nominal || 0), 0));
+const totalOutstanding = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.remaining_amount || i.nominal || 0), 0));
 const totalColli = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_colli || 0), 0));
 const totalWeight = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_weight || 0), 0));
 
@@ -100,6 +102,7 @@ function exportExcel() {
     colli: item.total_colli,
     kg: item.total_weight || 0,
     nominal: item.nominal,
+    sisa: item.remaining_amount || item.nominal,
     tanggal: formatDate(item.created_at)
   }));
 
@@ -117,13 +120,14 @@ function exportExcel() {
       { header: 'Colli', key: 'colli', width: 8, type: 'number', align: 'center' },
       { header: 'Kg', key: 'kg', width: 10, type: 'number', align: 'right' },
       { header: 'Nominal', key: 'nominal', width: 15, type: 'currency', align: 'right' },
+      { header: 'Sisa', key: 'sisa', width: 15, type: 'currency', align: 'right' },
       { header: 'Tanggal', key: 'tanggal', width: 14, type: 'text', align: 'center' }
     ],
     data: exportData,
     totals: {
       colli: totalColli.value,
       kg: totalWeight.value,
-      nominal: totalOutstanding.value
+      sisa: totalOutstanding.value
     }
   });
 }
@@ -232,6 +236,7 @@ onMounted(async () => {
                 <th class="px-2 py-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">Colli</th>
                 <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Kg</th>
                 <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Nominal</th>
+                <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Sisa</th>
                 <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Tanggal</th>
               </tr>
             </thead>
@@ -244,7 +249,8 @@ onMounted(async () => {
                 <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ item.origin }} → {{ item.destination }}</td>
                 <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ item.total_colli }}</td>
                 <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ (item.total_weight || 0).toFixed(1) }}</td>
-                <td class="px-2 py-2 text-right font-medium text-red-600">{{ formatRupiah(item.nominal) }}</td>
+                <td class="px-2 py-2 text-right text-gray-600 dark:text-gray-400">{{ formatRupiah(item.nominal) }}</td>
+                <td class="px-2 py-2 text-right font-medium text-red-600">{{ formatRupiah(item.remaining_amount || item.nominal) }}</td>
                 <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ formatDate(item.created_at) }}</td>
               </tr>
             </tbody>
@@ -253,6 +259,7 @@ onMounted(async () => {
                 <td colspan="5" class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">Total:</td>
                 <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ totalColli }}</td>
                 <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ totalWeight.toFixed(1) }}</td>
+                <td class="px-2 py-2 text-right text-gray-500"></td>
                 <td class="px-2 py-2 text-right text-red-600">{{ formatRupiah(totalOutstanding) }}</td>
                 <td></td>
               </tr>
@@ -268,7 +275,7 @@ onMounted(async () => {
                 <div class="text-xs text-gray-500 dark:text-gray-400">SPB: {{ item.spb_number || '-' }}</div>
               </div>
               <div class="text-right">
-                <div class="text-sm font-bold text-red-600">{{ formatRupiah(item.nominal) }}</div>
+                <div class="text-sm font-bold text-red-600">{{ formatRupiah(item.remaining_amount || item.nominal) }}</div>
                 <div class="text-xs text-gray-500">{{ formatDate(item.created_at) }}</div>
               </div>
             </div>
@@ -310,13 +317,14 @@ onMounted(async () => {
         <thead>
           <tr>
             <th class="text-center" style="width: 5%">No</th>
-            <th style="width: 15%">Kode</th>
-            <th style="width: 10%">SPB</th>
-            <th style="width: 15%">Customer</th>
-            <th style="width: 20%">Rute</th>
-            <th class="text-center" style="width: 7%">Colli</th>
-            <th class="text-right" style="width: 8%">Kg</th>
-            <th class="text-right" style="width: 12%">Nominal</th>
+            <th style="width: 14%">Kode</th>
+            <th style="width: 8%">SPB</th>
+            <th style="width: 14%">Customer</th>
+            <th style="width: 18%">Rute</th>
+            <th class="text-center" style="width: 6%">Colli</th>
+            <th class="text-right" style="width: 7%">Kg</th>
+            <th class="text-right" style="width: 10%">Nominal</th>
+            <th class="text-right" style="width: 10%">Sisa</th>
             <th class="text-center" style="width: 10%">Tanggal</th>
           </tr>
         </thead>
@@ -330,6 +338,7 @@ onMounted(async () => {
             <td class="text-center">{{ item.total_colli }}</td>
             <td class="text-right">{{ (item.total_weight || 0).toFixed(1) }}</td>
             <td class="text-right">{{ formatRupiah(item.nominal) }}</td>
+            <td class="text-right">{{ formatRupiah(item.remaining_amount || item.nominal) }}</td>
             <td class="text-center">{{ formatDate(item.created_at) }}</td>
           </tr>
         </tbody>
@@ -338,6 +347,7 @@ onMounted(async () => {
             <td colspan="5" class="text-right">Total:</td>
             <td class="text-center">{{ totalColli }}</td>
             <td class="text-right">{{ totalWeight.toFixed(1) }}</td>
+            <td class="text-right"></td>
             <td class="text-right">{{ formatRupiah(totalOutstanding) }}</td>
             <td></td>
           </tr>

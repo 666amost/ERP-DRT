@@ -129,9 +129,14 @@ const notes = ref<string>('');
 const pphPercent = ref<number>(0.5);
 const loadingUnpaidShipments = ref(false);
 const manualAmountMode = ref(false);
+const existingPaidAmount = ref<number>(0);
+const editingCustomerName = ref<string>('');
 
 const uniqueCustomerNames = computed(() => {
   const names = new Set<string>();
+  if (editingCustomerName.value) {
+    names.add(editingCustomerName.value);
+  }
   allUnpaidShipments.value.forEach(s => {
     if (s.customer_name) {
       names.add(s.customer_name);
@@ -313,7 +318,10 @@ function openCreateModal(): void {
   taxPercent.value = 0;
   discountAmount.value = 0;
   notes.value = '';
+  pphPercent.value = 0.5;
   manualAmountMode.value = false;
+  existingPaidAmount.value = 0;
+  editingCustomerName.value = '';
   showModal.value = true;
   loadAllUnpaidShipments();
 }
@@ -321,18 +329,29 @@ function openCreateModal(): void {
 async function openEditModal(invoice: Invoice) {
   editingId.value = invoice.id;
   manualAmountMode.value = true;
+  existingPaidAmount.value = invoice.paid_amount || 0;
+  editingCustomerName.value = invoice.customer_name || '';
   form.value = {
     customer_name: invoice.customer_name,
     customer_id: invoice.customer_id,
-    amount: String(invoice.amount),
+    amount: String(invoice.paid_amount || 0),
     status: invoice.status
   };
   taxPercent.value = invoice.tax_percent || 0;
   discountAmount.value = invoice.discount_amount || 0;
+  pphPercent.value = invoice.pph_percent || 0.5;
   notes.value = invoice.notes || '';
   await loadItemsForInvoice(invoice.id);
   if (items.value.length === 0) {
-    items.value = [{ description: 'Jasa pengiriman', quantity: 1, unit_price: invoice.amount, tax_type: 'include', item_discount: 0 }];
+    items.value = [{ 
+      description: 'Jasa pengiriman', 
+      quantity: 1, 
+      unit_price: invoice.subtotal || invoice.amount, 
+      tax_type: 'include', 
+      item_discount: 0,
+      spb_number: invoice.spb_number || '',
+      customer_name: invoice.customer_name
+    }];
   }
   showModal.value = true;
 }
@@ -340,8 +359,9 @@ async function openEditModal(invoice: Invoice) {
 async function saveInvoice() {
   const inputAmount = parseFloat(form.value.amount) || 0;
   if (!form.value.customer_name && !form.value.customer_id) {
-    if (items.value.length > 0 && items.value[0].customer_name) {
-      form.value.customer_name = items.value[0].customer_name;
+    const firstItem = items.value[0];
+    if (items.value.length > 0 && firstItem?.customer_name) {
+      form.value.customer_name = firstItem.customer_name;
     } else {
       alert('Pilih customer terlebih dahulu');
       return;
@@ -351,27 +371,19 @@ async function saveInvoice() {
   const subtotal = calcSubtotal();
   const pphAmount = calcPph();
   const totalTagihan = calcTotal();
-  
-  let paidAmount = 0;
-  let remainingAmount = totalTagihan;
-  let finalStatus = form.value.status;
-  
-  if (manualAmountMode.value && inputAmount > 0) {
-    paidAmount = inputAmount;
-    remainingAmount = Math.max(0, totalTagihan - paidAmount);
-    if (remainingAmount <= 0) {
-      finalStatus = 'paid';
-    } else if (paidAmount > 0) {
-      finalStatus = 'partial';
-    }
-  } else if (form.value.status === 'paid') {
-    paidAmount = totalTagihan;
-    remainingAmount = 0;
-  }
 
   try {
     const firstSpbNumber = items.value[0]?.spb_number || null;
+    
     if (editingId.value) {
+      const newRemaining = Math.max(0, totalTagihan - existingPaidAmount.value);
+      let newStatus = 'pending';
+      if (existingPaidAmount.value >= totalTagihan) {
+        newStatus = 'paid';
+      } else if (existingPaidAmount.value > 0) {
+        newStatus = 'partial';
+      }
+      
       const res = await fetch('/api/invoices?endpoint=update', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -383,15 +395,31 @@ async function saveInvoice() {
           subtotal: subtotal,
           pph_percent: pphPercent.value,
           pph_amount: pphAmount,
-          paid_amount: paidAmount,
-          remaining_amount: remainingAmount,
-          status: finalStatus,
+          remaining_amount: newRemaining,
+          status: newStatus,
           notes: notes.value || undefined
         })
       });
       if (!res.ok) throw new Error('Update failed');
       await saveItemsForInvoice(editingId.value);
     } else {
+      let paidAmount = 0;
+      let remainingAmount = totalTagihan;
+      let finalStatus = form.value.status || 'pending';
+      
+      if (manualAmountMode.value && inputAmount > 0) {
+        paidAmount = inputAmount;
+        remainingAmount = Math.max(0, totalTagihan - paidAmount);
+        if (remainingAmount <= 0) {
+          finalStatus = 'paid';
+        } else if (paidAmount > 0) {
+          finalStatus = 'partial';
+        }
+      } else if (form.value.status === 'paid') {
+        paidAmount = totalTagihan;
+        remainingAmount = 0;
+      }
+      
       const res = await fetch('/api/invoices?endpoint=create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -839,6 +867,21 @@ async function printInvoice(inv: Invoice): Promise<void> {
       color: #999;
       font-style: italic;
     }
+    .lunas-stamp {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-15deg);
+      font-size: 48px;
+      font-weight: 900;
+      color: rgba(34, 197, 94, 0.2);
+      border: 4px solid rgba(34, 197, 94, 0.2);
+      padding: 8px 24px;
+      border-radius: 8px;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      pointer-events: none;
+    }
     @media print {
       html, body { 
         width: 100%;
@@ -857,7 +900,8 @@ async function printInvoice(inv: Invoice): Promise<void> {
   </style>
 </head>
 <body>
-  <div class="container">
+  <div class="container" style="position: relative;">
+    ${(inv.status === 'paid' || (inv.remaining_amount !== undefined && inv.remaining_amount <= 0)) ? '<div class="lunas-stamp">LUNAS</div>' : ''}
     <div class="header">
       <div class="company-info">
         <div class="company-logo">
@@ -1132,43 +1176,45 @@ watch([items, pphPercent], () => {
             <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
               {{ formatDate(inv.issued_at) }}
             </td>
-            <td class="px-4 py-3 text-right space-x-1">
-              <button
-                class="text-blue-600 hover:text-blue-700 text-xs font-medium"
-                @click="openPaymentModal(inv)"
-              >
-                Bayar
-              </button>
-              <button
-                class="text-purple-600 hover:text-purple-700 text-xs font-medium"
-                @click="openPphModal(inv)"
-              >
-                PPh
-              </button>
-              <button
-                class="text-primary hover:text-primary-dark dark:text-blue-400 dark:hover:text-blue-300 text-xs font-medium transition-colors"
-                @click="openEditModal(inv)"
-              >
-                Edit
-              </button>
-              <button
-                class="text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 text-xs font-medium transition-colors"
-                @click="printInvoice(inv)"
-              >
-                Print
-              </button>
-              <button
-                class="text-gray-600 hover:text-gray-700 text-xs font-medium"
-                @click="printInvoiceReceipt(inv)"
-              >
-                T. Terima
-              </button>
-              <button
-                class="text-red-600 hover:text-red-700 text-xs font-medium"
-                @click="deleteInvoice(inv.id)"
-              >
-                Hapus
-              </button>
+            <td class="px-4 py-3 text-right">
+              <div class="flex items-center justify-end gap-1 flex-wrap">
+                <button
+                  class="px-2 py-1 text-xs font-medium text-white bg-blue-500 hover:bg-blue-600 rounded transition-colors"
+                  @click="openPaymentModal(inv)"
+                >
+                  Bayar
+                </button>
+                <button
+                  class="px-2 py-1 text-xs font-medium text-white bg-purple-500 hover:bg-purple-600 rounded transition-colors"
+                  @click="openPphModal(inv)"
+                >
+                  PPh
+                </button>
+                <button
+                  class="px-2 py-1 text-xs font-medium text-white bg-indigo-500 hover:bg-indigo-600 rounded transition-colors"
+                  @click="openEditModal(inv)"
+                >
+                  Edit
+                </button>
+                <button
+                  class="px-2 py-1 text-xs font-medium text-white bg-green-500 hover:bg-green-600 rounded transition-colors"
+                  @click="printInvoice(inv)"
+                >
+                  Print
+                </button>
+                <button
+                  class="px-2 py-1 text-xs font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500 rounded transition-colors"
+                  @click="printInvoiceReceipt(inv)"
+                >
+                  T. Terima
+                </button>
+                <button
+                  class="px-2 py-1 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded transition-colors"
+                  @click="deleteInvoice(inv.id)"
+                >
+                  Hapus
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -1293,7 +1339,7 @@ watch([items, pphPercent], () => {
               </div>
             </div>
             <div class="flex flex-col gap-3">
-              <div>
+              <div v-if="!editingId">
                 <div class="flex items-center justify-between mb-1">
                   <label class="block text-sm font-medium">Dibayar (Rp)</label>
                   <label class="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
@@ -1308,11 +1354,17 @@ watch([items, pphPercent], () => {
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg"
                   :class="{ 'bg-gray-50': !manualAmountMode, 'bg-white': manualAmountMode }"
                   inputmode="numeric"
-                  placeholder="1000000"
+                  placeholder="0 (kosongkan jika belum bayar)"
                   @input="manualAmountMode = true"
                 >
+                <div class="text-xs text-gray-500 mt-1">Isi jika ada pembayaran awal</div>
               </div>
-              <div>
+              <div v-else class="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
+                <div class="text-xs text-gray-600 dark:text-gray-400">Info Pembayaran (gunakan tombol Bayar)</div>
+                <div class="text-sm font-medium text-green-600">Dibayar: {{ formatRupiah(existingPaidAmount) }}</div>
+                <div class="text-sm font-medium text-orange-600">Sisa: {{ formatRupiah(Math.max(0, calcTotal() - existingPaidAmount)) }}</div>
+              </div>
+              <div v-if="!editingId">
                 <label class="block text-sm font-medium mb-1">Status</label>
                 <select
                   v-model="form.status"
@@ -1556,9 +1608,22 @@ watch([items, pphPercent], () => {
               <span>Total Tagihan:</span>
               <span>{{ formatRupiah(calcTotal()) }}</span>
             </div>
-            <template v-if="manualAmountMode && parseFloat(form.amount) > 0">
+            <template v-if="editingId">
               <div class="flex justify-between text-sm text-green-600 border-t pt-2">
-                <span>Dibayar:</span>
+                <span>Sudah Dibayar:</span>
+                <span class="font-semibold">{{ formatRupiah(existingPaidAmount) }}</span>
+              </div>
+              <div class="flex justify-between text-sm text-orange-600">
+                <span>Sisa Tagihan:</span>
+                <span class="font-semibold">{{ formatRupiah(Math.max(0, calcTotal() - existingPaidAmount)) }}</span>
+              </div>
+              <div class="text-xs text-gray-500 mt-2 italic">
+                * Gunakan tombol "Bayar" untuk menambah pembayaran cicilan
+              </div>
+            </template>
+            <template v-else-if="manualAmountMode && parseFloat(form.amount) > 0">
+              <div class="flex justify-between text-sm text-green-600 border-t pt-2">
+                <span>Pembayaran Awal:</span>
                 <span class="font-semibold">{{ formatRupiah(parseFloat(form.amount) || 0) }}</span>
               </div>
               <div class="flex justify-between text-sm text-orange-600">

@@ -10,9 +10,12 @@ type Company = {
   email?: string;
   website?: string;
   notes?: string;
+  bank_name?: string;
+  bank_account?: string;
+  account_holder?: string;
 }
 
-const company = ref<Company>({ name: '', address: '', phone: '', email: '', website: '' });
+const company = ref<Company>({ name: '', address: '', phone: '', email: '', website: '', bank_name: '', bank_account: '', account_holder: '' });
 const loading = ref(true);
 const saving = ref(false);
 
@@ -24,7 +27,7 @@ async function load() {
     if (d.company) company.value = d.company;
   } catch (e) {
     console.error('Failed to fetch company:', e);
-    company.value = { name: '', address: '', phone: '', email: '', website: '' };
+    company.value = { name: '', address: '', phone: '', email: '', website: '', bank_name: '', bank_account: '', account_holder: '' };
   } finally {
     loading.value = false;
   }
@@ -114,6 +117,36 @@ onMounted(load);
               <label class="block text-sm font-medium mb-1">Website</label>
               <input
                 v-model="company.website"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-6 pt-6 border-t border-gray-200">
+          <div class="text-sm font-semibold mb-3">Bank Information (untuk Invoice)</div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-sm font-medium mb-1">Bank Name</label>
+              <input
+                v-model="company.bank_name"
+                placeholder="e.g., PT Bank Central Asia Tbk"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              >
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Bank Account Number</label>
+              <input
+                v-model="company.bank_account"
+                placeholder="e.g., 1234567890"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              >
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Account Holder Name</label>
+              <input
+                v-model="company.account_holder"
+                placeholder="e.g., SUMBER TRANS EXPRESS, PT"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg"
               >
             </div>

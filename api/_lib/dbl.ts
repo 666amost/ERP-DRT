@@ -410,6 +410,119 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
 
       writeJson(res, { success: true, items });
       return
+
+    } else if (endpoint === 'available-shipments' && req.method === 'GET') {
+      try {
+        const items = await sql`
+          select 
+            s.id, 
+            s.spb_number, 
+            s.public_code, 
+            s.customer_id,
+            s.customer_name,
+            s.pengirim_name, 
+            s.penerima_name, 
+            s.penerima_phone,
+            s.origin, 
+            s.destination, 
+            s.macam_barang, 
+            coalesce(s.qty, 0)::float as qty,
+            s.satuan, 
+            coalesce(s.nominal, 0)::float as nominal, 
+            s.total_colli, 
+            s.status,
+            coalesce(s.invoice_generated, false) as invoice_generated
+          from shipments s
+          where s.dbl_id is null 
+          and s.status in ('LOADING', 'BOOKED', 'READY')
+          and coalesce(s.invoice_generated, false) = false
+          order by s.created_at desc
+          limit 100
+        `;
+
+        writeJson(res, { items });
+        return
+      } catch (err) {
+        console.error('[dbl/available-shipments] Error:', err);
+        writeJson(res, { error: 'Failed to fetch available shipments', details: String(err) }, 500);
+        return
+      }
+
+    } else if (endpoint === 'generate-invoices' && req.method === 'POST') {
+      const body = await readJsonNode(req) as { dbl_id: number; pph_percent?: number } | null;
+      if (!body || !body.dbl_id) { writeJson(res, { error: 'Missing dbl_id' }, 400); return }
+
+      const shipments = await sql`
+        select s.*, di.dbl_id
+        from shipments s
+        join dbl_items di on di.shipment_id = s.id
+        where di.dbl_id = ${body.dbl_id}
+        and coalesce(s.invoice_generated, false) = false
+        and s.customer_id is not null
+      `;
+
+      if (shipments.length === 0) {
+        writeJson(res, { error: 'No eligible shipments found' }, 400);
+        return
+      }
+
+      const customerGroups = shipments.reduce((acc, s) => {
+        const cid = s.customer_id;
+        if (!acc[cid]) acc[cid] = [];
+        acc[cid].push(s);
+        return acc;
+      }, {} as Record<number, typeof shipments>);
+
+      const invoices = [];
+      for (const [customerId, customerShipments] of Object.entries(customerGroups)) {
+        const totalAmount = customerShipments.reduce((sum, s) => sum + Number(s.nominal || 0), 0);
+        const pphAmount = body.pph_percent ? (totalAmount * body.pph_percent / 100) : 0;
+        const finalAmount = totalAmount - pphAmount;
+
+        const invoiceNumberResult = await sql`select generate_invoice_number() as num` as [{ num: string }];
+        const invoiceNumber = invoiceNumberResult[0]?.num || `INV-${Date.now()}`;
+
+        const [invoice] = await sql`
+          insert into invoices (
+            invoice_number,
+            customer_id,
+            invoice_date,
+            amount,
+            pph_amount,
+            status
+          ) values (
+            ${invoiceNumber},
+            ${parseInt(customerId)},
+            now(),
+            ${finalAmount},
+            ${pphAmount},
+            'pending'
+          ) returning id
+        ` as [{ id: number }];
+
+        for (const shipment of customerShipments) {
+          await sql`
+            insert into invoice_items (invoice_id, description, quantity, unit_price)
+            values (
+              ${invoice.id}, 
+              ${`Resi: ${shipment.spb_number || shipment.public_code} - ${shipment.macam_barang || 'Jasa Pengiriman'}`},
+              1,
+              ${Number(shipment.nominal || 0)}
+            )
+          `;
+          await sql`
+            update shipments 
+            set invoice_generated = true, status = 'DELIVERED'
+            where id = ${shipment.id}
+          `;
+        }
+
+        invoices.push({ id: invoice.id, invoice_number: invoiceNumber });
+      }
+
+      writeJson(res, { invoices });
+      return
+
     } else if (endpoint === 'report' && req.method === 'GET') {
       const items = await sql`
         select 

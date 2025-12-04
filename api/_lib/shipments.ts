@@ -394,7 +394,8 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
         order by s.created_at desc
       `;
       writeJson(res, { shipments });
-      return
+      return;;
+
     } else if (endpoint === 'delete' && req.method === 'DELETE') {
       const id = url.searchParams.get('id');
       if (!id) { writeJson(res, { error: 'Missing id' }, 400); return }

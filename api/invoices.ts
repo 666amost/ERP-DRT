@@ -9,6 +9,7 @@ type Invoice = {
   shipment_id: number | null;
   dbl_id: number | null;
   invoice_number: string;
+  spb_number: string | null;
   customer_name: string;
   customer_id: number | null;
   amount: number;
@@ -58,6 +59,7 @@ type PaymentHistory = {
 type InvoiceItem = {
   id?: number;
   invoice_id?: number;
+  shipment_id?: number | null;
   description: string;
   quantity: number;
   unit_price: number;
@@ -135,10 +137,10 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     let invoices: Invoice[];
     let total: number;
     
-    if (status && ['pending', 'partial', 'paid', 'cancelled', 'overdue'].includes(status)) {
+    if (status && ['partial', 'paid'].includes(status)) {
       invoices = await sql`
         select 
-          id, shipment_id, dbl_id, invoice_number, customer_name, customer_id,
+          id, shipment_id, dbl_id, invoice_number, spb_number, customer_name, customer_id,
           coalesce(amount, 0)::float as amount, 
           coalesce(subtotal, 0)::float as subtotal,
           coalesce(pph_percent, 0)::float as pph_percent,
@@ -163,7 +165,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     } else {
       invoices = await sql`
         select 
-          id, shipment_id, dbl_id, invoice_number, customer_name, customer_id,
+          id, shipment_id, dbl_id, invoice_number, spb_number, customer_name, customer_id,
           coalesce(amount, 0)::float as amount, 
           coalesce(subtotal, 0)::float as subtotal,
           coalesce(pph_percent, 0)::float as pph_percent,
@@ -221,16 +223,23 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       if (!c.length) { writeJson(res, { error: 'Invalid customer_id' }, 400); return; }
       customerName = c[0].name;
     }
+    // If shipment_id provided, try to set spb_number on invoice
+    let spb: string | null = null;
+    if (body.shipment_id) {
+      const s = await sql`select spb_number from shipments where id = ${body.shipment_id}` as [{ spb_number: string | null }];
+      spb = s[0]?.spb_number || null;
+    }
     const result = await sql`
       insert into invoices (
-        shipment_id, invoice_number, customer_name, customer_id, amount, status, issued_at, tax_percent, discount_amount, notes
+        shipment_id, invoice_number, spb_number, customer_name, customer_id, amount, status, issued_at, tax_percent, discount_amount, notes
       ) values (
         ${body.shipment_id || null},
         ${invoiceNumber},
+        ${spb},
         ${customerName},
         ${customerId},
         ${amount},
-        ${body.status || 'pending'},
+        ${body.status || 'partial'},
         now(),
         ${body.tax_percent || 0},
         ${body.discount_amount || 0},
@@ -257,61 +266,73 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       customerName = c[0].name;
     }
 
-    const sets: string[] = [];
-    if (customerName) sets.push(`customer_name = $${sets.length + 1}`);
-    if (customerId !== undefined) sets.push(`customer_id = $${sets.length + 1}`);
-    if (body.amount !== undefined) sets.push(`amount = $${sets.length + 1}`);
-    if (body.tax_percent !== undefined) sets.push(`tax_percent = $${sets.length + 1}`);
-    if (body.discount_amount !== undefined) sets.push(`discount_amount = $${sets.length + 1}`);
-    if (body.notes !== undefined) sets.push(`notes = $${sets.length + 1}`);
+    // Build a safe dynamic update using tagged template parts
+    const updates: any[] = [];
+    const values: any[] = [];
+
+    if (customerName) { updates.push(sql`customer_name = ${customerName}`); }
+    if (customerId !== undefined) { updates.push(sql`customer_id = ${customerId}`); }
+    if (body.amount !== undefined) { updates.push(sql`amount = ${body.amount}`); }
+    if (body.tax_percent !== undefined) { updates.push(sql`tax_percent = ${body.tax_percent}`); }
+    if (body.discount_amount !== undefined) { updates.push(sql`discount_amount = ${body.discount_amount}`); }
+    if (body.notes !== undefined) { updates.push(sql`notes = ${body.notes || null}`); }
     if (body.status) {
-      sets.push(`status = $${sets.length + 1}`);
-      if (body.status === 'paid') sets.push('paid_at = now()');
+      updates.push(sql`status = ${body.status}`);
+      if (body.status === 'paid') {
+        updates.push(sql`paid_at = now()`);
+      }
     }
-    if (!sets.length) { writeJson(res, { error: 'No fields to update' }, 400); return; }
-    const params: unknown[] = [];
-    if (customerName) params.push(customerName);
-    if (customerId !== undefined) params.push(customerId);
-    if (body.amount !== undefined) params.push(body.amount);
-    if (body.tax_percent !== undefined) params.push(body.tax_percent);
-    if (body.discount_amount !== undefined) params.push(body.discount_amount);
-    if (body.notes !== undefined) params.push(body.notes);
-    if (body.status) params.push(body.status);
-    params.push(body.id);
-    
-    const setClauses: string[] = [];
-    let paramIndex = 0;
-    if (customerName) setClauses.push(`customer_name = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
-    if (customerId !== undefined) setClauses.push(`customer_id = ${params[paramIndex++]}`);
-    if (body.amount !== undefined) setClauses.push(`amount = ${params[paramIndex++]}`);
-    if (body.tax_percent !== undefined) setClauses.push(`tax_percent = ${params[paramIndex++]}`);
-    if (body.discount_amount !== undefined) setClauses.push(`discount_amount = ${params[paramIndex++]}`);
-    if (body.notes !== undefined) setClauses.push(`notes = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
-    if (body.status) {
-      setClauses.push(`status = '${String(params[paramIndex++]).replace(/'/g, "''")}'`);
-      if (body.status === 'paid') setClauses.push('paid_at = now()');
+
+    if (!updates.length) { writeJson(res, { error: 'No fields to update' }, 400); return; }
+
+    // Compose the SET clause
+    const setSql = updates.reduce((acc, part, idx) => idx === 0 ? sql`${part}` : sql`${acc}, ${part}`, sql``);
+    await sql`update invoices set ${setSql} where id = ${body.id}`;
+
+    // Post-update adjustments for amounts depending on status
+    if (body.status === 'paid') {
+      await sql`update invoices set paid_amount = coalesce(amount, 0), remaining_amount = 0 where id = ${body.id}`;
+    } else if (body.status === 'partial') {
+      const rows = await sql`select coalesce(amount,0)::float as amount, coalesce(paid_amount,0)::float as paid_amount from invoices where id = ${body.id}` as [{ amount: number; paid_amount: number }];
+      const amt = rows[0]?.amount || 0;
+      const paid = rows[0]?.paid_amount || 0;
+      const remaining = Math.max(0, amt - paid);
+      await sql`update invoices set remaining_amount = ${remaining} where id = ${body.id}`;
     }
-    
-    const updateQuery = `UPDATE invoices SET ${setClauses.join(', ')} WHERE id = ${body.id}`;
-    await sql(updateQuery as any);
-    
+
     writeJson(res, { success: true });
     return;
   } else if (endpoint === 'items' && req.method === 'GET') {
     const invoiceId = parseInt(url.searchParams.get('invoice_id') || '0');
     if (!invoiceId) { writeJson(res, { error: 'Missing invoice_id' }, 400); return; }
-    const items = await sql`select id, invoice_id, description, quantity::float as quantity, unit_price::float as unit_price, tax_type, item_discount::float as item_discount from invoice_items where invoice_id = ${invoiceId} order by id` as InvoiceItem[];
+    const items = await sql`
+      select 
+        ii.id, 
+        ii.invoice_id, 
+        ii.description, 
+        ii.quantity::float as quantity, 
+        ii.unit_price::float as unit_price, 
+        ii.tax_type, 
+        ii.item_discount::float as item_discount,
+        s.spb_number,
+        s.public_code as tracking_code
+      from invoice_items ii
+      left join shipments s on ii.shipment_id = s.id
+      where ii.invoice_id = ${invoiceId}
+      order by ii.id
+    ` as (InvoiceItem & { spb_number?: string; tracking_code?: string })[];
     writeJson(res, { items });
     return;
   } else if (endpoint === 'set-items' && req.method === 'POST') {
-    let body: { invoice_id: number; items: InvoiceItem[]; tax_percent?: number; discount_amount?: number; notes?: string };
-    try { body = await readJsonNode(req) as { invoice_id: number; items: InvoiceItem[]; tax_percent?: number; discount_amount?: number; notes?: string }; } catch { body = null as any; }
+    let body: { invoice_id: number; items: (InvoiceItem & { id?: number })[]; tax_percent?: number; discount_amount?: number; notes?: string };
+    try { body = await readJsonNode(req) as { invoice_id: number; items: (InvoiceItem & { id?: number })[]; tax_percent?: number; discount_amount?: number; notes?: string }; } catch { body = null as any; }
     if (!body || !body.invoice_id) { writeJson(res, { error: 'Missing invoice_id' }, 400); return; }
 
+    // Upsert per item to preserve ids when present
     await sql`delete from invoice_items where invoice_id = ${body.invoice_id}`;
     for (const it of body.items || []) {
       if (!it || !it.description) continue;
-      await sql`insert into invoice_items (invoice_id, description, quantity, unit_price, tax_type, item_discount) values (${body.invoice_id}, ${it.description}, ${it.quantity || 0}, ${it.unit_price || 0}, ${it.tax_type || 'include'}, ${it.item_discount || 0})`;
+      await sql`insert into invoice_items (invoice_id, shipment_id, description, quantity, unit_price, tax_type, item_discount) values (${body.invoice_id}, ${it.shipment_id || null}, ${it.description}, ${it.quantity || 0}, ${it.unit_price || 0}, ${it.tax_type || 'include'}, ${it.item_discount || 0})`;
     }
     const rows = await sql`select coalesce(sum((quantity*unit_price) - coalesce(item_discount,0)),0)::float as subtotal from invoice_items where invoice_id = ${body.invoice_id}` as [{ subtotal: number }];
     const subtotal = rows[0]?.subtotal || 0;
@@ -461,7 +482,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       from shipments s
       left join invoices i on i.shipment_id = s.id
       where s.nominal > 0
-        and (i.id is null or i.status in ('pending', 'partial'))
+        and (i.id is null or i.status = 'partial')
       order by s.created_at desc
     `;
     writeJson(res, { items });

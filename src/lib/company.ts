@@ -4,6 +4,9 @@ export type CompanyProfile = {
   phone?: string;
   email?: string;
   website?: string;
+  bank_name?: string;
+  bank_account?: string;
+  account_holder?: string;
 };
 
 export const LOGO_URL = '/brand/logo.png';

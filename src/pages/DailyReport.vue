@@ -59,10 +59,10 @@ const serviceTypes = [
 const jenisOptions = [
   { value: '', label: 'Semua Jenis' },
   { value: 'FRANCO', label: 'FRANCO' },
-  { value: 'TJ', label: 'TJ' },
-  { value: 'LPT', label: 'LPT' },
-  { value: 'LJ', label: 'LJ' },
-  { value: 'LB', label: 'LB' }
+  { value: 'TJ', label: 'Tagihan Jakarta' },
+  { value: 'LPT', label: 'Lunas PT' },
+  { value: 'LJ', label: 'Lunas Jakarta' },
+  { value: 'LB', label: 'Lunas Bali' }
 ];
 
 const filteredItems = computed(() => {

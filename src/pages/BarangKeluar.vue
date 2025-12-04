@@ -174,10 +174,10 @@ watch(() => form.value.jenis, (val: string) => {
 
 const jenisOptions = [
   { value: 'FRANCO', label: 'FRANCO' },
-  { value: 'TJ', label: 'TJ (Tagih di Tujuan)' },
-  { value: 'LPT', label: 'LPT (Loco Pabrik Tujuan)' },
-  { value: 'LJ', label: 'LJ (Loco Jalan)' },
-  { value: 'LB', label: 'LB (Langganan Bulanan)' }
+  { value: 'TJ', label: 'Tagihan Jakarta' },
+  { value: 'LPT', label: 'Lunas PT' },
+  { value: 'LJ', label: 'Lunas Jakarta' },
+  { value: 'LB', label: 'Lunas Bali' }
 ];
 
 const statusOptions = [

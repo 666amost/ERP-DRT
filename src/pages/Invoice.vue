@@ -14,6 +14,7 @@ type Invoice = {
   id: number;
   shipment_id: number | null;
   invoice_number: string;
+  spb_number?: string | null;
   customer_name: string;
   customer_id: number | null;
   amount: number;
@@ -50,7 +51,8 @@ type CreateInvoiceForm = {
 };
 
 type Item = {
-  shipment_id?: number;
+  id?: number;
+  shipment_id?: number | null;
   spb_number?: string;
   tracking_code?: string;
   description: string;
@@ -102,7 +104,7 @@ const invoicePayments = ref<InvoicePayment[]>([]);
 const loadingPayments = ref(false);
 const paymentForm = ref({
   amount: '',
-  payment_date: '',
+  payment_date: new Date().toISOString().split('T')[0]!,
   payment_method: 'TRANSFER',
   reference_number: '',
   notes: ''
@@ -115,7 +117,7 @@ const form = ref<CreateInvoiceForm>({
   customer_name: '',
   customer_id: null,
   amount: '',
-  status: 'pending'
+  status: 'partial'
 });
 
 const items = ref<Item[]>([]);
@@ -232,7 +234,7 @@ async function loadItemsForInvoice(id: number | null): Promise<void> {
   try {
     const res = await fetch(`/api/invoices?endpoint=items&invoice_id=${id}`);
     const data = await res.json();
-    items.value = (data.items || []).map((i: { unit_price?: number; description?: string; quantity?: number; tax_type?: string; item_discount?: number }) => ({ ...i, _unit_price_display: i.unit_price ? formatRupiah(i.unit_price) : '' }));
+    items.value = (data.items || []).map((i: { id?: number; shipment_id?: number|null; spb_number?: string; tracking_code?: string; unit_price?: number; description?: string; quantity?: number; tax_type?: string; item_discount?: number }) => ({ ...i, _unit_price_display: i.unit_price ? formatRupiah(i.unit_price) : '' }));
   } catch {
     items.value = [];
   }
@@ -244,7 +246,7 @@ async function saveItemsForInvoice(invoiceId: number): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       invoice_id: invoiceId,
-      items: items.value.map((it) => ({ description: it.description, quantity: it.quantity, unit_price: it.unit_price, tax_type: it.tax_type, item_discount: it.item_discount })),
+      items: items.value.map((it) => ({ id: it.id, shipment_id: it.shipment_id || null, description: it.description, quantity: it.quantity, unit_price: it.unit_price, tax_type: it.tax_type, item_discount: it.item_discount })),
       tax_percent: taxPercent.value,
       discount_amount: discountAmount.value,
       notes: notes.value || undefined
@@ -361,6 +363,7 @@ async function saveInvoice() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          shipment_id: items.value[0]?.shipment_id || null,
           customer_name: form.value.customer_name,
           customer_id: form.value.customer_id || undefined,
           amount: finalAmount,
@@ -411,7 +414,7 @@ async function openPaymentModal(inv: Invoice) {
   showPaymentModal.value = true;
   paymentForm.value = {
     amount: '',
-    payment_date: new Date().toISOString().split('T')[0],
+    payment_date: new Date().toISOString().split('T')[0]!,
     payment_method: 'TRANSFER',
     reference_number: '',
     notes: ''
@@ -421,7 +424,7 @@ async function openPaymentModal(inv: Invoice) {
     const res = await fetch(`/api/invoices?endpoint=payments&invoice_id=${inv.id}`);
     if (res.ok) {
       const data = await res.json();
-      invoicePayments.value = data.payments || [];
+      invoicePayments.value = data.items || [];
     }
   } catch (e) {
     console.error('Failed to load payments:', e);
@@ -554,9 +557,9 @@ watch(() => route.query.create, (val) => {
 // Clear create query when modal closed
 watch(() => showModal.value, (val) => {
   if (!val && route.query.create) {
-    const newQuery = { ...route.query } as Record<string, unknown>;
-    delete (newQuery as Record<string, unknown>)['create'];
-    router.replace({ name: 'invoice', query: newQuery as Record<string, unknown> });
+    const newQuery = { ...route.query };
+    delete newQuery['create'];
+    router.replace({ name: 'invoice', query: newQuery });
   }
 });
 
@@ -566,9 +569,16 @@ async function printInvoice(inv: Invoice): Promise<void> {
     const res = await fetch(`/api/invoices?endpoint=items&invoice_id=${inv.id}`);
     const data = await res.json();
     invItems = (data.items || []) as Item[];
-  } catch {
-    invItems = [];
+  } catch (e) {
+    console.warn('Failed to load items:', e);
+    // Fallback to current modal items when available
+    invItems = items.value && items.value.length ? items.value : [];
   }
+  if (!invItems || invItems.length === 0) {
+    // As a final fallback, render a single line with invoice amount
+    invItems = [{ description: 'Jasa pengiriman', quantity: 1, unit_price: inv.amount, tax_type: 'include', item_discount: 0 }];
+  }
+  
   const subtotal = invItems.reduce((acc: number, it: Item) => {
     const line = (it.quantity || 0) * (it.unit_price || 0) - (it.item_discount || 0);
     return acc + line;
@@ -576,91 +586,380 @@ async function printInvoice(inv: Invoice): Promise<void> {
   const tax = ((inv.tax_percent || 0) * subtotal) / 100;
   const grand = subtotal + tax - (inv.discount_amount || 0);
   const company = await getCompany();
-  const html = `<!DOCTYPE html><html><head><title>Invoice ${inv.invoice_number}</title><style>
-    @page { size: 9.5in 5.5in; margin: 0; }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; font-family: 'Courier New', Courier, monospace; font-size: 9px; color: #111827; }
-    body { margin: 0; padding: 4px; }
-    .sheet { width: 9.5in; height: 5.5in; max-width: 9.5in; background: #fff; padding: 5px 8px; position: relative; overflow: hidden; }
-    .head { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid #000; padding-bottom: 4px; margin-bottom: 4px; }
-    .brand { display: flex; align-items: center; gap: 6px; }
-    .brand img { height: 24px; width: 24px; object-fit: contain; }
-    .brand-name { font-weight: 700; font-size: 10px; }
-    .meta { text-align: right; font-size: 8px; color: #374151; }
-    .meta strong { font-size: 9px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 4px; }
-    th, td { border: 1px solid #000; padding: 2px 4px; font-size: 8px; }
-    th { background: #f9fafb; text-align: left; font-size: 7px; }
-    .right { text-align: right; }
-    .totals { margin-top: 4px; width: 100%; }
-    .totals td { border: none; font-size: 8px; padding: 1px 4px; }
-    .footer { margin-top: 6px; font-size: 7px; color: #6b7280; text-align: center; }
-    .totals-row { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; margin-top: 4px; }
-    .qr-inline { width: 50px; height: 50px; border: 1px solid #e5e7eb; padding: 2px; background: #fff; display: flex; align-items: center; justify-content: center; }
-    .qr-inline img { width: 100%; height: auto; display: block; }
-    @media print {
-      html, body { width: 9.5in; height: 5.5in; }
-      body { padding: 0; }
-      .sheet { border: 0; width: 9.5in; height: 5.5in; max-width: none; padding: 4mm 6mm; page-break-after: always; }
+  
+  const rows = invItems.map((it: Item) => {
+    const spbOrTracking = (it.spb_number || it.tracking_code || '').replace(/</g,'&lt;');
+    const hasSpb = it.spb_number && it.spb_number.trim();
+    return `<tr>
+      <td style="padding: 4px 3px; border: 1px solid #000; text-align: center; font-size: 10px; width: 4%;">${hasSpb ? (it.spb_number as string) : (it.tracking_code || '')}</td>
+      <td style="padding: 4px 3px; border: 1px solid #000; font-size: 9px; width: 24%;">${hasSpb ? `<strong>${spbOrTracking}</strong><br>` : ''}${(it.description || '').replace(/</g,'&lt;')}</td>
+      <td style="padding: 4px 3px; border: 1px solid #000; text-align: center; font-size: 10px; width: 8%;">${it.quantity}</td>
+      <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-size: 10px; width: 13%;">${formatRupiah(it.unit_price)}</td>
+      <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-size: 10px; width: 13%;">${formatRupiah(it.item_discount || 0)}</td>
+      <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-size: 10px; font-weight: 600; width: 15%;">${formatRupiah((it.quantity || 0) * (it.unit_price || 0) - (it.item_discount || 0))}</td>
+    </tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Invoice ${inv.invoice_number}</title>
+  <style>
+    @page { 
+      size: A4; 
+      margin: 0;
     }
-  </style></head><body><div class="sheet">`;
-  const rows = invItems.map((it: Item, idx: number) => `<tr>
-      <td>${idx + 1}</td>
-      <td>${(it.description || '').replace(/</g,'&lt;')}</td>
-      <td class="right">${it.quantity}</td>
-      <td class="right">${formatRupiah(it.unit_price)}</td>
-      <td class="right">${formatRupiah(it.item_discount || 0)}</td>
-      <td class="right">${formatRupiah((it.quantity || 0) * (it.unit_price || 0) - (it.item_discount || 0))}</td>
-    </tr>`).join('');
+    * { 
+      box-sizing: border-box; 
+      margin: 0; 
+      padding: 0; 
+    }
+    html, body { 
+      font-family: Arial, sans-serif; 
+      font-size: 11px; 
+      color: #000; 
+      line-height: 1.3;
+    }
+    body { 
+      padding: 0;
+    }
+    .container {
+      width: 210mm;
+      height: 297mm;
+      margin: 0 auto;
+      padding: 12mm;
+      background: white;
+      page-break-after: always;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+      border-bottom: 2px solid #000;
+      padding-bottom: 8px;
+    }
+    .company-info {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      flex: 1;
+    }
+    .company-logo {
+      width: 35px;
+      height: 35px;
+      flex-shrink: 0;
+    }
+    .company-logo img {
+      width: 100%;
+      height: auto;
+    }
+    .company-details {
+      font-size: 10px;
+    }
+    .company-name {
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .company-address {
+      font-size: 9px;
+      color: #333;
+      margin-top: 1px;
+    }
+    .company-contact {
+      font-size: 9px;
+      color: #333;
+    }
+    .invoice-meta {
+      text-align: right;
+      min-width: 180px;
+    }
+    .invoice-title {
+      font-size: 16px;
+      font-weight: bold;
+      margin-bottom: 6px;
+    }
+    .invoice-meta-row {
+      font-size: 10px;
+      margin-bottom: 2px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .invoice-meta-label {
+      font-weight: bold;
+    }
+    .content {
+      margin: 8px 0;
+    }
+    .bill-to {
+      margin-bottom: 10px;
+    }
+    .bill-to-label {
+      font-weight: bold;
+      font-size: 10px;
+      margin-bottom: 2px;
+    }
+    .bill-to-content {
+      font-size: 10px;
+      padding: 6px;
+      background: #f8f8f8;
+      border: 1px solid #999;
+    }
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 8px;
+      font-size: 10px;
+    }
+    .items-table th {
+      background: #fff;
+      border: 1px solid #000;
+      padding: 4px 3px;
+      text-align: left;
+      font-weight: bold;
+      font-size: 9px;
+    }
+    .items-table td {
+      padding: 3px;
+      border: 1px solid #000;
+    }
+    .totals-section {
+      margin-top: 8px;
+      margin-left: auto;
+      width: 50%;
+    }
+    .totals-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 6px;
+      font-size: 10px;
+      border-bottom: 1px solid #ddd;
+    }
+    .totals-row.total {
+      font-weight: bold;
+      font-size: 11px;
+      border-bottom: 2px solid #000;
+      border-top: 2px solid #000;
+      padding: 4px 6px;
+    }
+    .bank-section {
+      margin: 10px 0;
+      padding: 8px;
+      border: 1px solid #999;
+      background: #f8f8f8;
+      font-size: 9px;
+    }
+    .bank-title {
+      font-weight: bold;
+      margin-bottom: 4px;
+      font-size: 10px;
+    }
+    .bank-row {
+      margin: 2px 0;
+      font-size: 9px;
+    }
+    .bank-row strong {
+      display: inline-block;
+      width: 100px;
+    }
+    .notes-section {
+      margin: 8px 0;
+      padding: 6px;
+      background: #fffacd;
+      border: 1px solid #daa520;
+      font-size: 9px;
+      line-height: 1.3;
+      min-height: 25px;
+    }
+    .footer {
+      margin-top: 15px;
+      display: flex;
+      justify-content: space-between;
+      gap: 15px;
+    }
+    .signature-block {
+      flex: 1;
+      text-align: center;
+      font-size: 9px;
+    }
+    .signature-line {
+      margin-top: 35px;
+      border-top: 1px solid #000;
+      min-height: 50px;
+    }
+    .no-items {
+      text-align: center;
+      padding: 20px;
+      color: #999;
+      font-style: italic;
+    }
+    @media print {
+      html, body { 
+        width: 100%;
+        height: auto;
+        margin: 0;
+        padding: 0;
+      }
+      .container {
+        width: 100%;
+        height: auto;
+        margin: 0;
+        padding: 12mm;
+        page-break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="company-info">
+        <div class="company-logo">
+          <img src="${LOGO_URL}" alt="${company.name}" />
+        </div>
+        <div class="company-details">
+          <div class="company-name">${company.name}</div>
+          <div class="company-address">${company.address || ''}</div>
+          <div class="company-contact">${[company.phone, company.email].filter(Boolean).join(' | ')}</div>
+        </div>
+      </div>
+      <div class="invoice-meta">
+        <div class="invoice-title">INVOICE</div>
+        <div class="invoice-meta-row">
+          <div class="invoice-meta-label">No. Invoice</div>
+          <div>${inv.invoice_number}</div>
+        </div>
+        <div class="invoice-meta-row">
+          <div class="invoice-meta-label">Tanggal</div>
+          <div>${formatDate(inv.issued_at)}</div>
+        </div>
+        <div class="invoice-meta-row">
+          <div class="invoice-meta-label">Status</div>
+          <div>${inv.status.toUpperCase()}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="bill-to">
+        <div class="bill-to-label">TAGIHAN KEPADA:</div>
+        <div class="bill-to-content">
+          <strong>${inv.customer_name}</strong><br>
+          Tgl: ${formatDate(inv.issued_at)}
+        </div>
+      </div>
+
+      <table class="items-table">
+        <thead>
+          <tr>
+            <th style="width: 12%;">No. SPB</th>
+            <th style="width: 24%;">No. SPB / Deskripsi</th>
+            <th style="width: 8%;">Qty</th>
+            <th style="width: 13%;">Harga Satuan</th>
+            <th style="width: 13%;">Diskon</th>
+            <th style="width: 15%;">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+
+      <div class="totals-section">
+        <div class="totals-row">
+          <div>Subtotal</div>
+          <div>${formatRupiah(subtotal)}</div>
+        </div>
+        ${inv.tax_percent ? `<div class="totals-row">
+          <div>PPN (${inv.tax_percent}%)</div>
+          <div>${formatRupiah(tax)}</div>
+        </div>` : ''}
+        ${inv.discount_amount ? `<div class="totals-row">
+          <div>Diskon</div>
+          <div>-${formatRupiah(inv.discount_amount)}</div>
+        </div>` : ''}
+        <div class="totals-row total">
+          <div>TOTAL</div>
+          <div>${formatRupiah(grand || inv.amount)}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bank-section">
+      <div class="bank-title">INFORMASI PEMBAYARAN</div>
+      <div class="bank-row"><strong>Metode:</strong> Transfer Bank / Tunai</div>
+      ${company.bank_name ? `<div class="bank-row"><strong>Bank:</strong> ${company.bank_name.toUpperCase()}</div>
+      <div class="bank-row"><strong>No. Rek:</strong> ${company.bank_account || ''}</div>
+      <div class="bank-row"><strong>A/N:</strong> ${company.account_holder || ''}</div>` : ''}
+      <div class="bank-row" style="margin-top: 4px; font-style: italic; color: #666; border-top: 1px solid #ddd; padding-top: 3px;">Mohon konfirmasi pembayaran via WhatsApp atau email</div>
+    </div>
+
+    ${inv.notes ? `<div class="notes-section"><strong>Catatan:</strong> ${(inv.notes || '').replace(/</g,'&lt;')}</div>` : '<div class="notes-section"><strong>Catatan:</strong> Terima kasih. Pembayaran sesuai dengan ketentuan yang berlaku.</div>'}
+
+    <div class="footer">
+      <div class="signature-block">
+        <div>Disetujui oleh</div>
+        <div class="signature-line"></div>
+      </div>
+      <div class="signature-block">
+        <div>Diterima oleh</div>
+        <div class="signature-line"></div>
+      </div>
+      <div class="signature-block">
+        <div>Mengetahui</div>
+        <div class="signature-line"></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+
   const win = window.open('', '_blank');
   if (!win) return;
   win.document.write(html);
-  win.document.write(`
-    <div class="head">
-        <div class="brand"><img src="${LOGO_URL}" alt="Logo" /><div class="brand-name">${company.name}</div></div>
-      <div class="meta">
-        <div><strong>${company.name}</strong></div>
-        <div>${company.address}</div>
-        <div>${[company.phone, company.email].filter(Boolean).join(' · ')}</div>
-        <div style="margin-top:3px;">No. Invoice: <strong>${inv.invoice_number}</strong></div>
-        <div>Tanggal: ${formatDate(inv.issued_at)}</div>
-        <div>Customer: ${inv.customer_name}</div>
-      </div>
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); }, 250);
+}
+
+async function printInvoiceReceipt(inv: Invoice): Promise<void> {
+  const amountDisplay = formatRupiah(inv.amount || 0);
+  const html = `<!DOCTYPE html><html><head><title>Tanda Terima ${inv.invoice_number}</title><style>
+    @page { size: 9.5in 5.5in; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: 'Courier New', Courier, monospace; font-size: 9px; color: #000; }
+    body { margin: 0; padding: 4px; }
+    .sheet { width: 9.5in; height: 5.5in; padding: 6px; }
+    .two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .copy { border: 1px solid #000; padding: 6px; height: 100%; font-size: 9px; }
+    .head { margin-bottom: 6px; }
+    .meta { font-size: 9px; }
+    .label { font-weight: 700; }
+    .signature { margin-top: 12px; }
+    @media print { .sheet { padding: 4mm 6mm; page-break-after: always; } }
+  </style></head><body><div class="sheet"><div class="two-up">
+    <div class="copy">
+      <div class="head"><div class="label">TANDA TERIMA</div><div>No: ${inv.invoice_number}</div></div>
+      <div class="meta">Diterima dari: <strong>${inv.customer_name}</strong></div>
+      <div class="meta">Jumlah: <strong>${amountDisplay}</strong></div>
+      <div class="meta">Untuk Pembayaran: <strong>${inv.invoice_number}</strong></div>
+      <div class="meta">Tanggal: ${formatDate(inv.issued_at)}</div>
+      <div class="signature">Penerima, <br/><br/><br/> (______________________)</div>
     </div>
-    <table>
-      <thead><tr><th>No</th><th>Deskripsi</th><th class="right">Qty</th><th class="right">Harga</th><th class="right">Diskon</th><th class="right">Subtotal</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="6" style="text-align:center;color:#6b7280;">Tidak ada item</td></tr>'}</tbody>
-    </table>
-    <div class="totals-row">
-      <div class="qr-inline" title="QR Code">
-        <img src="/api/blob?endpoint=generate&code=${inv.invoice_number}&type=qr" alt="QR" />
-      </div>
-      <table class="totals">
-      <tr>
-        <td style="width:70%;"></td>
-        <td class="right" style="width:15%;">Subtotal</td>
-        <td class="right" style="width:15%;">${formatRupiah(subtotal)}</td>
-      </tr>
-      <tr>
-        <td></td>
-        <td class="right">PPN (${inv.tax_percent || 0}%)</td>
-        <td class="right">${formatRupiah(tax)}</td>
-      </tr>
-      <tr>
-        <td></td>
-        <td class="right">Diskon</td>
-        <td class="right">-${formatRupiah(inv.discount_amount || 0)}</td>
-      </tr>
-      <tr>
-        <td></td>
-        <td class="right" style="font-weight:600;">Total</td>
-        <td class="right" style="font-weight:700;">${formatRupiah(grand || inv.amount)}</td>
-      </tr>
-      </table>
+    <div class="copy">
+      <div class="head"><div class="label">TANDA TERIMA</div><div>No: ${inv.invoice_number}</div></div>
+      <div class="meta">Diterima dari: <strong>${inv.customer_name}</strong></div>
+      <div class="meta">Jumlah: <strong>${amountDisplay}</strong></div>
+      <div class="meta">Untuk Pembayaran: <strong>${inv.invoice_number}</strong></div>
+      <div class="meta">Tanggal: ${formatDate(inv.issued_at)}</div>
+      <div class="signature">Penerima, <br/><br/><br/> (______________________)</div>
     </div>
-    <div class="footer">${(inv.notes || '').replace(/</g,'&lt;') || 'Terima kasih. Pembayaran sesuai ketentuan yang berlaku.'}</div>
-  </div>`);
-  win.document.write('</body></html>');
+  </div></div></body></html>`;
+  const win = window.open('', '_blank');
+  if (!win) return;
+  win.document.write(html);
   win.document.close();
   win.focus();
   setTimeout(() => { win.print(); }, 250);
@@ -723,6 +1022,9 @@ watch([items, taxPercent, discountAmount], () => {
               No. Invoice
             </th>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">
+              No. SPB
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">
               Customer
             </th>
             <th class="px-4 py-3 text-right text-xs font-medium text-gray-600">
@@ -761,6 +1063,9 @@ watch([items, taxPercent, discountAmount], () => {
           >
             <td class="px-4 py-3 text-sm font-medium dark:text-gray-200">
               {{ inv.invoice_number }}
+            </td>
+            <td class="px-4 py-3 text-sm dark:text-gray-300">
+              {{ inv.spb_number || '-' }}
             </td>
             <td class="px-4 py-3 text-sm dark:text-gray-300">
               {{ inv.customer_name }}
@@ -809,6 +1114,12 @@ watch([items, taxPercent, discountAmount], () => {
                 @click="printInvoice(inv)"
               >
                 Print
+              </button>
+              <button
+                class="text-gray-600 hover:text-gray-700 text-xs font-medium"
+                @click="printInvoiceReceipt(inv)"
+              >
+                T. Terima
               </button>
               <button
                 class="text-red-600 hover:text-red-700 text-xs font-medium"
@@ -890,6 +1201,14 @@ watch([items, taxPercent, discountAmount], () => {
           <Button
             block
             variant="default"
+            class="text-gray-700"
+            @click="printInvoiceReceipt(inv)"
+          >
+            T. Terima
+          </Button>
+          <Button
+            block
+            variant="default"
             class="text-red-600 hover:text-red-700 bg-red-50 dark:bg-red-900/20"
             @click="deleteInvoice(inv.id)"
           >
@@ -939,7 +1258,6 @@ watch([items, taxPercent, discountAmount], () => {
                   type="number"
                   min="0"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-                  readonly
                   inputmode="numeric"
                   placeholder="1000000"
                 >
@@ -950,14 +1268,11 @@ watch([items, taxPercent, discountAmount], () => {
                   v-model="form.status"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 >
-                  <option value="pending">
-                    Pending
+                  <option value="partial">
+                    Partial
                   </option>
                   <option value="paid">
                     Paid
-                  </option>
-                  <option value="cancelled">
-                    Cancelled
                   </option>
                 </select>
               </div>
@@ -1009,8 +1324,8 @@ watch([items, taxPercent, discountAmount], () => {
                 </thead>
                 <tbody>
                   <tr
-                    v-for="it in getFilteredUnpaidShipments()"
-                    :key="it.shipment_id"
+                    v-for="(it, idx) in getFilteredUnpaidShipments()"
+                    :key="`shipment-${it.id}-${idx}`"
                     class="border-t hover:bg-gray-50 cursor-pointer"
                     :class="{ 'bg-blue-50': selectedShipmentIds.has(it.shipment_id!) }"
                     @click="toggleShipmentSelection(it.shipment_id!)"
@@ -1067,8 +1382,8 @@ watch([items, taxPercent, discountAmount], () => {
                 </thead>
                 <tbody>
                   <tr
-                    v-for="it in items"
-                    :key="it.shipment_id"
+                    v-for="(it, idx) in items"
+                    :key="`item-view-${it.id}-${idx}`"
                     class="border-t"
                   >
                     <td class="px-2 py-2">
@@ -1120,8 +1435,8 @@ watch([items, taxPercent, discountAmount], () => {
                 </thead>
                 <tbody>
                   <tr
-                    v-for="it in items"
-                    :key="it.shipment_id"
+                    v-for="(it, idx) in items"
+                    :key="`item-edit-${it.id}-${idx}`"
                     class="border-t"
                   >
                     <td class="px-2 py-2">

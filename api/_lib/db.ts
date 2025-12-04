@@ -19,6 +19,9 @@ export type CompanyConfig = {
   phone?: string;
   email?: string;
   website?: string;
+  bank_name?: string;
+  bank_account?: string;
+  account_holder?: string;
 };
 
 export function getCompanyConfig(): CompanyConfig {

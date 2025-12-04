@@ -304,7 +304,10 @@ function filterInvoices() {
     const q = searchQuery.value.toLowerCase();
     filteredInvoices.value = invoices.value.filter(i =>
       String(i.invoice_number).toLowerCase().includes(q) ||
-      String(i.customer_name || '').toLowerCase().includes(q)
+      String(i.customer_name || '').toLowerCase().includes(q) ||
+      String(i.spb_number || '').toLowerCase().includes(q) ||
+      String(i.status || '').toLowerCase().includes(q) ||
+      String(i.notes || '').toLowerCase().includes(q)
     );
   }
 }

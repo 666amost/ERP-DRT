@@ -51,7 +51,10 @@ const filteredItems = computed(() => {
     result = result.filter(i =>
       (i.public_code || '').toLowerCase().includes(q) ||
       (i.spb_number || '').toLowerCase().includes(q) ||
-      (i.customer_name || '').toLowerCase().includes(q)
+      (i.customer_name || '').toLowerCase().includes(q) ||
+      (i.invoice_number || '').toLowerCase().includes(q) ||
+      (i.origin || '').toLowerCase().includes(q) ||
+      (i.destination || '').toLowerCase().includes(q)
     );
   }
   if (selectedCustomer.value) {

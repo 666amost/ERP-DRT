@@ -10,6 +10,7 @@ const { formatDate } = useFormatters();
 type Shipment = {
   id: number;
   public_code: string | null;
+  spb_number: string | null;
   origin: string;
   destination: string;
   status: string;
@@ -76,10 +77,13 @@ function filterShipments() {
     const query = searchQuery.value.toLowerCase();
     filteredShipments.value = shipments.value.filter(s => 
       s.public_code?.toLowerCase().includes(query) ||
+      s.spb_number?.toLowerCase().includes(query) ||
       s.origin.toLowerCase().includes(query) ||
       s.destination.toLowerCase().includes(query) ||
       s.driver_name?.toLowerCase().includes(query) ||
-      s.customer_name?.toLowerCase().includes(query)
+      s.customer_name?.toLowerCase().includes(query) ||
+      s.carrier_name?.toLowerCase().includes(query) ||
+      s.status?.toLowerCase().includes(query)
     );
   }
 }
@@ -166,7 +170,12 @@ watch(statusFilter, () => {
             <div class="font-semibold text-base lg:text-lg truncate min-w-0">
               {{ ship.public_code }}
             </div>
-            <div class="text-xs sm:text-sm text-gray-600 dark:text-gray-300 truncate min-w-0">
+            <div v-if="ship.spb_number" class="mt-0.5">
+              <span class="inline-block text-[11px] leading-tight bg-black text-white rounded px-1.5 py-0.5">
+                SPB: {{ ship.spb_number }}
+              </span>
+            </div>
+            <div class="text-xs sm:text-sm text-gray-600 dark:text-gray-300 truncate min-w-0 mt-1">
               {{ ship.driver_name || 'Driver' }} 
               <span v-if="ship.driver_phone" class="hidden sm:inline">• {{ ship.driver_phone }}</span>
             </div>

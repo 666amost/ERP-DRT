@@ -82,6 +82,7 @@ type ShipmentForm = {
 };
 
 const shipments = ref<Shipment[]>([]);
+const filteredShipments = ref<Shipment[]>([]);
 const loading = ref(true);
 const showModal = ref(false);
 const editingId = ref<number | null>(null);
@@ -209,12 +210,36 @@ async function loadShipments() {
     const res = await fetch('/api/shipments?endpoint=list');
     const data = await res.json();
     shipments.value = data.items || [];
+    filterShipments();
   } catch (e) {
     console.error('Failed to load shipments:', e);
   } finally {
     loading.value = false;
   }
 }
+
+function filterShipments() {
+  if (!searchQuery.value.trim()) {
+    filteredShipments.value = shipments.value;
+  } else {
+    const q = searchQuery.value.toLowerCase();
+    filteredShipments.value = shipments.value.filter(s =>
+      (s.public_code || '').toLowerCase().includes(q) ||
+      (s.spb_number || '').toLowerCase().includes(q) ||
+      (s.customer_name || '').toLowerCase().includes(q) ||
+      (s.pengirim_name || '').toLowerCase().includes(q) ||
+      (s.penerima_name || '').toLowerCase().includes(q) ||
+      (s.origin || '').toLowerCase().includes(q) ||
+      (s.destination || '').toLowerCase().includes(q) ||
+      (s.macam_barang || '').toLowerCase().includes(q) ||
+      (s.status || '').toLowerCase().includes(q)
+    );
+  }
+}
+
+watch([shipments, searchQuery], () => {
+  filterShipments();
+});
 
 function openCreateModal() {
   editingId.value = null;
@@ -541,6 +566,14 @@ onMounted(() => {
         <div class="text-xl font-semibold dark:text-gray-100">
           SPB (Barang Masuk)
         </div>
+        <div class="flex gap-2 flex-1 lg:flex-initial min-w-0 max-w-md">
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Cari kode, SPB, customer, rute..."
+            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 dark:border-gray-600"
+          >
+        </div>
         <Button
           variant="primary"
           class="flex-shrink-0 text-sm px-3"
@@ -579,10 +612,10 @@ onMounted(() => {
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-              <tr v-if="shipments.length === 0">
+              <tr v-if="filteredShipments.length === 0">
                 <td colspan="8" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">Belum ada shipment</td>
               </tr>
-              <tr v-for="ship in shipments" :key="ship.id" class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
+              <tr v-for="ship in filteredShipments" :key="ship.id" class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
                 <td class="px-3 py-2 text-sm font-medium dark:text-gray-200">
                   <div class="flex items-center gap-3">
                     <div class="min-w-[72px]">{{ ship.public_code }}</div>
@@ -622,7 +655,7 @@ onMounted(() => {
         class="lg:hidden space-y-3"
       >
         <div
-          v-if="shipments.length === 0"
+          v-if="filteredShipments.length === 0"
           class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 text-center"
         >
           <p class="text-sm text-gray-500 dark:text-gray-400">
@@ -636,14 +669,14 @@ onMounted(() => {
                 v-model="searchQuery"
                 type="text"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                placeholder="Cari kode, customer, rute..."
+                placeholder="Cari kode, SPB, customer, rute, barang..."
               />
             </div>
             <Button variant="primary" @click="openCreateModal" class="ml-2">+ Tambah</Button>
           </div>
           <div class="space-y-4">
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div v-for="s in shipments" :key="s.id" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md min-w-0 flex flex-col">
+              <div v-for="s in filteredShipments" :key="s.id" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md min-w-0 flex flex-col">
                 <div class="flex items-start justify-between gap-2">
                   <div class="flex-1 min-w-0">
                     <div class="text-sm font-semibold dark:text-gray-100 truncate">{{ s.public_code }}</div>

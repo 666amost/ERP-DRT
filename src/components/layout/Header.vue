@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue';
 import { useTheme } from '../../composables/useTheme';
-import { useRouter } from 'vue-router';
-import { ref } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
+import { ref, computed } from 'vue';
 
 const { theme, toggle } = useTheme();
 const router = useRouter();
+const route = useRoute();
 
 defineEmits<{
   toggleSidebar: [];
@@ -13,10 +14,13 @@ defineEmits<{
 
 const q = ref('');
 
+const showSearch = computed(() => {
+  return route.name === 'dashboard' || route.path === '/' || route.path === '/dashboard';
+});
+
 function submitSearch() {
   const value = (q.value || '').trim();
   if (!value) return;
-  // Simple heuristics: invoice numbers often contain "INV" or are long numeric strings
   const isInvoice = /(^INV|^inv|invoice)/i.test(value) || /^\d{6,}$/.test(value);
   const isSuratJalan = /(^SJ|^sj|surat)/i.test(value);
   if (isInvoice) {
@@ -27,7 +31,6 @@ function submitSearch() {
     router.push({ name: 'surat-jalan', query: { q: value } });
     return;
   }
-  // Default: go to pelacakan (tracking)
   router.push({ name: 'pelacakan', query: { q: value } });
 }
 
@@ -35,16 +38,15 @@ async function handleLogout() {
   try {
     await fetch('/api/auth?endpoint=logout', { method: 'POST', credentials: 'include' });
   } catch {
-    // ignore errors client-side
   }
   router.push('/login');
 }
 </script>
 
 <template>
-  <header class="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 lg:px-6 print:hidden">
+  <header class="h-14 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 lg:px-6 print:hidden">
     <div class="flex-1 flex items-center gap-3">
-      <div class="relative flex-1 max-w-xl">
+      <div v-if="showSearch" class="relative flex-1 max-w-xl">
         <input
           type="text"
           v-model="q"

@@ -38,7 +38,10 @@ const filteredPayments = computed(() => {
     const q = searchQuery.value.toLowerCase();
     result = result.filter(p =>
       (p.invoice_number || '').toLowerCase().includes(q) ||
-      (p.customer_name || '').toLowerCase().includes(q)
+      (p.customer_name || '').toLowerCase().includes(q) ||
+      (p.payment_method || '').toLowerCase().includes(q) ||
+      (p.notes || '').toLowerCase().includes(q) ||
+      String(p.final_amount || 0).includes(q)
     );
   }
   if (selectedCustomer.value) {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import Button from '@/components/ui/Button.vue';
 import Badge from '@/components/ui/Badge.vue';
 import DriverAutocomplete from '@/components/DriverAutocomplete.vue';
@@ -78,6 +78,8 @@ type DBLForm = {
 };
 
 const dblList = ref<DBL[]>([]);
+const filteredDblList = ref<DBL[]>([]);
+const searchQuery = ref('');
 const loading = ref(true);
 const showModal = ref(false);
 const showShipmentModal = ref(false);
@@ -132,12 +134,34 @@ async function loadDBLList() {
     const res = await fetch('/api/dbl?endpoint=list');
     const data = await res.json();
     dblList.value = data.items || [];
+    filterDBLList();
   } catch (e) {
     console.error('Failed to load DBL list:', e);
   } finally {
     loading.value = false;
   }
 }
+
+function filterDBLList() {
+  if (!searchQuery.value.trim()) {
+    filteredDblList.value = dblList.value;
+  } else {
+    const q = searchQuery.value.toLowerCase();
+    filteredDblList.value = dblList.value.filter(d =>
+      (d.dbl_number || '').toLowerCase().includes(q) ||
+      (d.vehicle_plate || '').toLowerCase().includes(q) ||
+      (d.driver_name || '').toLowerCase().includes(q) ||
+      (d.origin || '').toLowerCase().includes(q) ||
+      (d.destination || '').toLowerCase().includes(q) ||
+      (d.status || '').toLowerCase().includes(q) ||
+      (d.catatan || '').toLowerCase().includes(q)
+    );
+  }
+}
+
+watch([dblList, searchQuery], () => {
+  filterDBLList();
+});
 
 function openCreateModal() {
   editingId.value = null;
@@ -520,6 +544,14 @@ onMounted(() => {
         <div class="text-xl font-semibold dark:text-gray-100">
           Daftar Bongkar/Muat (DBL)
         </div>
+        <div class="flex gap-2 flex-1 lg:flex-initial min-w-0 max-w-md">
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Cari no DBL, plat, supir, rute..."
+            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 dark:border-gray-600"
+          >
+        </div>
         <Button variant="primary" class="flex-shrink-0 text-sm px-3" @click="openCreateModal">
           + Buat DBL
         </Button>
@@ -545,12 +577,12 @@ onMounted(() => {
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-              <tr v-if="dblList.length === 0">
+              <tr v-if="filteredDblList.length === 0">
                 <td colspan="8" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                   Belum ada DBL
                 </td>
               </tr>
-              <tr v-for="dbl in dblList" :key="dbl.id" class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
+              <tr v-for="dbl in filteredDblList" :key="dbl.id" class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
                 <td class="px-3 py-2 text-sm font-medium dark:text-gray-200">{{ dbl.dbl_number || '-' }}</td>
                 <td class="px-3 py-2 text-sm dark:text-gray-300">{{ dbl.dbl_date ? formatDate(dbl.dbl_date) : '-' }}</td>
                 <td class="px-3 py-2 text-sm dark:text-gray-300">
@@ -579,7 +611,15 @@ onMounted(() => {
       </div>
 
       <div class="lg:hidden space-y-3 mt-4">
-        <div v-for="dbl in dblList" :key="dbl.id" class="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+        <div class="mb-3">
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Cari no DBL, plat, supir, rute..."
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 dark:border-gray-600"
+          >
+        </div>
+        <div v-for="dbl in filteredDblList" :key="dbl.id" class="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
           <div class="flex justify-between items-start">
             <div class="font-medium dark:text-gray-200">{{ dbl.dbl_number || 'DBL-' + dbl.id }}</div>
             <Badge :variant="getStatusVariant(dbl.status)">

@@ -33,6 +33,7 @@ const loading = ref(true);
 const dateFrom = ref('');
 const dateTo = ref('');
 const selectedStatus = ref('');
+const selectedRegion = ref('');
 const reportType = ref<'daily' | 'monthly'>('daily');
 const company = ref<CompanyProfile | null>(null);
 const currentUser = ref<MeUser | null>(null);
@@ -44,6 +45,37 @@ const statusOptions = [
   { value: 'DEPARTED', label: 'Departed' },
   { value: 'ARRIVED', label: 'Arrived' }
 ];
+
+const regionOptions = [
+  { value: '', label: 'Semua Wilayah' },
+  { value: 'BALI', label: 'Bali' },
+  { value: 'KALIMANTAN', label: 'Kalimantan' },
+  { value: 'SUMATERA', label: 'Sumatera' },
+  { value: 'SULAWESI', label: 'Sulawesi' },
+  { value: 'PAPUA', label: 'Papua' },
+  { value: 'JAWA_TENGAH', label: 'Jawa Tengah' },
+  { value: 'JAWA_TIMUR', label: 'Jawa Timur' },
+  { value: 'SUMBAWA', label: 'Sumbawa' },
+  { value: 'LOMBOK', label: 'Lombok' },
+  { value: 'NTT', label: 'NTT' },
+  { value: 'MALUKU', label: 'Maluku' }
+];
+
+function getRegionFromDestination(destination: string): string {
+  const dest = (destination || '').toUpperCase();
+  if (dest.includes('BALI') || dest.includes('DENPASAR') || dest.includes('SINGARAJA') || dest.includes('GIANYAR') || dest.includes('TABANAN') || dest.includes('KLUNGKUNG') || dest.includes('KARANGASEM') || dest.includes('BULELENG') || dest.includes('BADUNG') || dest.includes('JEMBRANA') || dest.includes('BANGLI')) return 'BALI';
+  if (dest.includes('KALIMANTAN') || dest.includes('BANJARMASIN') || dest.includes('PONTIANAK') || dest.includes('BALIKPAPAN') || dest.includes('SAMARINDA') || dest.includes('PALANGKARAYA') || dest.includes('TARAKAN') || dest.includes('BONTANG') || dest.includes('KALTIM') || dest.includes('KALSEL') || dest.includes('KALBAR') || dest.includes('KALTENG') || dest.includes('KALTARA')) return 'KALIMANTAN';
+  if (dest.includes('SUMATERA') || dest.includes('SUMATRA') || dest.includes('MEDAN') || dest.includes('PALEMBANG') || dest.includes('PADANG') || dest.includes('PEKANBARU') || dest.includes('LAMPUNG') || dest.includes('JAMBI') || dest.includes('BENGKULU') || dest.includes('ACEH') || dest.includes('BANGKA') || dest.includes('BELITUNG') || dest.includes('RIAU') || dest.includes('SIBOLGA')) return 'SUMATERA';
+  if (dest.includes('SULAWESI') || dest.includes('MAKASSAR') || dest.includes('MANADO') || dest.includes('PALU') || dest.includes('KENDARI') || dest.includes('GORONTALO') || dest.includes('MAMUJU')) return 'SULAWESI';
+  if (dest.includes('PAPUA') || dest.includes('JAYAPURA') || dest.includes('SORONG') || dest.includes('MERAUKE') || dest.includes('TIMIKA') || dest.includes('MANOKWARI') || dest.includes('BIAK')) return 'PAPUA';
+  if (dest.includes('SEMARANG') || dest.includes('SOLO') || dest.includes('SURAKARTA') || dest.includes('KUDUS') || dest.includes('PEKALONGAN') || dest.includes('TEGAL') || dest.includes('MAGELANG') || dest.includes('PURWOKERTO') || dest.includes('CILACAP') || dest.includes('SALATIGA')) return 'JAWA_TENGAH';
+  if (dest.includes('SURABAYA') || dest.includes('MALANG') || dest.includes('SIDOARJO') || dest.includes('JEMBER') || dest.includes('KEDIRI') || dest.includes('BLITAR') || dest.includes('PASURUAN') || dest.includes('MADIUN') || dest.includes('MOJOKERTO') || dest.includes('PROBOLINGGO') || dest.includes('BANYUWANGI') || dest.includes('GRESIK') || dest.includes('TUBAN') || dest.includes('LAMONGAN')) return 'JAWA_TIMUR';
+  if (dest.includes('SUMBAWA') || dest.includes('BIMA') || dest.includes('DOMPU')) return 'SUMBAWA';
+  if (dest.includes('LOMBOK') || dest.includes('MATARAM') || dest.includes('PRAYA')) return 'LOMBOK';
+  if (dest.includes('KUPANG') || dest.includes('FLORES') || dest.includes('ENDE') || dest.includes('MAUMERE') || dest.includes('LABUAN BAJO') || dest.includes('RUTENG') || dest.includes('SUMBA') || dest.includes('WAINGAPU') || dest.includes('ATAMBUA') || dest.includes('ALOR') || dest.includes('LEMBATA') || dest.includes('ROTE')) return 'NTT';
+  if (dest.includes('MALUKU') || dest.includes('AMBON') || dest.includes('TERNATE') || dest.includes('TUAL')) return 'MALUKU';
+  return '';
+}
 
 const filteredItems = computed(() => {
   let result = items.value;
@@ -61,6 +93,9 @@ const filteredItems = computed(() => {
   }
   if (selectedStatus.value) {
     result = result.filter(i => i.status === selectedStatus.value);
+  }
+  if (selectedRegion.value) {
+    result = result.filter(i => getRegionFromDestination(i.destination || '') === selectedRegion.value);
   }
   return result;
 });
@@ -106,6 +141,7 @@ function resetFilters() {
   dateFrom.value = '';
   dateTo.value = '';
   selectedStatus.value = '';
+  selectedRegion.value = '';
 }
 
 function exportExcel() {
@@ -118,7 +154,7 @@ function exportExcel() {
     tujuan: item.destination || '-',
     spb: item.total_shipments,
     colli: item.total_colli,
-    kg: item.total_weight || 0,
+    berat: item.total_weight || 0,
     nominal: item.total_nominal,
     status: item.status
   }));
@@ -137,7 +173,7 @@ function exportExcel() {
       { header: 'Tujuan', key: 'tujuan', width: 15, type: 'text' },
       { header: 'SPB', key: 'spb', width: 8, type: 'number', align: 'center' },
       { header: 'Colli', key: 'colli', width: 8, type: 'number', align: 'center' },
-      { header: 'Kg', key: 'kg', width: 10, type: 'number', align: 'right' },
+      { header: 'Berat', key: 'berat', width: 10, type: 'number', align: 'right' },
       { header: 'Nominal', key: 'nominal', width: 15, type: 'currency', align: 'right' },
       { header: 'Status', key: 'status', width: 12, type: 'text', align: 'center' }
     ],
@@ -145,7 +181,7 @@ function exportExcel() {
     totals: {
       spb: totalShipments.value,
       colli: totalColli.value,
-      kg: totalWeight.value,
+      berat: totalWeight.value,
       nominal: totalNominal.value
     }
   });
@@ -224,7 +260,7 @@ onMounted(async () => {
           Monthly
         </Button>
       </div>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div>
           <label class="block text-sm font-medium mb-1">Dari Tanggal</label>
           <input v-model="dateFrom" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
@@ -237,6 +273,12 @@ onMounted(async () => {
           <label class="block text-sm font-medium mb-1">Status</label>
           <select v-model="selectedStatus" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
             <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Wilayah</label>
+          <select v-model="selectedRegion" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            <option v-for="opt in regionOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
         </div>
       </div>
@@ -259,7 +301,7 @@ onMounted(async () => {
         <div class="text-xl font-bold text-orange-500">{{ totalColli }}</div>
       </div>
       <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
-        <div class="text-xs text-gray-500 dark:text-gray-400">Total Kg</div>
+        <div class="text-xs text-gray-500 dark:text-gray-400">Total Berat</div>
         <div class="text-xl font-bold text-amber-600">{{ totalWeight.toFixed(1) }}</div>
       </div>
       <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 col-span-2 sm:col-span-1">
@@ -291,7 +333,7 @@ onMounted(async () => {
                 <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Tujuan</th>
                 <th class="px-2 py-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">SPB</th>
                 <th class="px-2 py-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">Colli</th>
-                <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Kg</th>
+                <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Berat</th>
                 <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Nominal</th>
                 <th class="px-2 py-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">Status</th>
               </tr>
@@ -346,7 +388,7 @@ onMounted(async () => {
             <div class="mt-2 flex flex-wrap items-center gap-2">
               <span class="px-2 py-0.5 rounded-full bg-gray-900 dark:bg-gray-600 text-white text-xs">{{ item.total_shipments }} SPB</span>
               <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs">{{ item.total_colli }} colli</span>
-              <span class="px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300 text-xs">{{ (item.total_weight || 0).toFixed(1) }} kg</span>
+              <span class="px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300 text-xs">{{ (item.total_weight || 0).toFixed(1) }}</span>
               <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs">{{ formatRupiah(item.total_nominal) }}</span>
             </div>
           </div>
@@ -369,7 +411,7 @@ onMounted(async () => {
           </div>
         </div>
         <div class="print-title">LAPORAN DBL (DAFTAR BONGKAR LOADING)</div>
-        <div class="print-subtitle">{{ dateFrom && dateTo ? `Periode: ${formatDate(dateFrom)} - ${formatDate(dateTo)}` : 'Semua Periode' }}</div>
+        <div class="print-subtitle">{{ dateFrom && dateTo ? `Periode: ${formatDate(dateFrom)} - ${formatDate(dateTo)}` : 'Semua Periode' }}{{ selectedRegion ? ` | Wilayah: ${regionOptions.find(r => r.value === selectedRegion)?.label || selectedRegion}` : '' }}</div>
       </div>
       <table class="print-table">
         <thead>
@@ -382,7 +424,7 @@ onMounted(async () => {
             <th style="width: 12%">Tujuan</th>
             <th class="text-center" style="width: 6%">SPB</th>
             <th class="text-center" style="width: 6%">Colli</th>
-            <th class="text-right" style="width: 8%">Kg</th>
+            <th class="text-right" style="width: 8%">Berat</th>
             <th class="text-right" style="width: 12%">Nominal</th>
             <th class="text-center" style="width: 8%">Status</th>
           </tr>

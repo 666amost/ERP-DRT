@@ -24,6 +24,7 @@ type ShipmentReport = {
   destination: string;
   total_colli: number;
   berat: number;
+  satuan: string | null;
   nominal: number;
   service_type: string | null;
   jenis: string | null;
@@ -38,6 +39,7 @@ const dateTo = ref('');
 const selectedStatus = ref('');
 const selectedServiceType = ref('');
 const selectedJenis = ref('');
+const selectedRegion = ref('');
 const company = ref<CompanyProfile | null>(null);
 const currentUser = ref<MeUser | null>(null);
 
@@ -65,6 +67,37 @@ const jenisOptions = [
   { value: 'LB', label: 'Lunas Bali' }
 ];
 
+const regionOptions = [
+  { value: '', label: 'Semua Wilayah' },
+  { value: 'BALI', label: 'Bali' },
+  { value: 'KALIMANTAN', label: 'Kalimantan' },
+  { value: 'SUMATERA', label: 'Sumatera' },
+  { value: 'SULAWESI', label: 'Sulawesi' },
+  { value: 'PAPUA', label: 'Papua' },
+  { value: 'JAWA_TENGAH', label: 'Jawa Tengah' },
+  { value: 'JAWA_TIMUR', label: 'Jawa Timur' },
+  { value: 'SUMBAWA', label: 'Sumbawa' },
+  { value: 'LOMBOK', label: 'Lombok' },
+  { value: 'NTT', label: 'NTT' },
+  { value: 'MALUKU', label: 'Maluku' }
+];
+
+function getRegionFromDestination(destination: string): string {
+  const dest = (destination || '').toUpperCase();
+  if (dest.includes('BALI') || dest.includes('DENPASAR') || dest.includes('SINGARAJA') || dest.includes('GIANYAR') || dest.includes('TABANAN') || dest.includes('KLUNGKUNG') || dest.includes('KARANGASEM') || dest.includes('BULELENG') || dest.includes('BADUNG') || dest.includes('JEMBRANA') || dest.includes('BANGLI')) return 'BALI';
+  if (dest.includes('KALIMANTAN') || dest.includes('BANJARMASIN') || dest.includes('PONTIANAK') || dest.includes('BALIKPAPAN') || dest.includes('SAMARINDA') || dest.includes('PALANGKARAYA') || dest.includes('TARAKAN') || dest.includes('BONTANG') || dest.includes('KALTIM') || dest.includes('KALSEL') || dest.includes('KALBAR') || dest.includes('KALTENG') || dest.includes('KALTARA')) return 'KALIMANTAN';
+  if (dest.includes('SUMATERA') || dest.includes('SUMATRA') || dest.includes('MEDAN') || dest.includes('PALEMBANG') || dest.includes('PADANG') || dest.includes('PEKANBARU') || dest.includes('LAMPUNG') || dest.includes('JAMBI') || dest.includes('BENGKULU') || dest.includes('ACEH') || dest.includes('BANGKA') || dest.includes('BELITUNG') || dest.includes('RIAU') || dest.includes('SIBOLGA')) return 'SUMATERA';
+  if (dest.includes('SULAWESI') || dest.includes('MAKASSAR') || dest.includes('MANADO') || dest.includes('PALU') || dest.includes('KENDARI') || dest.includes('GORONTALO') || dest.includes('MAMUJU')) return 'SULAWESI';
+  if (dest.includes('PAPUA') || dest.includes('JAYAPURA') || dest.includes('SORONG') || dest.includes('MERAUKE') || dest.includes('TIMIKA') || dest.includes('MANOKWARI') || dest.includes('BIAK')) return 'PAPUA';
+  if (dest.includes('SEMARANG') || dest.includes('SOLO') || dest.includes('SURAKARTA') || dest.includes('KUDUS') || dest.includes('PEKALONGAN') || dest.includes('TEGAL') || dest.includes('MAGELANG') || dest.includes('PURWOKERTO') || dest.includes('CILACAP') || dest.includes('SALATIGA')) return 'JAWA_TENGAH';
+  if (dest.includes('SURABAYA') || dest.includes('MALANG') || dest.includes('SIDOARJO') || dest.includes('JEMBER') || dest.includes('KEDIRI') || dest.includes('BLITAR') || dest.includes('PASURUAN') || dest.includes('MADIUN') || dest.includes('MOJOKERTO') || dest.includes('PROBOLINGGO') || dest.includes('BANYUWANGI') || dest.includes('GRESIK') || dest.includes('TUBAN') || dest.includes('LAMONGAN')) return 'JAWA_TIMUR';
+  if (dest.includes('SUMBAWA') || dest.includes('BIMA') || dest.includes('DOMPU')) return 'SUMBAWA';
+  if (dest.includes('LOMBOK') || dest.includes('MATARAM') || dest.includes('PRAYA')) return 'LOMBOK';
+  if (dest.includes('KUPANG') || dest.includes('FLORES') || dest.includes('ENDE') || dest.includes('MAUMERE') || dest.includes('LABUAN BAJO') || dest.includes('RUTENG') || dest.includes('SUMBA') || dest.includes('WAINGAPU') || dest.includes('ATAMBUA') || dest.includes('ALOR') || dest.includes('LEMBATA') || dest.includes('ROTE')) return 'NTT';
+  if (dest.includes('MALUKU') || dest.includes('AMBON') || dest.includes('TERNATE') || dest.includes('TUAL')) return 'MALUKU';
+  return '';
+}
+
 const filteredItems = computed(() => {
   let result = items.value;
   if (dateFrom.value) {
@@ -82,12 +115,40 @@ const filteredItems = computed(() => {
   if (selectedJenis.value) {
     result = result.filter(i => i.jenis === selectedJenis.value);
   }
+  if (selectedRegion.value) {
+    result = result.filter(i => getRegionFromDestination(i.destination) === selectedRegion.value);
+  }
   return result;
 });
 
 const totalNominal = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.nominal || 0), 0));
 const totalColli = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_colli || 0), 0));
-const totalWeight = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.berat || 0), 0));
+
+const weightBySatuan = computed(() => {
+  const result: Record<string, number> = {};
+  filteredItems.value.forEach(i => {
+    const unit = (i.satuan || 'KG').toUpperCase();
+    result[unit] = (result[unit] || 0) + (i.berat || 0);
+  });
+  return result;
+});
+
+function formatWeight(item: ShipmentReport): string {
+  const berat = item.berat || 0;
+  const satuan = (item.satuan || 'KG').toUpperCase();
+  return `${berat.toFixed(1)} ${satuan}`;
+}
+
+function formatTotalWeights(): string {
+  const weights = weightBySatuan.value;
+  const parts: string[] = [];
+  Object.entries(weights).forEach(([unit, val]) => {
+    if (val > 0) {
+      parts.push(`${val.toFixed(1)} ${unit}`);
+    }
+  });
+  return parts.length > 0 ? parts.join(' | ') : '0';
+}
 
 async function loadReport() {
   loading.value = true;
@@ -125,6 +186,7 @@ function resetFilters() {
   selectedStatus.value = '';
   selectedServiceType.value = '';
   selectedJenis.value = '';
+  selectedRegion.value = '';
 }
 
 function exportExcel() {
@@ -136,7 +198,7 @@ function exportExcel() {
     customer: item.customer_name || '-',
     rute: `${item.origin} → ${item.destination}`,
     colli: item.total_colli,
-    kg: item.berat || 0,
+    berat: formatWeight(item),
     nominal: item.nominal,
     jenis: item.jenis || '-',
     status: item.status
@@ -155,7 +217,7 @@ function exportExcel() {
       { header: 'Customer', key: 'customer', width: 18, type: 'text' },
       { header: 'Rute', key: 'rute', width: 25, type: 'text' },
       { header: 'Colli', key: 'colli', width: 8, type: 'number', align: 'center' },
-      { header: 'Kg', key: 'kg', width: 10, type: 'number', align: 'right' },
+      { header: 'Berat', key: 'berat', width: 12, type: 'text', align: 'right' },
       { header: 'Nominal', key: 'nominal', width: 15, type: 'currency', align: 'right' },
       { header: 'Jenis', key: 'jenis', width: 10, type: 'text', align: 'center' },
       { header: 'Status', key: 'status', width: 12, type: 'text', align: 'center' }
@@ -163,7 +225,7 @@ function exportExcel() {
     data: exportData,
     totals: {
       colli: totalColli.value,
-      kg: totalWeight.value,
+      berat: formatTotalWeights(),
       nominal: totalNominal.value
     }
   });
@@ -229,7 +291,7 @@ onMounted(async () => {
     </div>
 
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-4 print:hidden">
-      <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
         <div>
           <label class="block text-sm font-medium mb-1">Dari Tanggal</label>
           <input v-model="dateFrom" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
@@ -256,6 +318,12 @@ onMounted(async () => {
             <option v-for="opt in jenisOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
         </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Wilayah</label>
+          <select v-model="selectedRegion" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            <option v-for="opt in regionOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </select>
+        </div>
       </div>
       <div class="flex flex-wrap gap-2">
         <Button variant="default" @click="setToday">Hari Ini</Button>
@@ -274,8 +342,8 @@ onMounted(async () => {
         <div class="text-xl font-bold text-green-600">{{ totalColli }}</div>
       </div>
       <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
-        <div class="text-xs text-gray-500 dark:text-gray-400">Total Kg</div>
-        <div class="text-xl font-bold text-orange-500">{{ totalWeight.toFixed(1) }}</div>
+        <div class="text-xs text-gray-500 dark:text-gray-400">Total Berat</div>
+        <div class="text-lg font-bold text-orange-500">{{ formatTotalWeights() }}</div>
       </div>
       <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
         <div class="text-xs text-gray-500 dark:text-gray-400">Total Nominal</div>
@@ -304,7 +372,7 @@ onMounted(async () => {
                 <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Customer</th>
                 <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Rute</th>
                 <th class="px-2 py-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">Colli</th>
-                <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Kg</th>
+                <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Berat</th>
                 <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Nominal</th>
                 <th class="px-2 py-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">Jenis</th>
                 <th class="px-2 py-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">Status</th>
@@ -318,7 +386,7 @@ onMounted(async () => {
                 <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ item.customer_name || '-' }}</td>
                 <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ item.origin }} → {{ item.destination }}</td>
                 <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ item.total_colli }}</td>
-                <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ (item.berat || 0).toFixed(1) }}</td>
+                <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ formatWeight(item) }}</td>
                 <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ formatRupiah(item.nominal) }}</td>
                 <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ item.jenis || '-' }}</td>
                 <td class="px-2 py-2 text-center">
@@ -330,7 +398,7 @@ onMounted(async () => {
               <tr>
                 <td colspan="5" class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">Total:</td>
                 <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ totalColli }}</td>
-                <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ totalWeight.toFixed(1) }}</td>
+                <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ formatTotalWeights() }}</td>
                 <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ formatRupiah(totalNominal) }}</td>
                 <td colspan="2"></td>
               </tr>
@@ -354,7 +422,7 @@ onMounted(async () => {
             </div>
             <div class="mt-2 flex flex-wrap items-center gap-2">
               <span class="px-2 py-0.5 rounded-full bg-gray-900 dark:bg-gray-600 text-white text-xs">{{ item.total_colli }} colli</span>
-              <span class="px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300 text-xs">{{ (item.berat || 0).toFixed(1) }} kg</span>
+              <span class="px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300 text-xs">{{ formatWeight(item) }}</span>
               <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs">{{ formatRupiah(item.nominal) }}</span>
               <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs">{{ item.jenis || '-' }}</span>
             </div>
@@ -378,7 +446,7 @@ onMounted(async () => {
           </div>
         </div>
         <div class="print-title">LAPORAN HARIAN SPB</div>
-        <div class="print-subtitle">{{ dateFrom && dateTo ? `Periode: ${formatDate(dateFrom)} - ${formatDate(dateTo)}` : 'Semua Periode' }}</div>
+        <div class="print-subtitle">{{ dateFrom && dateTo ? `Periode: ${formatDate(dateFrom)} - ${formatDate(dateTo)}` : 'Semua Periode' }}{{ selectedRegion ? ` | Wilayah: ${regionOptions.find(r => r.value === selectedRegion)?.label || selectedRegion}` : '' }}</div>
       </div>
       <table class="print-table">
         <thead>
@@ -389,7 +457,7 @@ onMounted(async () => {
             <th style="width: 14%">Customer</th>
             <th style="width: 18%">Rute</th>
             <th class="text-center" style="width: 6%">Colli</th>
-            <th class="text-right" style="width: 7%">Kg</th>
+            <th class="text-right" style="width: 9%">Berat</th>
             <th class="text-right" style="width: 12%">Nominal</th>
             <th class="text-center" style="width: 7%">Jenis</th>
             <th class="text-center" style="width: 8%">Status</th>
@@ -403,7 +471,7 @@ onMounted(async () => {
             <td>{{ item.customer_name || '-' }}</td>
             <td>{{ item.origin }} → {{ item.destination }}</td>
             <td class="text-center">{{ item.total_colli }}</td>
-            <td class="text-right">{{ (item.berat || 0).toFixed(1) }}</td>
+            <td class="text-right">{{ formatWeight(item) }}</td>
             <td class="text-right">{{ formatRupiah(item.nominal) }}</td>
             <td class="text-center">{{ item.jenis || '-' }}</td>
             <td class="text-center">{{ item.status }}</td>
@@ -413,7 +481,7 @@ onMounted(async () => {
           <tr class="total-row">
             <td colspan="5" class="text-right">Total:</td>
             <td class="text-center">{{ totalColli }}</td>
-            <td class="text-right">{{ totalWeight.toFixed(1) }}</td>
+            <td class="text-right">{{ formatTotalWeights() }}</td>
             <td class="text-right">{{ formatRupiah(totalNominal) }}</td>
             <td colspan="2"></td>
           </tr>
@@ -421,7 +489,7 @@ onMounted(async () => {
       </table>
       <div class="print-footer">
         <div class="print-date">Dicetak: {{ formatDateTime() }} | Oleh: {{ currentUser?.name || currentUser?.email || '-' }}</div>
-        <div class="print-summary">Total SPB: {{ filteredItems.length }} | Total Colli: {{ totalColli }} | Total Kg: {{ totalWeight.toFixed(1) }}</div>
+        <div class="print-summary">Total SPB: {{ filteredItems.length }} | Total Colli: {{ totalColli }} | Total Berat: {{ formatTotalWeights() }}</div>
       </div>
     </div>
   </div>

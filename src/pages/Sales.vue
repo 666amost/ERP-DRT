@@ -22,6 +22,7 @@ type SalesItem = {
   total_nominal: number;
   total_paid: number;
   total_outstanding: number;
+  destination?: string;
 };
 
 const items = ref<SalesItem[]>([]);
@@ -29,12 +30,60 @@ const loading = ref(true);
 const dateFrom = ref('');
 const dateTo = ref('');
 const searchQuery = ref('');
+const selectedRegion = ref('');
+
+const regionOptions = [
+  { value: '', label: 'Semua Wilayah' },
+  { value: 'BALI', label: 'Bali' },
+  { value: 'KALIMANTAN', label: 'Kalimantan' },
+  { value: 'SUMATERA', label: 'Sumatera' },
+  { value: 'SULAWESI', label: 'Sulawesi' },
+  { value: 'PAPUA', label: 'Papua' },
+  { value: 'JATENG', label: 'Jawa Tengah' },
+  { value: 'JATIM', label: 'Jawa Timur' },
+  { value: 'SUMBAWA', label: 'Sumbawa' },
+  { value: 'LOMBOK', label: 'Lombok' },
+  { value: 'NTT', label: 'NTT' },
+  { value: 'MALUKU', label: 'Maluku' }
+];
+
+function getRegionFromDestination(destination: string): string {
+  if (!destination) return '';
+  const d = destination.toUpperCase();
+  const baliCities = ['DENPASAR', 'BADUNG', 'GIANYAR', 'TABANAN', 'BULELENG', 'KARANGASEM', 'KLUNGKUNG', 'BANGLI', 'JEMBRANA', 'SINGARAJA', 'UBUD', 'KUTA', 'SANUR', 'NUSA DUA', 'SEMINYAK', 'BALI'];
+  const kalimantanCities = ['BALIKPAPAN', 'SAMARINDA', 'BANJARMASIN', 'PONTIANAK', 'PALANGKARAYA', 'TARAKAN', 'BONTANG', 'TENGGARONG', 'KUTAI', 'BERAU', 'KALIMANTAN'];
+  const sumateraCities = ['MEDAN', 'PALEMBANG', 'PEKANBARU', 'PADANG', 'LAMPUNG', 'JAMBI', 'BENGKULU', 'BANDA ACEH', 'BATAM', 'BINTAN', 'TANJUNG PINANG', 'SUMATERA', 'SUMATRA'];
+  const sulawesiCities = ['MAKASSAR', 'MANADO', 'KENDARI', 'PALU', 'GORONTALO', 'MAMUJU', 'BONE', 'PARE-PARE', 'PAREPARE', 'BULUKUMBA', 'SULAWESI'];
+  const papuaCities = ['JAYAPURA', 'SORONG', 'MERAUKE', 'TIMIKA', 'BIAK', 'NABIRE', 'MANOKWARI', 'WAMENA', 'PAPUA'];
+  const jatengCities = ['SEMARANG', 'SOLO', 'SURAKARTA', 'MAGELANG', 'PEKALONGAN', 'TEGAL', 'PURWOKERTO', 'CILACAP', 'KUDUS', 'JEPARA', 'DEMAK', 'KLATEN', 'BOYOLALI', 'SALATIGA', 'JAWA TENGAH'];
+  const jatimCities = ['SURABAYA', 'MALANG', 'SIDOARJO', 'GRESIK', 'KEDIRI', 'MOJOKERTO', 'PASURUAN', 'PROBOLINGGO', 'LUMAJANG', 'JEMBER', 'BANYUWANGI', 'SITUBONDO', 'BONDOWOSO', 'BLITAR', 'TULUNGAGUNG', 'TRENGGALEK', 'NGANJUK', 'MADIUN', 'PONOROGO', 'PACITAN', 'LAMONGAN', 'TUBAN', 'BOJONEGORO', 'NGAWI', 'MAGETAN', 'JAWA TIMUR'];
+  const sumbawaCities = ['SUMBAWA', 'BIMA', 'DOMPU', 'SUMBAWA BESAR'];
+  const lombokCities = ['MATARAM', 'LOMBOK', 'PRAYA', 'SELONG', 'SENGGIGI', 'GILI'];
+  const nttCities = ['KUPANG', 'LABUAN BAJO', 'ENDE', 'MAUMERE', 'RUTENG', 'BAJAWA', 'WAINGAPU', 'WAIKABUBAK', 'ATAMBUA', 'KEFAMENANU', 'FLORES', 'SUMBA', 'TIMOR', 'ALOR', 'LEMBATA', 'SIKKA', 'MANGGARAI', 'NAGEKEO', 'NGADA', 'ROTE', 'SABU', 'NTT'];
+  const malukuCities = ['AMBON', 'TERNATE', 'TIDORE', 'TUAL', 'HALMAHERA', 'MALUKU'];
+
+  if (baliCities.some(c => d.includes(c))) return 'BALI';
+  if (kalimantanCities.some(c => d.includes(c))) return 'KALIMANTAN';
+  if (sumateraCities.some(c => d.includes(c))) return 'SUMATERA';
+  if (sulawesiCities.some(c => d.includes(c))) return 'SULAWESI';
+  if (papuaCities.some(c => d.includes(c))) return 'PAPUA';
+  if (jatengCities.some(c => d.includes(c))) return 'JATENG';
+  if (jatimCities.some(c => d.includes(c))) return 'JATIM';
+  if (sumbawaCities.some(c => d.includes(c))) return 'SUMBAWA';
+  if (lombokCities.some(c => d.includes(c))) return 'LOMBOK';
+  if (nttCities.some(c => d.includes(c))) return 'NTT';
+  if (malukuCities.some(c => d.includes(c))) return 'MALUKU';
+  return '';
+}
 
 const filteredItems = computed(() => {
   let result = items.value;
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase();
     result = result.filter(i => (i.customer_name || '').toLowerCase().includes(q));
+  }
+  if (selectedRegion.value) {
+    result = result.filter(i => getRegionFromDestination(i.destination || '') === selectedRegion.value);
   }
   return result;
 });
@@ -91,6 +140,7 @@ function resetFilters() {
   dateFrom.value = '';
   dateTo.value = '';
   searchQuery.value = '';
+  selectedRegion.value = '';
   loadReport();
 }
 
@@ -100,7 +150,7 @@ function exportExcel() {
     customer: item.customer_name || '-',
     spb: item.total_shipments,
     colli: item.total_colli,
-    kg: item.total_weight || 0,
+    berat: item.total_weight || 0,
     total: item.total_nominal,
     lunas: item.total_paid,
     outstanding: item.total_outstanding
@@ -116,7 +166,7 @@ function exportExcel() {
       { header: 'Customer', key: 'customer', width: 25, type: 'text' },
       { header: 'SPB', key: 'spb', width: 8, type: 'number', align: 'center' },
       { header: 'Colli', key: 'colli', width: 8, type: 'number', align: 'center' },
-      { header: 'Kg', key: 'kg', width: 10, type: 'number', align: 'right' },
+      { header: 'Berat', key: 'berat', width: 10, type: 'number', align: 'right' },
       { header: 'Total', key: 'total', width: 15, type: 'currency', align: 'right' },
       { header: 'Lunas', key: 'lunas', width: 15, type: 'currency', align: 'right' },
       { header: 'Outstanding', key: 'outstanding', width: 15, type: 'currency', align: 'right' }
@@ -125,7 +175,7 @@ function exportExcel() {
     totals: {
       spb: totalShipments.value,
       colli: totalColli.value,
-      kg: totalWeight.value,
+      berat: totalWeight.value,
       total: totalNominal.value,
       lunas: totalPaid.value,
       outstanding: totalOutstanding.value
@@ -177,7 +227,7 @@ onMounted(async () => {
     </div>
 
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-4 print:hidden">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div>
           <label class="block text-sm font-medium mb-1">Cari Customer</label>
           <input
@@ -194,6 +244,12 @@ onMounted(async () => {
         <div>
           <label class="block text-sm font-medium mb-1">Sampai Tanggal</label>
           <input v-model="dateTo" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Wilayah</label>
+          <select v-model="selectedRegion" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            <option v-for="opt in regionOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </select>
         </div>
       </div>
       <div class="flex flex-wrap gap-2">
@@ -218,7 +274,7 @@ onMounted(async () => {
         <div class="text-xl font-bold text-orange-500">{{ totalColli }}</div>
       </div>
       <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
-        <div class="text-xs text-gray-500 dark:text-gray-400">Total Kg</div>
+        <div class="text-xs text-gray-500 dark:text-gray-400">Total Berat</div>
         <div class="text-xl font-bold text-amber-600">{{ totalWeight.toFixed(1) }}</div>
       </div>
       <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
@@ -249,7 +305,7 @@ onMounted(async () => {
               <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Customer</th>
               <th class="px-2 py-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">SPB</th>
               <th class="px-2 py-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">Colli</th>
-              <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Kg</th>
+              <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Berat</th>
               <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Total</th>
               <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Lunas</th>
               <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Outstanding</th>
@@ -293,7 +349,7 @@ onMounted(async () => {
           <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
             <div class="flex items-center gap-1"><span class="text-gray-500">SPB</span><span class="font-medium text-gray-700 dark:text-gray-300">{{ item.total_shipments }}</span></div>
             <div class="flex items-center gap-1"><span class="text-gray-500">Colli</span><span class="font-medium text-gray-700 dark:text-gray-300">{{ item.total_colli }}</span></div>
-            <div class="flex items-center gap-1"><span class="text-gray-500">Kg</span><span class="font-medium text-gray-700 dark:text-gray-300">{{ (item.total_weight || 0).toFixed(1) }}</span></div>
+            <div class="flex items-center gap-1"><span class="text-gray-500">Berat</span><span class="font-medium text-gray-700 dark:text-gray-300">{{ (item.total_weight || 0).toFixed(1) }}</span></div>
             <div class="flex items-center gap-1"><span class="text-gray-500">Total</span><span class="font-semibold text-gray-700 dark:text-gray-300">{{ formatRupiah(item.total_nominal) }}</span></div>
             <div class="flex items-center gap-1"><span class="text-gray-500">Lunas</span><span class="font-semibold text-green-600">{{ formatRupiah(item.total_paid) }}</span></div>
             <div class="flex items-center gap-1"><span class="text-gray-500">Outstanding</span><span class="font-semibold text-red-600">{{ formatRupiah(item.total_outstanding) }}</span></div>
@@ -321,7 +377,7 @@ onMounted(async () => {
           </div>
         </div>
         <div class="print-title">LAPORAN PENJUALAN</div>
-        <div class="print-subtitle">{{ dateFrom && dateTo ? `Periode: ${dateFrom} - ${dateTo}` : 'Semua Periode' }}</div>
+        <div class="print-subtitle">{{ dateFrom && dateTo ? `Periode: ${dateFrom} - ${dateTo}` : 'Semua Periode' }}{{ selectedRegion ? ` | Wilayah: ${regionOptions.find(r => r.value === selectedRegion)?.label || selectedRegion}` : '' }}</div>
       </div>
       <table class="print-table">
         <thead>
@@ -330,7 +386,7 @@ onMounted(async () => {
             <th style="width: 22%">Customer</th>
             <th class="text-center" style="width: 8%">SPB</th>
             <th class="text-center" style="width: 8%">Colli</th>
-            <th class="text-right" style="width: 10%">Kg</th>
+            <th class="text-right" style="width: 10%">Berat</th>
             <th class="text-right" style="width: 15%">Total</th>
             <th class="text-right" style="width: 15%">Lunas</th>
             <th class="text-right" style="width: 15%">Outstanding</th>

@@ -72,7 +72,7 @@ export async function getValidSession(sql: Sql, id: string): Promise<(Session & 
     id: r.user_id2,
     email: r.email,
     name: r.name ?? null,
-    role: r.role,
+    role: r.role as 'admin' | 'staff' | 'accounting',
     password_hash: r.password_hash
   };
   const session: Session = {

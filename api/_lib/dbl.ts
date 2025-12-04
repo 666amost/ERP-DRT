@@ -461,21 +461,23 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
         and s.customer_id is not null
       `;
 
-      if (shipments.length === 0) {
+      const shipmentsArray = Array.isArray(shipments) ? shipments : [];
+
+      if (shipmentsArray.length === 0) {
         writeJson(res, { error: 'No eligible shipments found' }, 400);
         return
       }
 
-      const customerGroups = shipments.reduce((acc, s) => {
+      const customerGroups = shipmentsArray.reduce((acc: Record<number, typeof shipmentsArray>, s: any) => {
         const cid = s.customer_id;
         if (!acc[cid]) acc[cid] = [];
         acc[cid].push(s);
         return acc;
-      }, {} as Record<number, typeof shipments>);
+      }, {} as Record<number, typeof shipmentsArray>);
 
       const invoices = [];
       for (const [customerId, customerShipments] of Object.entries(customerGroups)) {
-        const totalAmount = customerShipments.reduce((sum, s) => sum + Number(s.nominal || 0), 0);
+        const totalAmount = customerShipments.reduce((sum: number, s: any) => sum + Number(s.nominal || 0), 0);
         const pphAmount = body.pph_percent ? (totalAmount * body.pph_percent / 100) : 0;
         const finalAmount = totalAmount - pphAmount;
 
@@ -500,7 +502,7 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
           ) returning id
         ` as [{ id: number }];
 
-        for (const shipment of customerShipments) {
+        for (const shipment of (customerShipments as any[])) {
           await sql`
             insert into invoice_items (invoice_id, description, quantity, unit_price)
             values (

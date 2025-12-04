@@ -222,9 +222,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     ` as [{ invoice_number: string }] | [];
     
     let nextNum = 1;
-    if (maxResult.length > 0 && maxResult[0].invoice_number) {
-      const match = maxResult[0].invoice_number.match(/INV-\d{4}-(\d+)/);
-      if (match && match[1]) {
+    if (maxResult.length > 0 && maxResult[0]?.invoice_number) {
+      const match = maxResult[0]?.invoice_number.match(/INV-\d{4}-(\d+)/);
+      if (match?.[1]) {
         nextNum = parseInt(match[1], 10) + 1;
       }
     }
@@ -448,8 +448,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       ) returning id
     ` as [{ id: number }];
 
-    const invoiceAmount = Number(invCheck[0].total_tagihan || invCheck[0].amount || 0);
-    const currentPaid = Number(invCheck[0].paid_amount || 0);
+    const invoiceAmount = Number(invCheck[0]?.total_tagihan || invCheck[0]?.amount || 0);
+    const currentPaid = Number(invCheck[0]?.paid_amount || 0);
     const newPaidAmount = currentPaid + Number(body.amount);
     const newRemainingAmount = Math.max(0, invoiceAmount - newPaidAmount);
     let newStatus = 'partial';

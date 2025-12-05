@@ -4,8 +4,8 @@ import { getSql } from './_lib/db.js';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { readJsonNode, writeJson } from './_lib/http.js';
 
-type Customer = { id: number; name: string; phone: string | null; address?: string | null };
-type CreateCustomerBody = { name: string; phone?: string; address?: string };
+type Customer = { id: number; name: string; pengirim_name?: string | null; phone: string | null; address?: string | null };
+type CreateCustomerBody = { name: string; pengirim_name?: string; phone?: string; address?: string };
 
 const ErrorCode = { Validation: 'validation', Duplicate: 'duplicate' } as const;
 
@@ -29,11 +29,25 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
   if (endpoint === 'list' && req.method === 'GET') {
     const search = url.searchParams.get('search');
+    const frequent = url.searchParams.get('frequent') === 'true';
     let rows: Customer[] = [];
-    if (search) {
-      rows = await sql`select id, name, phone, address from customers where lower(name) like ${'%' + search.toLowerCase() + '%'} order by name limit 50` as Customer[];
+    if (frequent) {
+      rows = await sql`
+        select c.id, c.name, c.pengirim_name, c.phone, c.address
+        from customers c
+        where c.id in (
+          select customer_id from shipments 
+          where customer_id is not null 
+          group by customer_id 
+          order by count(*) desc 
+          limit 20
+        )
+        order by (select count(*) from shipments where customer_id = c.id) desc
+      ` as Customer[];
+    } else if (search) {
+      rows = await sql`select id, name, pengirim_name, phone, address from customers where lower(name) like ${'%' + search.toLowerCase() + '%'} order by name limit 50` as Customer[];
     } else {
-      rows = await sql`select id, name, phone, address from customers order by name limit 200` as Customer[];
+      rows = await sql`select id, name, pengirim_name, phone, address from customers order by name limit 200` as Customer[];
     }
     writeJson(res, { items: rows });
     return;
@@ -44,7 +58,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     if (!body.name || body.name.trim().length < 2) { writeJson(res, { error: 'Nama customer wajib', code: ErrorCode.Validation }, 400); return; }
     const name = body.name.trim();
     try {
-      const rows = await sql`insert into customers (name, phone, address) values (${name}, ${body.phone || null}, ${body.address || null}) returning id, name, phone, address` as [{ id: number; name: string; phone: string | null; address: string | null }];
+      const rows = await sql`insert into customers (name, pengirim_name, phone, address) values (${name}, ${body.pengirim_name || null}, ${body.phone || null}, ${body.address || null}) returning id, name, pengirim_name, phone, address` as [Customer];
       writeJson(res, rows[0], 201);
       return;
     } catch (e: any) {

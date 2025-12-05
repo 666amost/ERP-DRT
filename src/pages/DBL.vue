@@ -99,6 +99,26 @@ const form = ref<DBLForm>({
   pengurus_name: ''
 });
 
+const validationErrors = ref<Record<string, string>>({});
+
+function validateDBLForm(): { ok: boolean; errors: Record<string, string> } {
+  const errors: Record<string, string> = {};
+  const f = form.value;
+  
+  if (!f.departure_date || !String(f.departure_date).trim()) {
+    errors.departure_date = 'Tanggal keberangkatan harus diisi';
+  }
+  if (!f.origin || !String(f.origin).trim()) {
+    errors.origin = 'Kota asal harus diisi';
+  }
+  if (!f.destination || !String(f.destination).trim()) {
+    errors.destination = 'Kota tujuan harus diisi';
+  }
+  
+  validationErrors.value = errors;
+  return { ok: Object.keys(errors).length === 0, errors };
+}
+
 const statusOptions = [
   { value: 'DRAFT', label: 'Draft', variant: 'default' },
   { value: 'READY', label: 'Ready', variant: 'info' },
@@ -161,6 +181,7 @@ function openCreateModal() {
     catatan: '',
     pengurus_name: ''
   };
+  validationErrors.value = {};
   showModal.value = true;
 }
 
@@ -182,10 +203,18 @@ async function openEditModal(dbl: DBL) {
     catatan: sanitize(dbl.catatan),
     pengurus_name: sanitize(dbl.pengurus_name)
   };
+  validationErrors.value = {};
   showModal.value = true;
 }
 
 async function saveDBL() {
+  const validation = validateDBLForm();
+  if (!validation.ok) {
+    const msgs = Object.values(validation.errors);
+    alert('Periksa field berikut:\n' + msgs.join('\n'));
+    return;
+  }
+
   try {
     const payload = {
       dbl_number: form.value.dbl_number || null,

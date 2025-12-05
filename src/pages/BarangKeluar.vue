@@ -2,11 +2,11 @@
 import { ref, onMounted, watch, computed } from 'vue';
 import Button from '../components/ui/Button.vue';
 import Badge from '../components/ui/Badge.vue';
-import CustomerAutocomplete from '../components/CustomerAutocomplete.vue';
 import CityAutocomplete from '../components/CityAutocomplete.vue';
 import { useFormatters } from '../composables/useFormatters';
 import { useAuth } from '../composables/useAuth';
 import { getCompany } from '../lib/company';
+import { getCityPlateCode } from '../lib/vehiclePlateCode';
 import { Icon } from '@iconify/vue';
 import JsBarcode from 'jsbarcode';
 const LOGO_URL = '/brand/logo.png';
@@ -85,8 +85,20 @@ const shipments = ref<Shipment[]>([]);
 const filteredShipments = ref<Shipment[]>([]);
 const loading = ref(true);
 const showModal = ref(false);
+const showCustomerPicker = ref(false);
+const showAddCustomerForm = ref(false);
+const customerList = ref<{ id: number; name: string; phone: string | null; address: string | null }[]>([]);
+const frequentCustomers = ref<{ id: number; name: string; phone: string | null; address: string | null }[]>([]);
+const customerSearch = ref('');
 const editingId = ref<number | null>(null);
 const searchQuery = ref('');
+const newCustomerForm = ref({
+  name: '',
+  pengirim_name: '',
+  phone: '',
+  address: ''
+});
+const isCreatingCustomer = ref(false);
 const form = ref<ShipmentForm>({
   spb_number: '',
   pengirim_name: '',
@@ -122,7 +134,6 @@ function validateForm(): { ok: boolean; errors: Record<string, string> } {
   if (!f.destination || !String(f.destination).trim()) errors.destination = 'Destination (kota tujuan) harus diisi';
   const total = Number(f.total_colli);
   if (Number.isNaN(total) || total < 1) errors.total_colli = 'Total colli harus >= 1';
-  if (f.vehicle_plate_region && !/^[A-Za-z]{1,2}$/.test(String(f.vehicle_plate_region).trim())) errors.vehicle_plate_region = 'Kode plat harus 1-2 huruf (contoh: BK, B)';
   if (f.eta && String(f.eta).trim()) {
     const d = new Date(f.eta);
     if (Number.isNaN(d.getTime())) errors.eta = 'Format ETA tidak valid';
@@ -143,14 +154,14 @@ watch(() => form.value.origin, (val: string) => {
   if (val && String(val).trim()) delete validationErrors.value.origin;
 });
 watch(() => form.value.destination, (val: string) => {
-  if (val && String(val).trim()) delete validationErrors.value.destination;
+  if (val && String(val).trim()) {
+    delete validationErrors.value.destination;
+    autoDetectPlateCode(val);
+  }
 });
 watch(() => form.value.total_colli, (val: string) => {
   const n: number = Number(val);
   if (!Number.isNaN(n) && n >= 1) delete validationErrors.value.total_colli;
-});
-watch(() => form.value.vehicle_plate_region, (val: string) => {
-  if (!val || /^[A-Za-z]{1,2}$/.test(String(val).trim())) delete validationErrors.value.vehicle_plate_region;
 });
 watch(() => form.value.eta, (val: string) => {
   if (!val) {
@@ -181,6 +192,95 @@ const jenisOptions = [
   { value: 'LB', label: 'Lunas Bali' }
 ];
 
+async function loadCustomerList() {
+  try {
+    const res = await fetch('/api/customers?endpoint=list');
+    const data = await res.json();
+    customerList.value = data.items || [];
+  } catch (e) {
+    console.error('Failed to load customers:', e);
+  }
+}
+
+async function loadFrequentCustomers() {
+  try {
+    const res = await fetch('/api/customers?endpoint=list&frequent=true');
+    const data = await res.json();
+    frequentCustomers.value = data.items || [];
+  } catch (e) {
+    console.error('Failed to load frequent customers:', e);
+  }
+}
+
+const filteredCustomerList = computed(() => {
+  if (!customerSearch.value.trim()) return customerList.value;
+  const q = customerSearch.value.toLowerCase();
+  return customerList.value.filter(c =>
+    c.name.toLowerCase().includes(q) ||
+    (c.phone || '').toLowerCase().includes(q) ||
+    (c.address || '').toLowerCase().includes(q)
+  );
+});
+
+function openCustomerPicker() {
+  customerSearch.value = '';
+  showCustomerPicker.value = true;
+  showAddCustomerForm.value = false;
+  loadCustomerList();
+  loadFrequentCustomers();
+}
+
+async function createNewCustomer() {
+  if (!newCustomerForm.value.name.trim()) {
+    alert('Nama penerima/customer wajib diisi');
+    return;
+  }
+  
+  isCreatingCustomer.value = true;
+  try {
+    const res = await fetch('/api/customers?endpoint=create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: newCustomerForm.value.name.trim(),
+        pengirim_name: newCustomerForm.value.pengirim_name.trim() || undefined,
+        phone: newCustomerForm.value.phone.trim() || undefined,
+        address: newCustomerForm.value.address.trim() || undefined
+      })
+    });
+    
+    if (!res.ok) {
+      const error = await res.json();
+      alert(error.error || 'Gagal membuat customer');
+      return;
+    }
+    
+    const newCustomer = await res.json();
+    newCustomerForm.value = { name: '', pengirim_name: '', phone: '', address: '' };
+    showAddCustomerForm.value = false;
+    
+    await loadCustomerList();
+    await loadFrequentCustomers();
+    
+    importCustomer(newCustomer);
+  } catch (e) {
+    console.error('Error creating customer:', e);
+    alert('Gagal membuat customer');
+  } finally {
+    isCreatingCustomer.value = false;
+  }
+}
+
+function importCustomer(c: { id: number; name: string; pengirim_name?: string | null; phone: string | null; address: string | null }) {
+  form.value.customer_id = c.id;
+  form.value.customer_name = c.name;
+  form.value.customer_address = c.address || '';
+  form.value.pengirim_name = c.pengirim_name || '';
+  form.value.penerima_name = c.name;
+  form.value.penerima_phone = c.phone || '';
+  showCustomerPicker.value = false;
+}
+
 const statusOptions = [
   { value: 'LOADING', label: 'Loading', variant: 'warning' },
   { value: 'IN_TRANSIT', label: 'In Transit', variant: 'info' }
@@ -197,6 +297,14 @@ const allStatusOptions = [
 const selectedShipment = ref<Shipment | null>(null);
 const showBarcodeModal = ref(false);
 const modalBarcodeValue = ref<string>('');
+
+function autoDetectPlateCode(cityName: string) {
+  const code = getCityPlateCode(cityName);
+  if (code) {
+    form.value.vehicle_plate_region = code;
+    delete validationErrors.value.vehicle_plate_region;
+  }
+}
 
 function viewBarcode(shipment: Shipment) {
   selectedShipment.value = shipment;
@@ -306,6 +414,9 @@ async function saveShipment() {
   const qtyVal = parseInt(form.value.qty) || 1;
   const beratVal = parseFloat(form.value.berat) || 0;
   const nominalVal = parseFloat(form.value.nominal) || 0;
+  
+  const customerName = form.value.customer_name?.trim() || form.value.penerima_name?.trim() || null;
+  
   const validation = validateForm();
   if (!validation.ok) {
     const msgs = Object.entries(validation.errors).map(([k, v]) => `${k}: ${v}`);
@@ -324,8 +435,8 @@ async function saveShipment() {
           pengirim_name: form.value.pengirim_name || null,
           penerima_name: form.value.penerima_name || null,
           penerima_phone: form.value.penerima_phone || null,
-          customer_id: form.value.customer_id || undefined,
-          customer_name: form.value.customer_name || undefined,
+          customer_id: customerName ? undefined : form.value.customer_id,
+          customer_name: customerName,
           customer_address: form.value.customer_address || undefined,
           origin: form.value.origin,
           destination: form.value.destination,
@@ -358,8 +469,8 @@ async function saveShipment() {
           pengirim_name: form.value.pengirim_name || null,
           penerima_name: form.value.penerima_name || null,
           penerima_phone: form.value.penerima_phone || null,
-          customer_id: form.value.customer_id || undefined,
-          customer_name: form.value.customer_name || undefined,
+          customer_id: customerName ? undefined : form.value.customer_id,
+          customer_name: customerName,
           customer_address: form.value.customer_address || undefined,
           origin: form.value.origin,
           destination: form.value.destination,
@@ -729,51 +840,58 @@ onMounted(() => {
               placeholder="Nomor SPB/Resi (input manual)"
             />
           </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium mb-1">Nama Pengirim</label>
-              <input
-                v-model="form.pengirim_name"
-                type="text"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                placeholder="Nama pengirim"
-              />
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">Nama Penerima</label>
-              <input
-                v-model="form.penerima_name"
-                type="text"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                placeholder="Nama penerima"
-              />
-            </div>
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">No. Telepon Penerima</label>
-            <input
-              v-model="form.penerima_phone"
-              type="text"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
-              placeholder="Nomor telepon penerima"
-            />
-          </div>
 
-          <h3 class="text-lg font-semibold border-b pb-2 mb-4 mt-6">Data Customer (Penagihan)</h3>
-          <CustomerAutocomplete
-            v-model="form.customer_name"
-            label="Customer"
-            @select-id="(id:number|null)=>{ form.customer_id = id; }"
-            @selected="(c: { id: number; name: string; address?: string }) => { form.customer_id = c.id; form.customer_name = c.name; form.customer_address = c.address || ''; }"
-          />
-          <div>
-            <label class="block text-sm font-medium mb-1">Alamat Customer</label>
-            <textarea
-              v-model="form.customer_address"
-              rows="2"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
-              placeholder="Alamat lengkap customer (untuk pengiriman & penagihan)"
-            ></textarea>
+          <button
+            type="button"
+            class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+            @click="openCustomerPicker"
+          >
+            <Icon icon="mdi:account-search" class="text-lg" />
+            Pilih / Tambah Customer
+          </button>
+          
+          <div class="bg-gray-50 rounded-lg p-4 space-y-3">
+            <div class="text-sm font-medium text-gray-700">Data Penerima & Penagihan</div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium mb-1">Nama Pengirim</label>
+                <input
+                  v-model="form.pengirim_name"
+                  type="text"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white"
+                  placeholder="Nama pengirim"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Nama Penerima / Customer</label>
+                <input
+                  v-model="form.penerima_name"
+                  type="text"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white"
+                  placeholder="Nama penerima (juga untuk penagihan)"
+                />
+              </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium mb-1">No. Telepon Penerima</label>
+                <input
+                  v-model="form.penerima_phone"
+                  type="text"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white"
+                  placeholder="Nomor telepon penerima"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Alamat Penerima</label>
+                <input
+                  v-model="form.customer_address"
+                  type="text"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white"
+                  placeholder="Alamat lengkap penerima"
+                />
+              </div>
+            </div>
           </div>
 
           <h3 class="text-lg font-semibold border-b pb-2 mb-4 mt-6">Rute & Detail Barang</h3>
@@ -864,18 +982,7 @@ onMounted(() => {
           </div>
 
           <h3 class="text-lg font-semibold border-b pb-2 mb-4 mt-6">Info Pengiriman</h3>
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label class="block text-sm font-medium mb-1">Kode Plat (2 huruf)</label>
-              <input
-                v-model="form.vehicle_plate_region"
-                type="text"
-                maxlength="2"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                placeholder="BV, T, B"
-              >
-              <p v-if="validationErrors.vehicle_plate_region" class="text-red-600 text-xs mt-1">{{ validationErrors.vehicle_plate_region }}</p>
-            </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium mb-1">ETA</label>
               <input
@@ -1009,6 +1116,149 @@ onMounted(() => {
           >
             Tutup
           </Button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="showCustomerPicker"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4"
+      @click.self="showCustomerPicker = false"
+    >
+      <div class="bg-white rounded-xl w-full max-w-lg max-h-[85vh] flex flex-col card">
+        <div v-if="!showAddCustomerForm" class="p-4 border-b border-gray-200 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold">Pilih Customer</h3>
+            <button
+              type="button"
+              class="text-gray-400 hover:text-gray-600"
+              @click="showCustomerPicker = false"
+            >
+              <Icon icon="mdi:close" class="text-xl" />
+            </button>
+          </div>
+          <input
+            v-model="customerSearch"
+            type="text"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            placeholder="Cari nama, telepon, atau alamat..."
+          />
+          <button
+            type="button"
+            class="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors"
+            @click="showAddCustomerForm = true"
+          >
+            <Icon icon="mdi:plus" class="text-lg" />
+            Tambah Customer Baru
+          </button>
+        </div>
+
+        <div v-else class="p-4 border-b border-gray-200">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-semibold">Tambah Customer Baru</h3>
+            <button
+              type="button"
+              class="text-gray-400 hover:text-gray-600"
+              @click="showAddCustomerForm = false"
+            >
+              <Icon icon="mdi:close" class="text-xl" />
+            </button>
+          </div>
+          <div class="space-y-3">
+            <div>
+              <label class="block text-sm font-medium mb-1">Nama Pengirim</label>
+              <input
+                v-model="newCustomerForm.pengirim_name"
+                type="text"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="Nama pengirim"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Nama Penerima / Customer *</label>
+              <input
+                v-model="newCustomerForm.name"
+                type="text"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="Nama penerima (juga untuk penagihan)"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">No. Telepon Penerima</label>
+              <input
+                v-model="newCustomerForm.phone"
+                type="text"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="08xx xxxx xxxx"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Alamat Penerima</label>
+              <textarea
+                v-model="newCustomerForm.address"
+                rows="2"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="Alamat lengkap"
+              ></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="!showAddCustomerForm" class="flex-1 overflow-y-auto p-2">
+          <div v-if="!customerSearch && frequentCustomers.length > 0" class="mb-4">
+            <div class="text-xs font-semibold text-gray-600 px-2 py-1 uppercase">
+              <Icon icon="mdi:fire" class="text-sm inline mr-1" />
+              Sering Mengirim
+            </div>
+            <button
+              v-for="c in frequentCustomers"
+              :key="c.id"
+              type="button"
+              class="w-full text-left p-3 hover:bg-amber-50 rounded-lg transition-colors mb-1 bg-amber-50/50"
+              @click="importCustomer(c)"
+            >
+              <div class="font-medium text-gray-900">{{ c.name }}</div>
+              <div v-if="c.phone" class="text-sm text-gray-500">{{ c.phone }}</div>
+              <div v-if="c.address" class="text-sm text-gray-400 truncate">{{ c.address }}</div>
+            </button>
+          </div>
+
+          <div v-if="filteredCustomerList.length === 0 && customerSearch" class="text-center text-gray-500 py-8">
+            <Icon icon="mdi:account-off" class="text-4xl mb-2" />
+            <div>Tidak ada customer</div>
+          </div>
+          <div v-else-if="customerSearch">
+            <div class="text-xs font-semibold text-gray-600 px-2 py-1 uppercase mb-2">Hasil Pencarian</div>
+          </div>
+          <button
+            v-for="c in filteredCustomerList"
+            :key="c.id"
+            type="button"
+            class="w-full text-left p-3 hover:bg-blue-50 rounded-lg transition-colors mb-1"
+            @click="importCustomer(c)"
+          >
+            <div class="font-medium text-gray-900">{{ c.name }}</div>
+            <div v-if="c.phone" class="text-sm text-gray-500">{{ c.phone }}</div>
+            <div v-if="c.address" class="text-sm text-gray-400 truncate">{{ c.address }}</div>
+          </button>
+        </div>
+
+        <div v-if="showAddCustomerForm" class="p-4 border-t border-gray-200 flex gap-2 justify-end bg-gray-50">
+          <button
+            type="button"
+            class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 font-medium transition-colors"
+            @click="showAddCustomerForm = false"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            :disabled="isCreatingCustomer || !newCustomerForm.name.trim()"
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+            @click="createNewCustomer"
+          >
+            {{ isCreatingCustomer ? 'Menyimpan...' : 'Simpan' }}
+          </button>
         </div>
       </div>
     </div>

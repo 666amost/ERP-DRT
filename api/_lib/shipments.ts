@@ -214,6 +214,16 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
           const ca = await sql`select address from customers where id = ${customerId}` as [{ address: string }];
           customerAddress = ca[0]?.address || null;
         }
+        
+        if (customerName) {
+          const existingCust = await sql`select id from customers where lower(name) = lower(${customerName}) limit 1` as { id: number }[];
+          if (existingCust.length > 0) {
+            customerId = existingCust[0].id;
+          } else {
+            const inserted = await sql`insert into customers (name, address) values (${customerName}, ${customerAddress}) returning id` as { id: number }[];
+            customerId = inserted[0].id;
+          }
+        }
 
         const seqResult = await sql`select coalesce(max(id), 0) + 1 as next_seq from shipments` as [{ next_seq: number }];
         const nextSeq = seqResult[0]?.next_seq || 1;
@@ -303,9 +313,20 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
         }
 
         const spbNumber = body.spb_number !== undefined ? body.spb_number : existing.spb_number;
-        const customerId = body.customer_id !== undefined ? body.customer_id : existing.customer_id;
-        const customerName = body.customer_name !== undefined ? body.customer_name : existing.customer_name;
-        const customerAddress = body.customer_address !== undefined ? body.customer_address : existing.customer_address;
+        let customerId = body.customer_id !== undefined ? body.customer_id : existing.customer_id;
+        let customerName = body.customer_name !== undefined ? body.customer_name : existing.customer_name;
+        let customerAddress = body.customer_address !== undefined ? body.customer_address : existing.customer_address;
+        
+        if (customerName) {
+          const existingCust = await sql`select id, name from customers where lower(name) = lower(${customerName}) limit 1` as { id: number; name: string }[];
+          if (existingCust.length > 0) {
+            customerId = existingCust[0].id;
+          } else {
+            const inserted = await sql`insert into customers (name, address) values (${customerName}, ${customerAddress}) returning id` as { id: number }[];
+            customerId = inserted[0].id;
+          }
+        }
+        
         const senderName = body.sender_name !== undefined ? body.sender_name : existing.sender_name;
         const senderAddress = body.sender_address !== undefined ? body.sender_address : existing.sender_address;
         const pengirimName = body.pengirim_name !== undefined ? body.pengirim_name : existing.pengirim_name;

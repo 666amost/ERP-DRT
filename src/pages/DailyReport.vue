@@ -205,7 +205,7 @@ function exportExcel() {
   }));
 
   exportToExcel({
-    filename: `daily_report_${dateFrom.value || 'all'}_${dateTo.value || 'all'}`,
+    filename: buildFilename('daily'),
     sheetName: 'Daily Report',
     title: 'LAPORAN HARIAN SPB',
     subtitle: dateFrom.value && dateTo.value ? `Periode: ${formatDate(dateFrom.value)} - ${formatDate(dateTo.value)}` : 'Semua Periode',
@@ -232,7 +232,27 @@ function exportExcel() {
 }
 
 function printReport() {
-  window.print();
+  const prev = document.title;
+  document.title = buildFilename('daily');
+  try {
+    window.print();
+  } finally {
+    document.title = prev;
+  }
+}
+
+function makeSlug(input = ''): string {
+  return (input || '').toString().trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '');
+}
+
+function buildFilename(prefix = 'daily'): string {
+  const regionPart = selectedRegion.value ? makeSlug(regionOptions.find(r => r.value === selectedRegion.value)?.label || selectedRegion.value) : 'all';
+  const jenisPart = selectedJenis.value ? makeSlug(selectedJenis.value) : '';
+  const svcPart = selectedServiceType.value ? makeSlug(selectedServiceType.value) : '';
+  const statusPart = selectedStatus.value ? makeSlug(selectedStatus.value) : '';
+  const datePart = `${dateFrom.value || 'all'}_${dateTo.value || 'all'}`;
+  const parts = [prefix, regionPart, jenisPart, svcPart, statusPart, datePart].filter(Boolean);
+  return parts.join('-');
 }
 
 function getStatusVariant(status: string): 'default' | 'info' | 'warning' | 'success' {

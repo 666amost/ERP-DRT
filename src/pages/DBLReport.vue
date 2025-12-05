@@ -160,7 +160,7 @@ function exportExcel() {
   }));
 
   exportToExcel({
-    filename: `dbl_report_${reportType.value}_${dateFrom.value || 'all'}`,
+    filename: buildFilename('dbl'),
     sheetName: 'DBL Report',
     title: 'LAPORAN DBL (DAFTAR BONGKAR LOADING)',
     subtitle: dateFrom.value && dateTo.value ? `Periode: ${formatDate(dateFrom.value)} - ${formatDate(dateTo.value)}` : 'Semua Periode',
@@ -188,7 +188,26 @@ function exportExcel() {
 }
 
 function printReport() {
-  window.print();
+  const prev = document.title;
+  document.title = buildFilename('dbl');
+  try {
+    window.print();
+  } finally {
+    document.title = prev;
+  }
+}
+
+function makeSlug(input = ''): string {
+  return (input || '').toString().trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '');
+}
+
+function buildFilename(prefix = 'dbl'): string {
+  const typePart = reportType.value || 'daily';
+  const regionPart = selectedRegion.value ? makeSlug(regionOptions.find(r => r.value === selectedRegion.value)?.label || selectedRegion.value) : 'all';
+  const statusPart = selectedStatus.value ? makeSlug(selectedStatus.value) : '';
+  const datePart = `${dateFrom.value || 'all'}_${dateTo.value || 'all'}`;
+  const parts = [prefix, typePart, regionPart, statusPart, datePart].filter(Boolean);
+  return parts.join('-');
 }
 
 function formatDateTime(): string {

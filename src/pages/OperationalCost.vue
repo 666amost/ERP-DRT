@@ -3,8 +3,10 @@ import { ref, onMounted, computed, watch } from 'vue';
 import Button from '@/components/ui/Button.vue';
 import Badge from '@/components/ui/Badge.vue';
 import { useFormatters } from '../composables/useFormatters';
+import { useAuth } from '../composables/useAuth';
 
 const { formatRupiah, formatDate } = useFormatters();
+const { fetchUser } = useAuth();
 
 type DBLWithCost = {
   id: number;
@@ -223,6 +225,7 @@ watch([viewMode, startDate, endDate, destinationFilter], () => {
 });
 
 onMounted(() => {
+  fetchUser();
   initDates();
   loadData();
 });

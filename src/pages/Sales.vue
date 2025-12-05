@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import Button from '../components/ui/Button.vue';
 import { useFormatters } from '../composables/useFormatters';
+import { useAuth } from '../composables/useAuth';
 import { Icon } from '@iconify/vue';
 import { exportToExcel } from '../lib/excelExport';
 import { getCompany, type CompanyProfile, LOGO_URL } from '../lib/company';
@@ -9,6 +10,7 @@ import { getCompany, type CompanyProfile, LOGO_URL } from '../lib/company';
 type MeUser = { id: number; email: string; name?: string; role?: string };
 
 const { formatRupiah, toWIBDateString } = useFormatters();
+const { fetchUser } = useAuth();
 
 const company = ref<CompanyProfile | null>(null);
 const currentUser = ref<MeUser | null>(null);
@@ -213,6 +215,7 @@ watch([dateFrom, dateTo], () => {
 
 onMounted(async () => {
   setThisMonth();
+  fetchUser();
   try {
     company.value = await getCompany();
   } catch (e) {

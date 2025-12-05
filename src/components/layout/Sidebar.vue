@@ -10,24 +10,24 @@ type MenuItem = {
   label: string; 
   icon: string; 
   children?: SubItem[];
-  requirePermission?: 'canViewKeuangan' | 'canViewSalesReport' | 'canPelunasan' | 'canViewSettings';
+  requirePermission?: keyof typeof import('../../composables/useAuth').ROLE_PERMISSIONS.admin;
 };
 
 type MenuGroup = {
   title: string;
   items: MenuItem[];
-  requirePermission?: 'canViewKeuangan' | 'canViewSalesReport' | 'canPelunasan' | 'canViewSettings';
+  requirePermission?: keyof typeof import('../../composables/useAuth').ROLE_PERMISSIONS.admin;
 };
 
 const allMenuGroups: MenuGroup[] = [
   {
     title: 'MENU UTAMA',
     items: [
-      { to: '/dashboard', label: 'Dasboard', icon: 'mdi:view-dashboard-outline' },
-      { to: '/barang-keluar', label: 'SPB RESI', icon: 'mdi:archive-arrow-down-outline' },
-      { to: '/dbl', label: 'DBL/Manifes', icon: 'mdi:clipboard-list-outline' },
-      { to: '/surat-jalan', label: 'Surat Jalan', icon: 'mdi:file-document-outline' },
-      { to: '/pelacakan', label: 'Pelacakan', icon: 'mdi:truck-outline' },
+      { to: '/dashboard', label: 'Dasbor', icon: 'mdi:view-dashboard-outline', requirePermission: 'canViewDashboard' },
+      { to: '/barang-keluar', label: 'SPB', icon: 'mdi:archive-arrow-down-outline', requirePermission: 'canViewSPB' },
+      { to: '/dbl', label: 'DBL/Manifes', icon: 'mdi:clipboard-list-outline', requirePermission: 'canViewDBL' },
+      { to: '/surat-jalan', label: 'Surat Jalan', icon: 'mdi:file-document-outline', requirePermission: 'canViewSuratJalan' },
+      { to: '/pelacakan', label: 'Pelacakan', icon: 'mdi:truck-outline', requirePermission: 'canViewPelacakan' },
     ]
   },
   {
@@ -37,7 +37,7 @@ const allMenuGroups: MenuGroup[] = [
       { to: '/invoice', label: 'Invoice', icon: 'mdi:receipt-text-outline' },
       { to: '/outstanding', label: 'Outstanding', icon: 'mdi:clock-alert-outline' },
       { to: '/pelunasan', label: 'Pelunasan', icon: 'mdi:cash-check', requirePermission: 'canPelunasan' },
-      { to: '/report/operational', label: 'Biaya Operasional', icon: 'mdi:calculator-variant-outline' },
+      { to: '/report/operational', label: 'Biaya Operasional', icon: 'mdi:calculator-variant-outline', requirePermission: 'canViewOperationalCost' },
     ]
   },
   {

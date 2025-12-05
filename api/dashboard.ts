@@ -10,6 +10,11 @@ type Stats = {
   activeShipments: number;
   pendingInvoices: number;
   deliveryNotes: number;
+  totalInvoices: number;
+  outstandingCount: number;
+  outstandingAmount: number;
+  pelunasanCount: number;
+  pelunasanAmount: number;
 };
 
 type Invoice = {
@@ -65,18 +70,65 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       
       const pending = await sql`
         select count(*)::int as count from invoices 
-        where status = 'pending'
+        where status in ('pending', 'partial')
       ` as { count: number }[];
       
       const notes = await sql`
         select count(*)::int as count from shipments
       ` as { count: number }[];
+
+      const totalInvoices = await sql`
+        select count(*)::int as count from invoices
+      ` as { count: number }[];
+
+      const outstanding = await sql`
+        select 
+          count(*)::int as count,
+          coalesce(sum(remaining_amount), 0)::numeric as amount 
+        from (
+          select 
+            s.id,
+            case 
+              when ii_inv.id is null and spb_inv.id is null then coalesce(s.nominal, 0)
+              when ii_inv.id is not null then
+                case 
+                  when coalesce(ii_inv.subtotal, 0) > 0 then 
+                    round((coalesce(s.nominal, 0)::numeric / coalesce(ii_inv.subtotal, 1)::numeric) * coalesce(ii_inv.remaining_amount, ii_inv.amount, 0)::numeric, 2)
+                  else coalesce(ii_inv.remaining_amount, s.nominal, 0)
+                end
+              else coalesce(spb_inv.remaining_amount, s.nominal, 0)
+            end as remaining_amount
+          from shipments s
+          left join invoice_items ii on ii.shipment_id = s.id
+          left join invoices ii_inv on ii_inv.id = ii.invoice_id
+          left join invoices spb_inv on spb_inv.spb_number = s.spb_number and ii.id is null
+          where s.nominal > 0
+            and (
+              (ii_inv.id is null and spb_inv.id is null)
+              or (ii_inv.id is not null and ii_inv.status in ('pending', 'partial'))
+              or (ii_inv.id is null and spb_inv.id is not null and spb_inv.status in ('pending', 'partial'))
+            )
+          group by s.id, s.nominal,
+                   ii_inv.id, ii_inv.remaining_amount, ii_inv.amount, ii_inv.subtotal,
+                   spb_inv.id, spb_inv.remaining_amount
+        ) as outstanding_items
+      ` as { count: number; amount: number }[];
+
+      const pelunasan = await sql`
+        select count(*)::int as count, coalesce(sum(amount), 0)::numeric as amount 
+        from invoice_payments
+      ` as { count: number; amount: number }[];
       
       const stats: Stats = {
         outgoingToday: outgoing[0]?.count || 0,
         activeShipments: active[0]?.count || 0,
         pendingInvoices: pending[0]?.count || 0,
-        deliveryNotes: notes[0]?.count || 0
+        deliveryNotes: notes[0]?.count || 0,
+        totalInvoices: totalInvoices[0]?.count || 0,
+        outstandingCount: outstanding[0]?.count || 0,
+        outstandingAmount: Number(outstanding[0]?.amount) || 0,
+        pelunasanCount: pelunasan[0]?.count || 0,
+        pelunasanAmount: Number(pelunasan[0]?.amount) || 0
       };
       
       writeJson(res, stats);

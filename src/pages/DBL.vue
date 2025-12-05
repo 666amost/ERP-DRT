@@ -6,6 +6,9 @@ import DriverAutocomplete from '@/components/DriverAutocomplete.vue';
 import CityAutocomplete from '@/components/CityAutocomplete.vue';
 import { useFormatters } from '../composables/useFormatters';
 import { getCompany } from '../lib/company';
+import { useAuth } from '../composables/useAuth';
+
+const { fetchUser, permissions } = useAuth();
 
 const { formatRupiah, formatDate } = useFormatters();
 
@@ -497,7 +500,8 @@ async function printDaftarMuat(dbl: DBL) {
   setTimeout(() => win.print(), 300);
 }
 
-onMounted(() => {
+onMounted(async () => {
+  await fetchUser();
   loadDBLList();
 });
 </script>
@@ -565,7 +569,7 @@ onMounted(() => {
                 <td class="px-3 py-2 text-right space-x-1">
                   <Button variant="success" class="px-2 py-1 h-7 text-xs" @click="openShipmentModal(dbl)">Resi</Button>
                   <Button variant="warning" class="px-2 py-1 h-7 text-xs" @click="printDaftarMuat(dbl)">Print</Button>
-                  <Button variant="info" class="px-2 py-1 h-7 text-xs" @click="openInvoiceModal(dbl)">Invoice</Button>
+                  <Button v-if="permissions.canViewKeuangan" variant="info" class="px-2 py-1 h-7 text-xs" @click="openInvoiceModal(dbl)">Invoice</Button>
                   <Button variant="primary" class="px-2 py-1 h-7 text-xs" @click="openEditModal(dbl)">Edit</Button>
                   <Button variant="default" class="px-2 py-1 h-7 text-xs text-red-600" @click="deleteDBL(dbl.id)">Hapus</Button>
                 </td>
@@ -612,7 +616,7 @@ onMounted(() => {
           <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 grid grid-cols-2 gap-2">
             <Button block variant="success" @click="openShipmentModal(dbl)">Resi</Button>
             <Button block variant="warning" @click="printDaftarMuat(dbl)">Print</Button>
-            <Button block variant="info" @click="openInvoiceModal(dbl)">Invoice</Button>
+            <Button v-if="permissions.canViewKeuangan" block variant="info" @click="openInvoiceModal(dbl)">Invoice</Button>
             <Button block variant="primary" @click="openEditModal(dbl)">Edit</Button>
           </div>
         </div>

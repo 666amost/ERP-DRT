@@ -6,6 +6,7 @@ import Badge from '../components/ui/Badge.vue';
 import { useFormatters } from '../composables/useFormatters';
 import { Icon } from '@iconify/vue';
 import { getCompany } from '../lib/company';
+import { useAuth } from '../composables/useAuth';
 const LOGO_URL = '/brand/logo.png';
 
 const { formatRupiah, formatDate } = useFormatters();
@@ -604,7 +605,9 @@ function getPaymentStatus(inv: Invoice): { label: string; variant: 'default' | '
   return { label: 'Belum Bayar', variant: 'default' };
 }
 
-onMounted(() => {
+onMounted(async () => {
+  const { fetchUser } = useAuth();
+  await fetchUser();
   if (route.query.q) {
     searchQuery.value = String(route.query.q || '');
   }

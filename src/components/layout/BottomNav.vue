@@ -88,26 +88,26 @@ type NavItem = {
   to: string;
   label: string;
   icon: string;
-  requirePermission?: 'canViewKeuangan' | 'canViewSalesReport' | 'canPelunasan' | 'canViewSettings';
+  requirePermission?: keyof typeof import('../../composables/useAuth').ROLE_PERMISSIONS.admin;
 };
 
 type MoreMenuItem = {
   to: string;
   label: string;
   icon: string;
-  requirePermission?: 'canViewKeuangan' | 'canViewSalesReport' | 'canPelunasan' | 'canViewSettings';
+  requirePermission?: keyof typeof import('../../composables/useAuth').ROLE_PERMISSIONS.admin;
 };
 
 type MoreMenuGroup = {
   title: string;
   items: MoreMenuItem[];
-  requirePermission?: 'canViewKeuangan' | 'canViewSalesReport' | 'canPelunasan' | 'canViewSettings';
+  requirePermission?: keyof typeof import('../../composables/useAuth').ROLE_PERMISSIONS.admin;
 };
 
 const allNavItems: NavItem[] = [
-  { name: 'dashboard', to: '/dashboard', label: 'Dasbor', icon: 'mdi:view-dashboard-outline' },
-  { name: 'barang-keluar', to: '/barang-keluar', label: 'Keluar', icon: 'mdi:archive-arrow-down-outline' },
-  { name: 'dbl', to: '/dbl', label: 'DBL', icon: 'mdi:clipboard-list-outline' },
+  { name: 'dashboard', to: '/dashboard', label: 'Dasbor', icon: 'mdi:view-dashboard-outline', requirePermission: 'canViewDashboard' },
+  { name: 'barang-keluar', to: '/barang-keluar', label: 'Keluar', icon: 'mdi:archive-arrow-down-outline', requirePermission: 'canViewSPB' },
+  { name: 'dbl', to: '/dbl', label: 'DBL', icon: 'mdi:clipboard-list-outline', requirePermission: 'canViewDBL' },
   { name: 'invoice', to: '/invoice', label: 'Invoice', icon: 'mdi:receipt-text-outline', requirePermission: 'canViewKeuangan' },
 ];
 
@@ -115,8 +115,8 @@ const allMoreMenuGroups: MoreMenuGroup[] = [
   {
     title: 'Operasional',
     items: [
-      { to: '/surat-jalan', label: 'Surat Jalan', icon: 'mdi:file-document-outline' },
-      { to: '/pelacakan', label: 'Pelacakan', icon: 'mdi:truck-outline' },
+      { to: '/surat-jalan', label: 'Surat Jalan', icon: 'mdi:file-document-outline', requirePermission: 'canViewSuratJalan' },
+      { to: '/pelacakan', label: 'Pelacakan', icon: 'mdi:truck-outline', requirePermission: 'canViewPelacakan' },
     ]
   },
   {
@@ -125,7 +125,7 @@ const allMoreMenuGroups: MoreMenuGroup[] = [
     items: [
       { to: '/outstanding', label: 'Outstanding', icon: 'mdi:clock-alert-outline' },
       { to: '/pelunasan', label: 'Pelunasan', icon: 'mdi:cash-check', requirePermission: 'canPelunasan' },
-      { to: '/report/operational', label: 'Biaya Ops', icon: 'mdi:calculator-variant-outline', requirePermission: 'canViewKeuangan' },
+      { to: '/report/operational', label: 'Biaya Ops', icon: 'mdi:calculator-variant-outline', requirePermission: 'canViewOperationalCost' },
     ]
   },
   {

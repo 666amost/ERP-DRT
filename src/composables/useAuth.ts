@@ -16,29 +16,47 @@ export const ROLE_PERMISSIONS = {
   admin: {
     canViewKeuangan: true,
     canViewSalesReport: true,
+    canViewPelacakan: true,
     canDeleteShipment: true,
     canEditShipment: true,
     canCreateAWB: true,
     canPelunasan: true,
     canViewSettings: true,
+    canViewDashboard: true,
+    canViewSPB: true,
+    canViewDBL: true,
+    canViewSuratJalan: true,
+    canViewOperationalCost: true,
   },
   staff: {
     canViewKeuangan: false,
     canViewSalesReport: false,
+    canViewPelacakan: true,
     canDeleteShipment: false,
     canEditShipment: true,
     canCreateAWB: true,
     canPelunasan: false,
     canViewSettings: false,
+    canViewDashboard: true,
+    canViewSPB: true,
+    canViewDBL: true,
+    canViewSuratJalan: true,
+    canViewOperationalCost: false,
   },
   accounting: {
     canViewKeuangan: true,
     canViewSalesReport: false,
+    canViewPelacakan: true,
     canDeleteShipment: false,
-    canEditShipment: true,
-    canCreateAWB: true,
+    canEditShipment: false,
+    canCreateAWB: false,
     canPelunasan: true,
     canViewSettings: false,
+    canViewDashboard: true,
+    canViewSPB: false,
+    canViewDBL: false,
+    canViewSuratJalan: false,
+    canViewOperationalCost: false,
   },
 } as const;
 
@@ -103,6 +121,30 @@ export function useAuth() {
     
     if (routePath.startsWith('/admin')) {
       return p.canViewSettings;
+    }
+
+    if (routePath.startsWith('/pelacakan')) {
+      return p.canViewPelacakan;
+    }
+
+    if (routePath.startsWith('/dashboard')) {
+      return p.canViewDashboard;
+    }
+
+    if (routePath.startsWith('/barang-keluar')) {
+      return p.canViewSPB;
+    }
+
+    if (routePath.startsWith('/dbl')) {
+      return p.canViewDBL;
+    }
+
+    if (routePath.startsWith('/report/operational')) {
+      return p.canViewOperationalCost;
+    }
+
+    if (routePath.startsWith('/surat-jalan')) {
+      return p.canViewSuratJalan;
     }
     
     return true;

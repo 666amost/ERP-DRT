@@ -218,15 +218,15 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
         if (customerName) {
           const existingCust = await sql`select id from customers where lower(name) = lower(${customerName}) limit 1` as { id: number }[];
           if (existingCust.length > 0) {
-            customerId = existingCust[0].id;
+            customerId = existingCust[0]!.id;
           } else {
             const inserted = await sql`insert into customers (name, address) values (${customerName}, ${customerAddress}) returning id` as { id: number }[];
-            customerId = inserted[0].id;
+            customerId = inserted[0]!.id;
           }
         }
 
         const seqResult = await sql`select coalesce(max(id), 0) + 1 as next_seq from shipments` as [{ next_seq: number }];
-        const nextSeq = seqResult[0]?.next_seq || 1;
+        const nextSeq = seqResult[0]!.next_seq || 1;
         const publicCode = generatePublicCode(
           body.vehicle_plate_region || 'XX',
           body.destination,
@@ -320,10 +320,10 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
         if (customerName) {
           const existingCust = await sql`select id, name from customers where lower(name) = lower(${customerName}) limit 1` as { id: number; name: string }[];
           if (existingCust.length > 0) {
-            customerId = existingCust[0].id;
+            customerId = existingCust[0]!.id;
           } else {
             const inserted = await sql`insert into customers (name, address) values (${customerName}, ${customerAddress}) returning id` as { id: number }[];
-            customerId = inserted[0].id;
+            customerId = inserted[0]!.id;
           }
         }
         

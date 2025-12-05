@@ -87,10 +87,19 @@ type CreateInvoiceBody = {
   tax_percent?: number;
   discount_amount?: number;
   notes?: string;
+  items?: {
+    shipment_id?: number | null;
+    description: string;
+    quantity: number;
+    unit_price: number;
+    tax_type?: string;
+    item_discount?: number;
+  }[];
 };
 
 type UpdateInvoiceBody = {
   id: number;
+  spb_number?: string;
   customer_name?: string;
   customer_id?: number;
   amount?: number;
@@ -277,6 +286,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     
     const invoiceId = result[0].id;
     
+    if (body.items && body.items.length > 0) {
+      for (const it of body.items) {
+        if (!it) continue;
+        const desc = it.description || 'Jasa pengiriman';
+        await sql`insert into invoice_items (invoice_id, shipment_id, description, quantity, unit_price, tax_type, item_discount) 
+          values (${invoiceId}, ${it.shipment_id || null}, ${desc}, ${it.quantity || 1}, ${it.unit_price || 0}, ${it.tax_type || 'include'}, ${it.item_discount || 0})`;
+      }
+    }
+    
     if (paidAmount > 0) {
       await sql`
         insert into invoice_payments (invoice_id, amount, payment_date, payment_method, notes)
@@ -328,6 +346,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     if (newStatus === 'paid') {
       await sql`
         update invoices set
+          spb_number = coalesce(${body.spb_number || null}, spb_number),
           customer_name = coalesce(${customerName || null}, customer_name),
           customer_id = coalesce(${customerId || null}, customer_id),
           amount = ${newAmount},
@@ -345,6 +364,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     } else {
       await sql`
         update invoices set
+          spb_number = coalesce(${body.spb_number || null}, spb_number),
           customer_name = coalesce(${customerName || null}, customer_name),
           customer_id = coalesce(${customerId || null}, customer_id),
           amount = ${newAmount},
@@ -389,10 +409,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     if (!body || !body.invoice_id) { writeJson(res, { error: 'Missing invoice_id' }, 400); return; }
 
     await sql`delete from invoice_items where invoice_id = ${body.invoice_id}`;
-    for (const it of body.items || []) {
-      if (!it || !it.description) continue;
-      await sql`insert into invoice_items (invoice_id, shipment_id, description, quantity, unit_price, tax_type, item_discount) values (${body.invoice_id}, ${it.shipment_id || null}, ${it.description}, ${it.quantity || 0}, ${it.unit_price || 0}, ${it.tax_type || 'include'}, ${it.item_discount || 0})`;
+    const itemsToInsert = body.items || [];
+    let insertedCount = 0;
+    for (const it of itemsToInsert) {
+      if (!it) continue;
+      const desc = it.description || 'Jasa pengiriman';
+      await sql`insert into invoice_items (invoice_id, shipment_id, description, quantity, unit_price, tax_type, item_discount) values (${body.invoice_id}, ${it.shipment_id || null}, ${desc}, ${it.quantity || 1}, ${it.unit_price || 0}, ${it.tax_type || 'include'}, ${it.item_discount || 0})`;
+      insertedCount++;
     }
+    console.log(`[set-items] invoice_id=${body.invoice_id}, received=${itemsToInsert.length}, inserted=${insertedCount}`);
     const rows = await sql`select coalesce(sum((quantity*unit_price) - coalesce(item_discount,0)),0)::float as subtotal from invoice_items where invoice_id = ${body.invoice_id}` as [{ subtotal: number }];
     const subtotal = rows[0]?.subtotal || 0;
     

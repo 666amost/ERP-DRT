@@ -249,18 +249,31 @@ async function loadItemsForInvoice(id: number | null): Promise<void> {
   }
 }
 
-async function saveItemsForInvoice(invoiceId: number): Promise<void> {
-  await fetch('/api/invoices?endpoint=set-items', {
+async function saveItemsForInvoice(invoiceId: number, itemsToSave?: Item[]): Promise<void> {
+  const saveItems = itemsToSave || items.value;
+  const response = await fetch('/api/invoices?endpoint=set-items', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       invoice_id: invoiceId,
-      items: items.value.map((it) => ({ id: it.id, shipment_id: it.shipment_id || null, description: it.description, quantity: it.quantity, unit_price: it.unit_price, tax_type: it.tax_type, item_discount: it.item_discount })),
+      items: saveItems.map((it) => ({ 
+        id: it.id, 
+        shipment_id: it.shipment_id || null, 
+        description: it.description || 'Jasa pengiriman', 
+        quantity: it.quantity || 1, 
+        unit_price: it.unit_price || 0, 
+        tax_type: it.tax_type || 'include', 
+        item_discount: it.item_discount || 0 
+      })),
       tax_percent: taxPercent.value,
       discount_amount: discountAmount.value,
       notes: notes.value || undefined
     })
   });
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error || 'Failed to save items');
+  }
 }
 
 function calcSubtotal(): number {
@@ -375,10 +388,10 @@ async function saveInvoice() {
   const subtotal = calcSubtotal();
   const pphAmount = calcPph();
   const totalTagihan = calcTotal();
+  
+  const itemsSnapshot = items.value.map(it => ({ ...it }));
 
   try {
-    const firstSpbNumber = items.value[0]?.spb_number || null;
-    
     if (editingId.value) {
       const newRemaining = Math.max(0, totalTagihan - existingPaidAmount.value);
       let newStatus = 'pending';
@@ -388,11 +401,17 @@ async function saveInvoice() {
         newStatus = 'partial';
       }
       
+      const allSpbNumbers = itemsSnapshot
+        .map(it => it.spb_number || it.tracking_code)
+        .filter(Boolean)
+        .join(', ');
+      
       const res = await fetch('/api/invoices?endpoint=update', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: editingId.value,
+          spb_number: allSpbNumbers || undefined,
           customer_name: form.value.customer_name,
           customer_id: form.value.customer_id || undefined,
           amount: totalTagihan,
@@ -405,7 +424,7 @@ async function saveInvoice() {
         })
       });
       if (!res.ok) throw new Error('Update failed');
-      await saveItemsForInvoice(editingId.value);
+      await saveItemsForInvoice(editingId.value, itemsSnapshot);
     } else {
       let paidAmount = 0;
       let remainingAmount = totalTagihan;
@@ -424,12 +443,17 @@ async function saveInvoice() {
         remainingAmount = 0;
       }
       
+      const allSpbNumbers = itemsSnapshot
+        .map(it => it.spb_number || it.tracking_code)
+        .filter(Boolean)
+        .join(', ');
+      
       const res = await fetch('/api/invoices?endpoint=create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          shipment_id: items.value[0]?.shipment_id || null,
-          spb_number: firstSpbNumber,
+          shipment_id: itemsSnapshot[0]?.shipment_id || null,
+          spb_number: allSpbNumbers || null,
           customer_name: form.value.customer_name,
           customer_id: form.value.customer_id || undefined,
           amount: totalTagihan,
@@ -439,21 +463,20 @@ async function saveInvoice() {
           paid_amount: paidAmount,
           remaining_amount: remainingAmount,
           status: finalStatus,
-          notes: notes.value || undefined
+          notes: notes.value || undefined,
+          items: itemsSnapshot.map(it => ({
+            shipment_id: it.shipment_id || null,
+            description: it.description || 'Jasa pengiriman',
+            quantity: it.quantity || 1,
+            unit_price: it.unit_price || 0,
+            tax_type: it.tax_type || 'include',
+            item_discount: it.item_discount || 0
+          }))
         })
       });
+      const created = await res.json();
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'Create failed');
-      }
-      try {
-        const created = await res.json();
-        const newId: number | undefined = created?.id ?? created?.invoice?.id;
-        if (typeof newId === 'number') {
-          await saveItemsForInvoice(newId);
-        }
-      } catch (err) {
-        console.warn('Create invoice parse error', err);
+        throw new Error(created.error || 'Create failed');
       }
     }
     showModal.value = false;

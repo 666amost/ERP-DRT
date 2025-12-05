@@ -17,6 +17,7 @@ type PaymentHistory = {
   final_amount: number;
   payment_date: string;
   payment_method: string | null;
+  reference_no: string | null;
   notes: string | null;
 };
 
@@ -87,7 +88,7 @@ function resetFilters() {
 }
 
 function exportExcel() {
-  const headers = ['No', 'Invoice', 'Customer', 'Original', 'Diskon', 'Bayar', 'Metode', 'Tanggal'];
+  const headers = ['No', 'Invoice', 'Customer', 'Original', 'Diskon', 'Bayar', 'Metode', 'No. Ref', 'Catatan', 'Tanggal'];
   const rows = filteredPayments.value.map((p, idx) => [
     idx + 1,
     p.invoice_number || '-',
@@ -96,6 +97,8 @@ function exportExcel() {
     p.discount,
     p.final_amount,
     p.payment_method || '-',
+    p.reference_no || '-',
+    p.notes || '-',
     formatDate(p.payment_date)
   ]);
 
@@ -200,6 +203,8 @@ onMounted(() => {
               <th class="px-3 py-2 text-right">Diskon</th>
               <th class="px-3 py-2 text-right">Bayar</th>
               <th class="px-3 py-2 text-center">Metode</th>
+              <th class="px-3 py-2 text-left">No. Ref</th>
+              <th class="px-3 py-2 text-left">Catatan</th>
               <th class="px-3 py-2 text-left">Tanggal</th>
             </tr>
           </thead>
@@ -214,6 +219,8 @@ onMounted(() => {
               <td class="px-3 py-2 text-center">
                 <Badge :variant="getMethodVariant(p.payment_method)">{{ p.payment_method || '-' }}</Badge>
               </td>
+              <td class="px-3 py-2 text-gray-600 dark:text-gray-400">{{ p.reference_no || '-' }}</td>
+              <td class="px-3 py-2 text-gray-600 dark:text-gray-400 max-w-[200px] truncate" :title="p.notes || ''">{{ p.notes || '-' }}</td>
               <td class="px-3 py-2">{{ formatDate(p.payment_date) }}</td>
             </tr>
           </tbody>
@@ -221,7 +228,7 @@ onMounted(() => {
             <tr>
               <td colspan="5" class="px-3 py-2 text-right">Total:</td>
               <td class="px-3 py-2 text-right text-green-600">{{ formatRupiah(totalPaid) }}</td>
-              <td colspan="2"></td>
+              <td colspan="4"></td>
             </tr>
           </tfoot>
         </table>

@@ -388,7 +388,8 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
           s.status
         from shipments s
         left join customers c on c.id = s.customer_id
-        left join invoices i on i.shipment_id = s.id
+        left join invoice_items ii on ii.shipment_id = s.id
+        left join invoices i on i.id = ii.invoice_id
         where s.nominal > 0
           and (i.id is null or i.status = 'cancelled')
         order by s.created_at desc

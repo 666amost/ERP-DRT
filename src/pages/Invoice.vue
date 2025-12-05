@@ -38,7 +38,7 @@ type InvoicePayment = {
   amount: number;
   payment_date: string;
   payment_method: string | null;
-  reference_number: string | null;
+  reference_no: string | null;
   notes: string | null;
   created_at: string;
 };
@@ -510,6 +510,14 @@ async function addPayment() {
     return;
   }
   
+  const remainingAmount = selectedInvoice.value.remaining_amount ?? selectedInvoice.value.amount ?? 0;
+  const isFullPayment = amount >= remainingAmount;
+  
+  if (isFullPayment) {
+    const confirmMsg = `Pembayaran sebesar ${formatRupiah(amount)} akan melunasi invoice ini.\n\nLanjutkan pelunasan?`;
+    if (!confirm(confirmMsg)) return;
+  }
+  
   try {
     const res = await fetch('/api/invoices?endpoint=add-payment', {
       method: 'POST',
@@ -519,7 +527,7 @@ async function addPayment() {
         amount,
         payment_date: paymentForm.value.payment_date || null,
         payment_method: paymentForm.value.payment_method || null,
-        reference_number: paymentForm.value.reference_number || null,
+        reference_no: paymentForm.value.reference_number || null,
         notes: paymentForm.value.notes || null
       })
     });
@@ -900,6 +908,73 @@ async function printInvoice(inv: Invoice): Promise<void> {
         page-break-inside: avoid;
       }
     }
+    @media print and (min-resolution: 72dpi) and (max-resolution: 150dpi) {
+      body {
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 12px;
+      }
+      .items-table th,
+      .items-table td {
+        border: 2px solid #000;
+        padding: 6px 4px;
+        font-size: 11px;
+      }
+      .company-name {
+        font-size: 14px;
+        font-weight: bold;
+      }
+      .company-address,
+      .company-contact {
+        font-size: 10px;
+        color: #000;
+      }
+      .invoice-title {
+        font-size: 18px;
+      }
+      .invoice-meta-row {
+        font-size: 11px;
+      }
+      .bill-to-label,
+      .bank-title {
+        font-size: 11px;
+        font-weight: bold;
+      }
+      .bill-to-content,
+      .bank-row {
+        font-size: 10px;
+        color: #000;
+      }
+      .totals-row {
+        font-size: 11px;
+        border-color: #000;
+      }
+      .totals-row.total {
+        font-size: 13px;
+        border-width: 2px;
+      }
+      .notes-section {
+        font-size: 10px;
+        color: #000;
+        background: #fff;
+        border: 2px solid #000;
+      }
+      .signature-block {
+        font-size: 11px;
+      }
+      .signature-line {
+        border-top: 2px solid #000;
+      }
+      .bank-section,
+      .bill-to-content {
+        background: #fff;
+        border: 2px solid #000;
+      }
+      .lunas-stamp {
+        color: rgba(0, 0, 0, 0.2);
+        border-color: rgba(0, 0, 0, 0.2);
+        border-width: 6px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -980,10 +1055,9 @@ async function printInvoice(inv: Invoice): Promise<void> {
       ${company.bank_name ? `<div class="bank-row"><strong>Bank:</strong> ${company.bank_name.toUpperCase()}</div>
       <div class="bank-row"><strong>No. Rek:</strong> ${company.bank_account || ''}</div>
       <div class="bank-row"><strong>A/N:</strong> ${company.account_holder || ''}</div>` : ''}
-      <div class="bank-row" style="margin-top: 4px; font-style: italic; color: #666; border-top: 1px solid #ddd; padding-top: 3px;">Mohon konfirmasi pembayaran via WhatsApp atau email</div>
     </div>
 
-    ${inv.notes ? `<div class="notes-section"><strong>Catatan:</strong> ${(inv.notes || '').replace(/</g,'&lt;')}</div>` : '<div class="notes-section"><strong>Catatan:</strong> Terima kasih. Pembayaran sesuai dengan ketentuan yang berlaku.</div>'}
+    ${inv.notes ? `<div class="notes-section"><strong>Catatan:</strong> ${(inv.notes || '').replace(/</g,'&lt;')}</div>` : ''}
 
     <div class="footer">
       <div class="signature-block">
@@ -992,10 +1066,6 @@ async function printInvoice(inv: Invoice): Promise<void> {
       </div>
       <div class="signature-block">
         <div>Diterima oleh</div>
-        <div class="signature-line"></div>
-      </div>
-      <div class="signature-block">
-        <div>Mengetahui</div>
         <div class="signature-line"></div>
       </div>
     </div>
@@ -1182,18 +1252,21 @@ watch([items, pphPercent], () => {
             <td class="px-4 py-3 text-right">
               <div class="flex items-center justify-end gap-1 flex-wrap">
                 <button
+                  v-if="inv.status !== 'paid' && (inv.remaining_amount ?? inv.amount) > 0"
                   class="px-2 py-1 text-xs font-medium text-white bg-blue-500 hover:bg-blue-600 rounded transition-colors"
                   @click="openPaymentModal(inv)"
                 >
                   Bayar
                 </button>
                 <button
+                  v-if="inv.status !== 'paid'"
                   class="px-2 py-1 text-xs font-medium text-white bg-purple-500 hover:bg-purple-600 rounded transition-colors"
                   @click="openPphModal(inv)"
                 >
                   PPh
                 </button>
                 <button
+                  v-if="inv.status !== 'paid'"
                   class="px-2 py-1 text-xs font-medium text-white bg-indigo-500 hover:bg-indigo-600 rounded transition-colors"
                   @click="openEditModal(inv)"
                 >
@@ -1276,6 +1349,7 @@ watch([items, pphPercent], () => {
         </div>
         <div class="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-700 min-w-0">
           <Button
+            v-if="inv.status !== 'paid'"
             block
             variant="primary"
             @click="openEditModal(inv)"
@@ -1298,6 +1372,7 @@ watch([items, pphPercent], () => {
             T. Terima
           </Button>
           <Button
+            v-if="inv.status !== 'paid'"
             block
             variant="default"
             class="text-red-600 hover:text-red-700 bg-red-50 dark:bg-red-900/20"
@@ -1666,20 +1741,31 @@ watch([items, pphPercent], () => {
             <div>
               <h4 class="font-medium mb-2 dark:text-gray-200">Riwayat Pembayaran</h4>
               <div v-if="invoicePayments.length === 0" class="text-sm text-gray-500">Belum ada pembayaran</div>
-              <div v-else class="space-y-2 max-h-32 overflow-auto">
+              <div v-else class="space-y-2 max-h-40 overflow-auto">
                 <div v-for="p in invoicePayments" :key="p.id" class="flex items-center justify-between bg-gray-50 dark:bg-gray-700 p-2 rounded-lg text-sm">
-                  <div>
+                  <div class="flex-1">
                     <div class="font-medium text-green-600">{{ formatRupiah(p.amount) }}</div>
                     <div class="text-xs text-gray-500">{{ formatDate(p.payment_date) }} - {{ p.payment_method || 'N/A' }}</div>
-                    <div v-if="p.reference_number" class="text-xs text-gray-400">Ref: {{ p.reference_number }}</div>
+                    <div v-if="p.reference_no" class="text-xs text-gray-400">Ref: {{ p.reference_no }}</div>
+                    <div v-if="p.notes" class="text-xs text-gray-400 italic">{{ p.notes }}</div>
                   </div>
-                  <button class="text-red-500 text-xs" @click="deletePayment(p.id)">Hapus</button>
+                  <button class="text-red-500 text-xs ml-2" @click="deletePayment(p.id)">Hapus</button>
                 </div>
               </div>
             </div>
             
-            <div class="border-t border-gray-200 dark:border-gray-600 pt-4">
-              <h4 class="font-medium mb-2 dark:text-gray-200">Tambah Pembayaran</h4>
+            <div v-if="selectedInvoice?.status !== 'paid' && (selectedInvoice?.remaining_amount ?? selectedInvoice?.amount ?? 0) > 0" class="border-t border-gray-200 dark:border-gray-600 pt-4">
+              <div class="flex items-center justify-between mb-2">
+                <h4 class="font-medium dark:text-gray-200">Tambah Pembayaran</h4>
+                <button 
+                  v-if="(selectedInvoice?.remaining_amount ?? selectedInvoice?.amount ?? 0) > 0"
+                  type="button"
+                  class="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400"
+                  @click="paymentForm.amount = String(selectedInvoice?.remaining_amount ?? selectedInvoice?.amount ?? 0)"
+                >
+                  Isi sisa ({{ formatRupiah(selectedInvoice?.remaining_amount ?? selectedInvoice?.amount ?? 0) }})
+                </button>
+              </div>
               <div class="space-y-3">
                 <div>
                   <label class="block text-sm font-medium mb-1 dark:text-gray-300">Jumlah (Rp)</label>
@@ -1710,12 +1796,17 @@ watch([items, pphPercent], () => {
                 </div>
               </div>
             </div>
+            <div v-else-if="selectedInvoice?.status === 'paid'" class="border-t border-gray-200 dark:border-gray-600 pt-4">
+              <div class="text-center py-4">
+                <div class="text-green-600 font-medium">✓ Invoice sudah lunas</div>
+              </div>
+            </div>
           </template>
         </div>
         
         <div class="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
           <Button variant="default" @click="showPaymentModal = false">Tutup</Button>
-          <Button variant="primary" @click="addPayment">Tambah Pembayaran</Button>
+          <Button v-if="selectedInvoice?.status !== 'paid' && (selectedInvoice?.remaining_amount ?? selectedInvoice?.amount ?? 0) > 0" variant="primary" @click="addPayment">Tambah Pembayaran</Button>
         </div>
       </div>
     </div>

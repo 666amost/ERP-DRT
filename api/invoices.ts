@@ -53,6 +53,7 @@ type PaymentHistory = {
   final_amount: number;
   payment_date: string;
   payment_method: string | null;
+  reference_no: string | null;
   notes: string | null;
 };
 
@@ -387,7 +388,6 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     try { body = await readJsonNode(req) as { invoice_id: number; items: (InvoiceItem & { id?: number })[]; tax_percent?: number; discount_amount?: number; notes?: string }; } catch { body = null as any; }
     if (!body || !body.invoice_id) { writeJson(res, { error: 'Missing invoice_id' }, 400); return; }
 
-    // Upsert per item to preserve ids when present
     await sql`delete from invoice_items where invoice_id = ${body.invoice_id}`;
     for (const it of body.items || []) {
       if (!it || !it.description) continue;
@@ -397,8 +397,30 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const subtotal = rows[0]?.subtotal || 0;
     const tax = (body.tax_percent || 0) * subtotal / 100;
     const total = subtotal + tax - (body.discount_amount || 0);
-    await sql`update invoices set amount = ${total}, tax_percent = ${body.tax_percent || 0}, discount_amount = ${body.discount_amount || 0}, notes = ${body.notes || null} where id = ${body.invoice_id}`;
-    writeJson(res, { success: true, subtotal, total });
+    
+    const inv = await sql`select paid_amount, pph_percent, pph_amount from invoices where id = ${body.invoice_id}` as [{ paid_amount: number; pph_percent: number; pph_amount: number }];
+    const paidAmount = Number(inv[0]?.paid_amount || 0);
+    const pphPercent = Number(inv[0]?.pph_percent || 0);
+    const pphAmount = pphPercent > 0 ? (subtotal * pphPercent / 100) : 0;
+    const totalTagihan = subtotal - pphAmount;
+    const remainingAmount = Math.max(0, totalTagihan - paidAmount);
+    
+    let status = 'pending';
+    if (remainingAmount <= 0 && paidAmount > 0) status = 'paid';
+    else if (paidAmount > 0) status = 'partial';
+    
+    await sql`update invoices set 
+      amount = ${totalTagihan}, 
+      subtotal = ${subtotal},
+      pph_amount = ${pphAmount},
+      total_tagihan = ${totalTagihan},
+      remaining_amount = ${remainingAmount},
+      status = ${status},
+      tax_percent = ${body.tax_percent || 0}, 
+      discount_amount = ${body.discount_amount || 0}, 
+      notes = ${body.notes || null} 
+    where id = ${body.invoice_id}`;
+    writeJson(res, { success: true, subtotal, total: totalTagihan, remaining_amount: remainingAmount });
     return;
   } else if (endpoint === 'delete' && req.method === 'DELETE') {
     const id = url.searchParams.get('id');
@@ -569,21 +591,36 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         coalesce(s.berat, 0)::float as total_weight,
         coalesce(s.nominal, 0)::float as nominal,
         s.created_at,
-        i.id as invoice_id, 
-        i.invoice_number,
-        coalesce(i.remaining_amount, s.nominal)::float as remaining_amount,
-        coalesce(i.status, 'no_invoice') as invoice_status
+        coalesce(ii_inv.id, spb_inv.id) as invoice_id, 
+        coalesce(ii_inv.invoice_number, spb_inv.invoice_number) as invoice_number,
+        case 
+          when ii_inv.id is null and spb_inv.id is null then coalesce(s.nominal, 0)
+          when ii_inv.id is not null then
+            case 
+              when coalesce(ii_inv.subtotal, 0) > 0 then 
+                round((coalesce(s.nominal, 0)::numeric / coalesce(ii_inv.subtotal, 1)::numeric) * coalesce(ii_inv.remaining_amount, ii_inv.amount, 0)::numeric, 2)
+              else coalesce(ii_inv.remaining_amount, s.nominal, 0)
+            end
+          else coalesce(spb_inv.remaining_amount, s.nominal, 0)
+        end::float as remaining_amount,
+        coalesce(
+          case when ii_inv.id is not null then ii_inv.status else spb_inv.status end,
+          'no_invoice'
+        ) as invoice_status
       from shipments s
       left join invoice_items ii on ii.shipment_id = s.id
-      left join invoices i on i.id = ii.invoice_id
+      left join invoices ii_inv on ii_inv.id = ii.invoice_id
+      left join invoices spb_inv on spb_inv.spb_number = s.spb_number and ii.id is null
       where s.nominal > 0
         and (
-          i.id is null 
-          or i.status in ('pending', 'partial')
+          (ii_inv.id is null and spb_inv.id is null)
+          or (ii_inv.id is not null and ii_inv.status in ('pending', 'partial'))
+          or (ii_inv.id is null and spb_inv.id is not null and spb_inv.status in ('pending', 'partial'))
         )
       group by s.id, s.spb_number, s.public_code, s.customer_id, s.customer_name,
                s.origin, s.destination, s.total_colli, s.berat, s.nominal, s.created_at,
-               i.id, i.invoice_number, i.remaining_amount, i.status
+               ii_inv.id, ii_inv.invoice_number, ii_inv.remaining_amount, ii_inv.amount, ii_inv.subtotal, ii_inv.status,
+               spb_inv.id, spb_inv.invoice_number, spb_inv.remaining_amount, spb_inv.status
       order by s.created_at desc
     `;
     writeJson(res, { items });
@@ -595,7 +632,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         coalesce(i.amount, 0)::float as original_amount,
         coalesce(i.discount_amount, 0)::float as discount,
         coalesce(ip.amount, 0)::float as final_amount,
-        ip.payment_date, ip.payment_method, ip.notes
+        ip.payment_date, ip.payment_method, ip.reference_no, ip.notes
       from invoice_payments ip
       join invoices i on i.id = ip.invoice_id
       order by ip.payment_date desc

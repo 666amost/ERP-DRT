@@ -23,8 +23,8 @@ const allMenuGroups: MenuGroup[] = [
   {
     title: 'MENU UTAMA',
     items: [
-      { to: '/dashboard', label: 'Dasbor', icon: 'mdi:view-dashboard-outline' },
-      { to: '/barang-keluar', label: 'SPB', icon: 'mdi:archive-arrow-down-outline' },
+      { to: '/dashboard', label: 'Dasboard', icon: 'mdi:view-dashboard-outline' },
+      { to: '/barang-keluar', label: 'SPB RESI', icon: 'mdi:archive-arrow-down-outline' },
       { to: '/dbl', label: 'DBL/Manifes', icon: 'mdi:clipboard-list-outline' },
       { to: '/surat-jalan', label: 'Surat Jalan', icon: 'mdi:file-document-outline' },
       { to: '/pelacakan', label: 'Pelacakan', icon: 'mdi:truck-outline' },

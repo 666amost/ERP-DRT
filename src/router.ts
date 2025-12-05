@@ -16,6 +16,7 @@ const Outstanding = () => import('./pages/Outstanding.vue');
 const Pelunasan = () => import('./pages/Pelunasan.vue');
 const DailyReport = () => import('./pages/DailyReport.vue');
 const DBLReport = () => import('./pages/DBLReport.vue');
+const OperationalCost = () => import('./pages/OperationalCost.vue');
 const Sales = () => import('./pages/Sales.vue');
 const Unauthorized = () => import('./pages/Unauthorized.vue');
 
@@ -42,6 +43,7 @@ export const router = createRouter({
         { path: 'pelunasan', name: 'pelunasan', component: Pelunasan, meta: { requiresAuth: true, permission: 'canPelunasan' as PermissionKey } },
         { path: 'report/daily', name: 'daily-report', component: DailyReport },
         { path: 'report/dbl', name: 'dbl-report', component: DBLReport },
+        { path: 'report/operational', name: 'operational-cost', component: OperationalCost, meta: { requiresAuth: true, permission: 'canViewKeuangan' as PermissionKey } },
         { path: 'report/sales', name: 'sales-report', component: Sales, meta: { requiresAuth: true, permission: 'canViewSalesReport' as PermissionKey } },
         { path: 'admin/pod', name: 'admin-pod', component: AdminPodList, meta: { requiresAuth: true, permission: 'canViewSettings' as PermissionKey } },
         { path: 'admin/company', name: 'admin-company', component: AdminCompany, meta: { requiresAuth: true, permission: 'canViewSettings' as PermissionKey } }

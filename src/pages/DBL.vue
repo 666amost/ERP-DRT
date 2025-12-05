@@ -65,14 +65,6 @@ type DBLForm = {
   origin: string;
   destination: string;
   status: string;
-  loco_amount: string;
-  tekor_amount: string;
-  sangu: string;
-  komisi: string;
-  ongkos_muatan: string;
-  biaya_lain: string;
-  administrasi: string;
-  ongkos_lain: string;
   catatan: string;
   pengurus_name: string;
 };
@@ -103,14 +95,6 @@ const form = ref<DBLForm>({
   origin: '',
   destination: '',
   status: 'DRAFT',
-  loco_amount: '0',
-  tekor_amount: '0',
-  sangu: '0',
-  komisi: '0',
-  ongkos_muatan: '0',
-  biaya_lain: '0',
-  administrasi: '0',
-  ongkos_lain: '0',
   catatan: '',
   pengurus_name: ''
 });
@@ -174,14 +158,6 @@ function openCreateModal() {
     origin: '',
     destination: '',
     status: 'DRAFT',
-    loco_amount: '0',
-    tekor_amount: '0',
-    sangu: '0',
-    komisi: '0',
-    ongkos_muatan: '0',
-    biaya_lain: '0',
-    administrasi: '0',
-    ongkos_lain: '0',
     catatan: '',
     pengurus_name: ''
   };
@@ -203,14 +179,6 @@ async function openEditModal(dbl: DBL) {
     origin: sanitize(dbl.origin),
     destination: sanitize(dbl.destination),
     status: dbl.status,
-    loco_amount: String(dbl.loco_amount || 0),
-    tekor_amount: String(dbl.tekor_amount || 0),
-    sangu: String(dbl.sangu || 0),
-    komisi: String(dbl.komisi || 0),
-    ongkos_muatan: String(dbl.ongkos_muatan || 0),
-    biaya_lain: String(dbl.biaya_lain || 0),
-    administrasi: String(dbl.administrasi || 0),
-    ongkos_lain: String(dbl.ongkos_lain || 0),
     catatan: sanitize(dbl.catatan),
     pengurus_name: sanitize(dbl.pengurus_name)
   };
@@ -228,14 +196,6 @@ async function saveDBL() {
       origin: form.value.origin || null,
       destination: form.value.destination || null,
       status: form.value.status,
-      loco_amount: parseFloat(form.value.loco_amount) || 0,
-      tekor_amount: parseFloat(form.value.tekor_amount) || 0,
-      sangu: parseFloat(form.value.sangu) || 0,
-      komisi: parseFloat(form.value.komisi) || 0,
-      ongkos_muatan: parseFloat(form.value.ongkos_muatan) || 0,
-      biaya_lain: parseFloat(form.value.biaya_lain) || 0,
-      administrasi: parseFloat(form.value.administrasi) || 0,
-      ongkos_lain: parseFloat(form.value.ongkos_lain) || 0,
       catatan: form.value.catatan || null,
       pengurus_name: form.value.pengurus_name || null
     };
@@ -402,18 +362,6 @@ async function printDaftarMuat(dbl: DBL) {
 
   const totalNom = items.reduce((sum, s) => sum + (s.nominal || 0), 0);
   const totalCol = items.reduce((sum, s) => sum + (s.total_colli || 0), 0);
-  
-  const locoAmount = dbl.loco_amount || 0;
-  const tekorAmount = dbl.tekor_amount || 0;
-  const sangu = dbl.sangu || 0;
-  const komisi = dbl.komisi || 0;
-  const ongkosMuatan = dbl.ongkos_muatan || 0;
-  const biayaLain = dbl.biaya_lain || 0;
-  const administrasi = dbl.administrasi || 0;
-  const ongkosLain = dbl.ongkos_lain || 0;
-
-  const totalTagihan = sangu + komisi + ongkosMuatan + biayaLain + administrasi + ongkosLain;
-  const totalBayar = totalNom + locoAmount - tekorAmount;
 
   const win = window.open('', '_blank');
   if (!win) return;
@@ -486,24 +434,12 @@ async function printDaftarMuat(dbl: DBL) {
   <div class="grid grid-cols-2 gap-4 mb-4">
     <div class="border p-2 rounded">
       <div class="font-bold mb-2 border-b pb-1">CATATAN:</div>
-      <table class="w-full text-sm">
-        <tr><td>SANGU</td><td class="text-right">: Rp</td><td class="text-right w-24">${formatRupiah(sangu)}</td></tr>
-        <tr><td>KOMISI</td><td class="text-right">: Rp</td><td class="text-right">${formatRupiah(komisi)}</td></tr>
-        <tr><td>ONGKOS MUATAN</td><td class="text-right">: Rp</td><td class="text-right">${formatRupiah(ongkosMuatan)}</td></tr>
-        <tr><td>BIAYA LAIN-LAIN</td><td class="text-right">: Rp</td><td class="text-right">${formatRupiah(biayaLain)}</td></tr>
-        <tr><td>ADMINISTRASI</td><td class="text-right">: Rp</td><td class="text-right">${formatRupiah(administrasi)}</td></tr>
-        <tr><td>ONGKOS LAIN-LAIN</td><td class="text-right">: Rp</td><td class="text-right">${formatRupiah(ongkosLain)}</td></tr>
-        <tr class="font-bold border-t"><td>TOTAL</td><td class="text-right">: Rp</td><td class="text-right">${formatRupiah(totalTagihan)}</td></tr>
-        <tr class="font-bold"><td>BAYAR</td><td class="text-right">: Rp</td><td class="text-right">${formatRupiah(totalBayar)}</td></tr>
-      </table>
-      <div class="mt-2 text-xs text-gray-600">${esc(dbl.catatan)}</div>
+      <div class="text-sm text-gray-600">${esc(dbl.catatan) || '-'}</div>
     </div>
 
     <div class="border p-2 rounded">
       <table class="w-full text-sm mb-4">
-        <tr><td colspan="3" class="text-right font-bold">Rp. ${formatRupiah(totalNom)}</td></tr>
-        <tr><td>LOCO</td><td class="text-right">: Rp</td><td class="text-right w-24">${formatRupiah(locoAmount)}</td></tr>
-        <tr><td>TEKOR F/L</td><td class="text-right">: Rp</td><td class="text-right">${locoAmount > tekorAmount ? '-' : ''}${formatRupiah(Math.abs(tekorAmount))}</td></tr>
+        <tr><td class="font-bold">TOTAL NOMINAL</td><td class="text-right font-bold">Rp. ${formatRupiah(totalNom)}</td></tr>
       </table>
       
       <div class="grid grid-cols-2 gap-4 mt-8">
@@ -699,44 +635,6 @@ onMounted(() => {
             </div>
             <div>
               <CityAutocomplete v-model="form.destination" label="Tujuan" placeholder="Kota tujuan" />
-            </div>
-          </div>
-
-          <div class="border-t pt-4 mt-4">
-            <h4 class="font-medium mb-3 dark:text-gray-200">Biaya & Potongan</h4>
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-xs font-medium mb-1 dark:text-gray-300">LOCO</label>
-                <input v-model="form.loco_amount" type="number" class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100" @focus="($event.target as HTMLInputElement).select()" />
-              </div>
-              <div>
-                <label class="block text-xs font-medium mb-1 dark:text-gray-300">TEKOR F/L</label>
-                <input v-model="form.tekor_amount" type="number" class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100" @focus="($event.target as HTMLInputElement).select()" />
-              </div>
-              <div>
-                <label class="block text-xs font-medium mb-1 dark:text-gray-300">SANGU</label>
-                <input v-model="form.sangu" type="number" class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100" @focus="($event.target as HTMLInputElement).select()" />
-              </div>
-              <div>
-                <label class="block text-xs font-medium mb-1 dark:text-gray-300">KOMISI</label>
-                <input v-model="form.komisi" type="number" class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100" @focus="($event.target as HTMLInputElement).select()" />
-              </div>
-              <div>
-                <label class="block text-xs font-medium mb-1 dark:text-gray-300">ONGKOS MUATAN</label>
-                <input v-model="form.ongkos_muatan" type="number" class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100" @focus="($event.target as HTMLInputElement).select()" />
-              </div>
-              <div>
-                <label class="block text-xs font-medium mb-1 dark:text-gray-300">BIAYA LAIN</label>
-                <input v-model="form.biaya_lain" type="number" class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100" @focus="($event.target as HTMLInputElement).select()" />
-              </div>
-              <div>
-                <label class="block text-xs font-medium mb-1 dark:text-gray-300">ADMINISTRASI</label>
-                <input v-model="form.administrasi" type="number" class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100" @focus="($event.target as HTMLInputElement).select()" />
-              </div>
-              <div>
-                <label class="block text-xs font-medium mb-1 dark:text-gray-300">ONGKOS LAIN</label>
-                <input v-model="form.ongkos_lain" type="number" class="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100" @focus="($event.target as HTMLInputElement).select()" />
-              </div>
             </div>
           </div>
 

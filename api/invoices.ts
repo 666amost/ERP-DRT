@@ -395,8 +395,6 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
     const rows = await sql`select coalesce(sum((quantity*unit_price) - coalesce(item_discount,0)),0)::float as subtotal from invoice_items where invoice_id = ${body.invoice_id}` as [{ subtotal: number }];
     const subtotal = rows[0]?.subtotal || 0;
-    const tax = (body.tax_percent || 0) * subtotal / 100;
-    const total = subtotal + tax - (body.discount_amount || 0);
     
     const inv = await sql`select paid_amount, pph_percent, pph_amount from invoices where id = ${body.invoice_id}` as [{ paid_amount: number; pph_percent: number; pph_amount: number }];
     const paidAmount = Number(inv[0]?.paid_amount || 0);

@@ -37,6 +37,7 @@ const allMenuGroups: MenuGroup[] = [
       { to: '/invoice', label: 'Invoice', icon: 'mdi:receipt-text-outline' },
       { to: '/outstanding', label: 'Outstanding', icon: 'mdi:clock-alert-outline' },
       { to: '/pelunasan', label: 'Pelunasan', icon: 'mdi:cash-check', requirePermission: 'canPelunasan' },
+      { to: '/report/operational', label: 'Biaya Operasional', icon: 'mdi:calculator-variant-outline' },
     ]
   },
   {

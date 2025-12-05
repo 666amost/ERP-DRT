@@ -125,6 +125,7 @@ const allMoreMenuGroups: MoreMenuGroup[] = [
     items: [
       { to: '/outstanding', label: 'Outstanding', icon: 'mdi:clock-alert-outline' },
       { to: '/pelunasan', label: 'Pelunasan', icon: 'mdi:cash-check', requirePermission: 'canPelunasan' },
+      { to: '/report/operational', label: 'Biaya Ops', icon: 'mdi:calculator-variant-outline', requirePermission: 'canViewKeuangan' },
     ]
   },
   {

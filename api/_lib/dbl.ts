@@ -559,6 +559,195 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
 
       writeJson(res, { items });
       return
+
+    } else if (endpoint === 'operational-costs' && req.method === 'GET') {
+      const dblId = url.searchParams.get('dbl_id');
+      
+      if (dblId) {
+        const result = await sql`
+          select oc.*, d.dbl_number, d.origin, d.destination, d.driver_name, d.dbl_date,
+            (select coalesce(sum(s.nominal), 0)::float from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_nominal
+          from dbl_operational_costs oc
+          join dbl d on d.id = oc.dbl_id
+          where oc.dbl_id = ${parseInt(dblId)}
+        ` as Record<string, unknown>[];
+        
+        if (result.length > 0) {
+          writeJson(res, { item: result[0] });
+        } else {
+          const dblResult = await sql`
+            select d.*, 
+              (select coalesce(sum(s.nominal), 0)::float from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_nominal
+            from dbl d where d.id = ${parseInt(dblId)}
+          ` as Record<string, unknown>[];
+          writeJson(res, { item: null, dbl: dblResult[0] || null });
+        }
+      } else {
+        const startDate = url.searchParams.get('start_date');
+        const endDate = url.searchParams.get('end_date');
+        const destination = url.searchParams.get('destination');
+        
+        let items;
+        if (startDate && endDate) {
+          if (destination) {
+            items = await sql`
+              select d.id, d.dbl_number, d.origin, d.destination, d.driver_name, d.dbl_date, d.vehicle_plate,
+                (select coalesce(sum(s.nominal), 0)::float from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_nominal,
+                oc.bayar_supir, oc.solar, oc.sewa_mobil, oc.kuli_muat, oc.kuli_bongkar, oc.biaya_lain, oc.total_operational, oc.catatan as oc_catatan
+              from dbl d
+              left join dbl_operational_costs oc on oc.dbl_id = d.id
+              where d.dbl_date >= ${startDate}::date and d.dbl_date <= ${endDate}::date
+                and lower(d.destination) like ${`%${destination.toLowerCase()}%`}
+              order by d.dbl_date desc
+            `;
+          } else {
+            items = await sql`
+              select d.id, d.dbl_number, d.origin, d.destination, d.driver_name, d.dbl_date, d.vehicle_plate,
+                (select coalesce(sum(s.nominal), 0)::float from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_nominal,
+                oc.bayar_supir, oc.solar, oc.sewa_mobil, oc.kuli_muat, oc.kuli_bongkar, oc.biaya_lain, oc.total_operational, oc.catatan as oc_catatan
+              from dbl d
+              left join dbl_operational_costs oc on oc.dbl_id = d.id
+              where d.dbl_date >= ${startDate}::date and d.dbl_date <= ${endDate}::date
+              order by d.dbl_date desc
+            `;
+          }
+        } else {
+          items = await sql`
+            select d.id, d.dbl_number, d.origin, d.destination, d.driver_name, d.dbl_date, d.vehicle_plate,
+              (select coalesce(sum(s.nominal), 0)::float from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_nominal,
+              oc.bayar_supir, oc.solar, oc.sewa_mobil, oc.kuli_muat, oc.kuli_bongkar, oc.biaya_lain, oc.total_operational, oc.catatan as oc_catatan
+            from dbl d
+            left join dbl_operational_costs oc on oc.dbl_id = d.id
+            order by d.dbl_date desc
+            limit 50
+          `;
+        }
+        
+        writeJson(res, { items });
+      }
+      return
+
+    } else if (endpoint === 'save-operational-costs' && req.method === 'POST') {
+      const body = await readJsonNode(req) as {
+        dbl_id: number;
+        bayar_supir?: number;
+        solar?: number;
+        sewa_mobil?: number;
+        kuli_muat?: number;
+        kuli_bongkar?: number;
+        biaya_lain?: number;
+        catatan?: string;
+      } | null;
+
+      if (!body || !body.dbl_id) {
+        writeJson(res, { error: 'Missing dbl_id' }, 400);
+        return;
+      }
+
+      const totalOperational = (body.bayar_supir || 0) + (body.solar || 0) + (body.sewa_mobil || 0) +
+        (body.kuli_muat || 0) + (body.kuli_bongkar || 0) + (body.biaya_lain || 0);
+
+      const existing = await sql`
+        select id from dbl_operational_costs where dbl_id = ${body.dbl_id}
+      ` as { id: number }[];
+
+      if (existing.length > 0) {
+        await sql`
+          update dbl_operational_costs set
+            bayar_supir = ${body.bayar_supir || 0},
+            solar = ${body.solar || 0},
+            sewa_mobil = ${body.sewa_mobil || 0},
+            kuli_muat = ${body.kuli_muat || 0},
+            kuli_bongkar = ${body.kuli_bongkar || 0},
+            biaya_lain = ${body.biaya_lain || 0},
+            total_operational = ${totalOperational},
+            catatan = ${body.catatan || null},
+            updated_at = now()
+          where dbl_id = ${body.dbl_id}
+        `;
+      } else {
+        await sql`
+          insert into dbl_operational_costs (
+            dbl_id, bayar_supir, solar, sewa_mobil, kuli_muat, kuli_bongkar, biaya_lain, total_operational, catatan
+          ) values (
+            ${body.dbl_id},
+            ${body.bayar_supir || 0},
+            ${body.solar || 0},
+            ${body.sewa_mobil || 0},
+            ${body.kuli_muat || 0},
+            ${body.kuli_bongkar || 0},
+            ${body.biaya_lain || 0},
+            ${totalOperational},
+            ${body.catatan || null}
+          )
+        `;
+      }
+
+      writeJson(res, { success: true });
+      return
+
+    } else if (endpoint === 'margin-report' && req.method === 'GET') {
+      const startDate = url.searchParams.get('start_date');
+      const endDate = url.searchParams.get('end_date');
+      const destination = url.searchParams.get('destination');
+      
+      let baseQuery = `
+        select 
+          d.id, d.dbl_number, d.origin, d.destination, d.driver_name, d.dbl_date, d.vehicle_plate,
+          (select coalesce(sum(s.nominal), 0)::float from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_nominal,
+          coalesce(oc.total_operational, 0)::float as total_operational,
+          coalesce(oc.bayar_supir, 0)::float as bayar_supir,
+          coalesce(oc.solar, 0)::float as solar,
+          coalesce(oc.sewa_mobil, 0)::float as sewa_mobil,
+          coalesce(oc.kuli_muat, 0)::float as kuli_muat,
+          coalesce(oc.kuli_bongkar, 0)::float as kuli_bongkar,
+          coalesce(oc.biaya_lain, 0)::float as biaya_lain
+        from dbl d
+        left join dbl_operational_costs oc on oc.dbl_id = d.id
+      `;
+
+      const conditions: string[] = [];
+      if (startDate) conditions.push(`d.dbl_date >= '${startDate}'::date`);
+      if (endDate) conditions.push(`d.dbl_date <= '${endDate}'::date`);
+      if (destination) conditions.push(`lower(d.destination) like '%${destination.toLowerCase()}%'`);
+
+      if (conditions.length > 0) {
+        baseQuery += ` where ${conditions.join(' and ')}`;
+      }
+      baseQuery += ` order by d.dbl_date desc`;
+
+      const items = await sql(baseQuery as never) as Array<{
+        id: number;
+        dbl_number: string;
+        origin: string | null;
+        destination: string | null;
+        driver_name: string | null;
+        dbl_date: string | null;
+        vehicle_plate: string | null;
+        total_nominal: number;
+        total_operational: number;
+        bayar_supir: number;
+        solar: number;
+        sewa_mobil: number;
+        kuli_muat: number;
+        kuli_bongkar: number;
+        biaya_lain: number;
+      }>;
+
+      const report = items.map(item => ({
+        ...item,
+        margin: item.total_nominal - item.total_operational,
+        margin_percent: item.total_nominal > 0 ? ((item.total_nominal - item.total_operational) / item.total_nominal * 100).toFixed(2) : 0
+      }));
+
+      const summary = {
+        total_nominal: report.reduce((sum, r) => sum + r.total_nominal, 0),
+        total_operational: report.reduce((sum, r) => sum + r.total_operational, 0),
+        total_margin: report.reduce((sum, r) => sum + r.margin, 0)
+      };
+
+      writeJson(res, { items: report, summary });
+      return
     }
 
     writeJson(res, { error: 'Invalid endpoint' }, 404);

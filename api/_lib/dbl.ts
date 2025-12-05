@@ -737,7 +737,7 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
       const report = items.map(item => ({
         ...item,
         margin: item.total_nominal - item.total_operational,
-        margin_percent: item.total_nominal > 0 ? ((item.total_nominal - item.total_operational) / item.total_nominal * 100).toFixed(2) : 0
+        margin_percent: item.total_nominal > 0 ? parseFloat(((item.total_nominal - item.total_operational) / item.total_nominal * 100).toFixed(2)) : 0
       }));
 
       const summary = {

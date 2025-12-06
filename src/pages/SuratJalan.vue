@@ -199,38 +199,38 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         body { margin: 0; padding: 8mm 10mm; background: #fff; }
         .sheet { width: 100%; background: #fff; position: relative; }
         
-        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 3px solid #000; }
-        .brand { display: flex; gap: 8px; align-items: center; }
-        .brand img { width: 45px; height: 45px; object-fit: contain; }
-        .brand-title { font-weight: bold; font-size: 14px; line-height: 1.2; }
-        .brand-sub { font-size: 9px; margin-top: 2px; }
-        .addr { font-size: 8px; margin-top: 2px; line-height: 1.2; }
-        .right-box { border: 3px solid #000; padding: 4px 8px; text-align: center; min-width: 240px; margin-top: 8px; }
-        .right-box .title { font-weight: bold; font-size: 13px; }
-        .right-box .spb { margin-top: 3px; font-size: 11px; font-weight: bold; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 2px solid #000; }
+        .brand { display: flex; gap: 6px; align-items: center; }
+        .brand img { width: 40px; height: 40px; object-fit: contain; }
+        .brand-title { font-weight: bold; font-size: 13px; line-height: 1.2; }
+        .brand-sub { font-size: 8px; margin-top: 1px; }
+        .addr { font-size: 7px; margin-top: 2px; line-height: 1.2; }
+        .right-box { border: 2px solid #000; padding: 3px 6px; text-align: center; min-width: 200px; margin-top: 6px; }
+        .right-box .title { font-weight: bold; font-size: 12px; }
+        .right-box .spb { margin-top: 2px; font-size: 10px; font-weight: bold; }
 
-        .barcode-section { text-align: center; margin: 5px 0; }
-        .barcode-section img { width: 280px; height: 55px; border: 3px solid #000; padding: 3px; }
+        .barcode-section { text-align: center; margin: 3px 0; }
+        .barcode-section img { width: 220px; height: 45px; border: 2px solid #000; padding: 2px; }
 
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
-        .info-box { border: 3px solid #000; padding: 6px; min-height: 48px; }
-        .info-label { font-size: 10px; font-weight: bold; margin-bottom: 3px; text-transform: uppercase; }
-        .info-value { font-size: 13px; font-weight: bold; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 6px 0; }
+        .info-box { border: 2px solid #000; padding: 5px; min-height: 40px; }
+        .info-label { font-size: 9px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
+        .info-value { font-size: 12px; font-weight: bold; }
 
-        .table-wrapper { margin: 8px 0; }
+        .table-wrapper { margin: 6px 0; }
         table { width: 100%; border-collapse: collapse; }
-        th, td { border: 3px solid #000; padding: 6px 5px; text-align: left; vertical-align: top; }
-        th { background: #fff; font-size: 10px; font-weight: bold; }
-        td { font-size: 11px; min-height: 80px; height: 80px; }
+        th, td { border: 2px solid #000; padding: 5px 4px; text-align: left; vertical-align: top; }
+        th { background: #fff; font-size: 9px; font-weight: bold; }
+        td { font-size: 10px; min-height: 60px; height: 60px; }
 
-        .notes-section { margin: 6px 0; border: 3px solid #000; padding: 6px; }
-        .notes-label { font-size: 10px; font-weight: bold; margin-bottom: 3px; }
-        .notes-value { font-size: 11px; min-height: 25px; }
+        .notes-section { margin: 5px 0; border: 2px solid #000; padding: 5px; }
+        .notes-label { font-size: 9px; font-weight: bold; margin-bottom: 2px; }
+        .notes-value { font-size: 10px; min-height: 20px; }
 
-        .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-top: 10px; }
+        .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 8px; }
         .sign { text-align: center; }
-        .sign-label { font-size: 10px; font-weight: bold; margin-bottom: 25px; }
-        .sign-line { border-top: 2px solid #000; padding-top: 4px; font-size: 10px; }
+        .sign-label { font-size: 9px; font-weight: bold; margin-bottom: 20px; }
+        .sign-line { border-top: 2px solid #000; padding-top: 3px; font-size: 9px; }
 
         .delivered-stamp {
           position: absolute;
@@ -248,8 +248,7 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         }
 
         @media print {
-          html, body { margin: 0; padding: 0; }
-          body { transform: scale(0.8); transform-origin: top left; width: 125%; }
+          body { padding: 6mm 8mm; }
           .delivered-stamp { color: rgba(0, 0, 0, 0.12); border-color: rgba(0, 0, 0, 0.12); }
         }
       </style>
@@ -508,38 +507,38 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           .page-break { page-break-before: always; }
           .dbl-banner { background: #000; color: #fff; text-align: center; padding: 4px 8px; font-size: 10px; font-weight: bold; margin-bottom: 6px; }
           
-          .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 3px solid #000; }
-          .brand { display: flex; gap: 8px; align-items: center; }
-          .brand img { width: 45px; height: 45px; object-fit: contain; }
-          .brand-title { font-weight: bold; font-size: 14px; line-height: 1.2; }
-          .brand-sub { font-size: 9px; margin-top: 2px; }
-          .addr { font-size: 8px; margin-top: 2px; line-height: 1.2; }
-          .right-box { border: 3px solid #000; padding: 4px 8px; text-align: center; min-width: 240px; margin-top: 8px; }
-          .right-box .title { font-weight: bold; font-size: 13px; }
-          .right-box .spb { margin-top: 3px; font-size: 11px; font-weight: bold; }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 2px solid #000; }
+          .brand { display: flex; gap: 6px; align-items: center; }
+          .brand img { width: 40px; height: 40px; object-fit: contain; }
+          .brand-title { font-weight: bold; font-size: 13px; line-height: 1.2; }
+          .brand-sub { font-size: 8px; margin-top: 1px; }
+          .addr { font-size: 7px; margin-top: 2px; line-height: 1.2; }
+          .right-box { border: 2px solid #000; padding: 3px 6px; text-align: center; min-width: 200px; margin-top: 6px; }
+          .right-box .title { font-weight: bold; font-size: 12px; }
+          .right-box .spb { margin-top: 2px; font-size: 10px; font-weight: bold; }
 
-          .barcode-section { text-align: center; margin: 5px 0; }
-          .barcode-section img { width: 280px; height: 55px; border: 3px solid #000; padding: 3px; }
+          .barcode-section { text-align: center; margin: 3px 0; }
+          .barcode-section img { width: 220px; height: 45px; border: 2px solid #000; padding: 2px; }
 
-          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
-          .info-box { border: 3px solid #000; padding: 6px; min-height: 48px; }
-          .info-label { font-size: 10px; font-weight: bold; margin-bottom: 3px; text-transform: uppercase; }
-          .info-value { font-size: 13px; font-weight: bold; }
+          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 6px 0; }
+          .info-box { border: 2px solid #000; padding: 5px; min-height: 40px; }
+          .info-label { font-size: 9px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
+          .info-value { font-size: 12px; font-weight: bold; }
 
-          .table-wrapper { margin: 8px 0; }
+          .table-wrapper { margin: 6px 0; }
           table { width: 100%; border-collapse: collapse; }
-          th, td { border: 3px solid #000; padding: 6px 5px; text-align: left; vertical-align: top; }
-          th { background: #fff; font-size: 10px; font-weight: bold; }
-          td { font-size: 11px; min-height: 80px; height: 80px; }
+          th, td { border: 2px solid #000; padding: 5px 4px; text-align: left; vertical-align: top; }
+          th { background: #fff; font-size: 9px; font-weight: bold; }
+          td { font-size: 10px; min-height: 60px; height: 60px; }
 
-          .notes-section { margin: 6px 0; border: 3px solid #000; padding: 6px; }
-          .notes-label { font-size: 10px; font-weight: bold; margin-bottom: 3px; }
-          .notes-value { font-size: 11px; min-height: 25px; }
+          .notes-section { margin: 5px 0; border: 2px solid #000; padding: 5px; }
+          .notes-label { font-size: 9px; font-weight: bold; margin-bottom: 2px; }
+          .notes-value { font-size: 10px; min-height: 20px; }
 
-          .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-top: 10px; }
+          .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 8px; }
           .sign { text-align: center; }
-          .sign-label { font-size: 10px; font-weight: bold; margin-bottom: 25px; }
-          .sign-line { border-top: 2px solid #000; padding-top: 4px; font-size: 10px; }
+          .sign-label { font-size: 9px; font-weight: bold; margin-bottom: 20px; }
+          .sign-line { border-top: 2px solid #000; padding-top: 3px; font-size: 9px; }
 
           .delivered-stamp {
             position: absolute;
@@ -557,8 +556,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           }
 
           @media print {
-            html, body { margin: 0; padding: 0; }
-            body { transform: scale(0.8); transform-origin: top left; width: 125%; }
+            body { padding: 0; }
             .sheet { padding: 6mm 8mm; }
             .delivered-stamp { color: rgba(0, 0, 0, 0.12); border-color: rgba(0, 0, 0, 0.12); }
           }

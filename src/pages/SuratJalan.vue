@@ -198,38 +198,38 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { height: 100%; font-family: 'Courier New', Courier, monospace; font-size: 12px; color: var(--ink); }
         body { margin: 0; padding: 0; }
-        .sheet { width: 9.5in; height: 11in; max-width: 9.5in; background: var(--paper); padding: 12px 20px; position: relative; }
-        .top { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
-        .brand { display: flex; gap: 10px; align-items: center; }
-        .brand img { width: 48px; height: 48px; object-fit: contain; }
-        .brand-title { font-weight: 800; font-size: 14px; letter-spacing: .4px; }
-        .brand-sub { font-size: 11px; color: #000; margin-top: 2px; }
-        .addr { font-size: 10px; color: #000; margin-top: 4px; white-space: pre-line; line-height: 1.3; }
-        .right-box { margin-left: auto; border: 2px solid #000; padding: 6px 10px; text-align: center; min-width: 240px; }
-        .right-box .title { font-weight: 800; font-size: 13px; letter-spacing: .5px; }
-        .right-box .spb { margin-top: 4px; font-size: 12px; font-weight: 700; }
-        .right-box .code { margin-top: 3px; font-size: 11px; }
+        .sheet { width: 9.5in; height: 11in; max-width: 9.5in; background: var(--paper); padding: 10px 18px; position: relative; }
+        .top { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 6px; }
+        .brand { display: flex; gap: 8px; align-items: center; }
+        .brand img { width: 45px; height: 45px; object-fit: contain; }
+        .brand-title { font-weight: 800; font-size: 13px; letter-spacing: .3px; }
+        .brand-sub { font-size: 10px; color: #000; margin-top: 2px; }
+        .addr { font-size: 9px; color: #000; margin-top: 3px; white-space: pre-line; line-height: 1.2; }
+        .right-box { margin-left: auto; border: 2px solid #000; padding: 5px 9px; text-align: center; min-width: 230px; }
+        .right-box .title { font-weight: 800; font-size: 12px; letter-spacing: .4px; }
+        .right-box .spb { margin-top: 3px; font-size: 11px; font-weight: 700; }
+        .right-box .code { margin-top: 2px; font-size: 10px; }
 
-        .barcode { text-align: right; margin: 6px 0 8px; }
-        .barcode img { width: 320px; height: 70px; object-fit: contain; border: 2px solid #000; padding: 4px; background: #fff; }
+        .barcode { text-align: right; margin: 5px 0 6px; }
+        .barcode img { width: 300px; height: 65px; object-fit: contain; border: 2px solid #000; padding: 4px; background: #fff; }
 
-        .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
-        .field { border: 2px solid #000; padding: 6px 8px; min-height: 45px; }
-        .label { font-size: 10px; font-weight: 700; color: #000; margin-bottom: 3px; text-transform: uppercase; }
-        .value { font-size: 12px; font-weight: 600; }
+        .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+        .field { border: 2px solid #000; padding: 5px 7px; min-height: 42px; }
+        .label { font-size: 9px; font-weight: 700; color: #000; margin-bottom: 2px; text-transform: uppercase; }
+        .value { font-size: 11px; font-weight: 600; }
 
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border: 2px solid #000; font-size: 11px; padding: 6px 8px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        th, td { border: 2px solid #000; font-size: 10px; padding: 5px 7px; }
         thead th { background: #fff; font-weight: 700; }
 
-        .bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; align-items: start; }
-        .tnc { border: 2px solid #000; padding: 8px; font-size: 9px; line-height: 1.4; color: #000; }
-        .tnc h4 { margin: 0 0 4px; font-size: 10px; font-weight: 700; }
-        .badge-note { display: inline-block; border: 2px solid #000; padding: 4px 8px; font-weight: 700; margin-top: 6px; font-size: 9px; }
+        .bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; align-items: start; }
+        .tnc { border: 2px solid #000; padding: 6px; font-size: 8px; line-height: 1.3; color: #000; }
+        .tnc h4 { margin: 0 0 3px; font-size: 9px; font-weight: 700; }
+        .badge-note { display: inline-block; border: 2px solid #000; padding: 3px 6px; font-weight: 700; margin-top: 4px; font-size: 8px; }
 
-        .sign-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 16px; }
-        .sign { text-align: center; font-size: 11px; font-weight: 600; }
-        .line { border-top: 2px solid #000; margin-top: 50px; padding-top: 4px; }
+        .sign-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 12px; }
+        .sign { text-align: center; font-size: 10px; font-weight: 600; }
+        .line { border-top: 2px solid #000; margin-top: 40px; padding-top: 3px; }
 
         .right-summary { text-align: right; font-size: 11px; font-weight: 600; }
         .right-summary .date { margin-top: 8px; }
@@ -252,7 +252,7 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         @media print {
           html, body { width: 9.5in; height: 11in; }
           body { padding: 0; }
-          .sheet { border: 0; width: 9.5in; height: 11in; max-width: none; padding: 10mm 15mm; page-break-after: always; }
+          .sheet { border: 0; width: 9.5in; height: 11in; max-width: none; padding: 8mm 12mm; page-break-after: always; }
           .delivered-stamp { color: rgba(0, 0, 0, 0.2); border-color: rgba(0, 0, 0, 0.2); }
         }
       </style>
@@ -532,40 +532,40 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           * { box-sizing: border-box; margin: 0; padding: 0; }
           html, body { height: 100%; font-family: 'Courier New', Courier, monospace; font-size: 12px; color: var(--ink); }
           body { margin: 0; padding: 0; }
-          .sheet { width: 9.5in; height: 11in; max-width: 9.5in; background: var(--paper); padding: 12px 20px; position: relative; }
+          .sheet { width: 9.5in; height: 11in; max-width: 9.5in; background: var(--paper); padding: 10px 18px; position: relative; }
           .page-break { page-break-before: always; }
-          .dbl-banner { background: #000; color: #fff; text-align: center; padding: 4px 8px; font-size: 11px; font-weight: 700; margin-bottom: 6px; }
-          .top { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
-          .brand { display: flex; gap: 10px; align-items: center; }
-          .brand img { width: 48px; height: 48px; object-fit: contain; }
-          .brand-title { font-weight: 800; font-size: 14px; letter-spacing: .4px; }
-          .brand-sub { font-size: 11px; color: #000; margin-top: 2px; }
-          .addr { font-size: 10px; color: #000; margin-top: 4px; white-space: pre-line; line-height: 1.3; }
-          .right-box { margin-left: auto; border: 2px solid #000; padding: 6px 10px; text-align: center; min-width: 240px; }
-          .right-box .title { font-weight: 800; font-size: 13px; letter-spacing: .5px; }
-          .right-box .spb { margin-top: 4px; font-size: 12px; font-weight: 700; }
-          .right-box .code { margin-top: 3px; font-size: 11px; }
+          .dbl-banner { background: #000; color: #fff; text-align: center; padding: 3px 6px; font-size: 10px; font-weight: 700; margin-bottom: 5px; }
+          .top { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 6px; }
+          .brand { display: flex; gap: 8px; align-items: center; }
+          .brand img { width: 45px; height: 45px; object-fit: contain; }
+          .brand-title { font-weight: 800; font-size: 13px; letter-spacing: .3px; }
+          .brand-sub { font-size: 10px; color: #000; margin-top: 2px; }
+          .addr { font-size: 9px; color: #000; margin-top: 3px; white-space: pre-line; line-height: 1.2; }
+          .right-box { margin-left: auto; border: 2px solid #000; padding: 5px 9px; text-align: center; min-width: 230px; }
+          .right-box .title { font-weight: 800; font-size: 12px; letter-spacing: .4px; }
+          .right-box .spb { margin-top: 3px; font-size: 11px; font-weight: 700; }
+          .right-box .code { margin-top: 2px; font-size: 10px; }
 
-          .barcode { text-align: right; margin: 6px 0 8px; }
-          .barcode img { width: 320px; height: 70px; object-fit: contain; border: 2px solid #000; padding: 4px; background: #fff; }
+          .barcode { text-align: right; margin: 5px 0 6px; }
+          .barcode img { width: 300px; height: 65px; object-fit: contain; border: 2px solid #000; padding: 4px; background: #fff; }
 
-          .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
-          .field { border: 2px solid #000; padding: 6px 8px; min-height: 45px; }
-          .label { font-size: 10px; font-weight: 700; color: #000; margin-bottom: 3px; text-transform: uppercase; }
-          .value { font-size: 12px; font-weight: 600; }
+          .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+          .field { border: 2px solid #000; padding: 5px 7px; min-height: 42px; }
+          .label { font-size: 9px; font-weight: 700; color: #000; margin-bottom: 2px; text-transform: uppercase; }
+          .value { font-size: 11px; font-weight: 600; }
 
-          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-          th, td { border: 2px solid #000; font-size: 11px; padding: 6px 8px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+          th, td { border: 2px solid #000; font-size: 10px; padding: 5px 7px; }
           thead th { background: #fff; font-weight: 700; }
 
-          .bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; align-items: start; }
-          .tnc { border: 2px solid #000; padding: 8px; font-size: 9px; line-height: 1.4; color: #000; }
-          .tnc h4 { margin: 0 0 4px; font-size: 10px; font-weight: 700; }
-          .badge-note { display: inline-block; border: 2px solid #000; padding: 4px 8px; font-weight: 700; margin-top: 6px; font-size: 9px; }
+          .bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; align-items: start; }
+          .tnc { border: 2px solid #000; padding: 6px; font-size: 8px; line-height: 1.3; color: #000; }
+          .tnc h4 { margin: 0 0 3px; font-size: 9px; font-weight: 700; }
+          .badge-note { display: inline-block; border: 2px solid #000; padding: 3px 6px; font-weight: 700; margin-top: 4px; font-size: 8px; }
 
-          .sign-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 16px; }
-          .sign { text-align: center; font-size: 11px; font-weight: 600; }
-          .line { border-top: 2px solid #000; margin-top: 50px; padding-top: 4px; }
+          .sign-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 12px; }
+          .sign { text-align: center; font-size: 10px; font-weight: 600; }
+          .line { border-top: 2px solid #000; margin-top: 40px; padding-top: 3px; }
 
           .right-summary { text-align: right; font-size: 11px; font-weight: 600; }
           .right-summary .date { margin-top: 8px; }
@@ -588,7 +588,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           @media print {
             html, body { width: 9.5in; height: 11in; }
             body { padding: 0; }
-            .sheet { border: 0; width: 9.5in; height: 11in; max-width: none; padding: 10mm 15mm; margin-bottom: 0; page-break-after: always; }
+            .sheet { border: 0; width: 9.5in; height: 11in; max-width: none; padding: 8mm 12mm; margin-bottom: 0; page-break-after: always; }
             .page-break { page-break-before: always; }
             .delivered-stamp { color: rgba(0, 0, 0, 0.2); border-color: rgba(0, 0, 0, 0.2); }
           }

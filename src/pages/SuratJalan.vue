@@ -213,24 +213,20 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         .barcode-section img { width: 220px; height: 45px; border: 2px solid #000; padding: 2px; }
 
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 6px 0; }
-        .info-box { border: 2px solid #000; padding: 5px; min-height: 40px; }
-        .info-label { font-size: 9px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
-        .info-value { font-size: 12px; font-weight: bold; }
+        .info-box { border: 2px solid #000; padding: 5px; min-height: 45px; }
+        .info-label { font-size: 11px; font-weight: bold; margin-bottom: 3px; text-transform: uppercase; }
+        .info-value { font-size: 15px; font-weight: bold; }
 
         .table-wrapper { margin: 6px 0; }
         table { width: 100%; border-collapse: collapse; }
         th, td { border: 2px solid #000; padding: 5px 4px; text-align: left; vertical-align: top; }
-        th { background: #fff; font-size: 9px; font-weight: bold; }
-        td { font-size: 10px; min-height: 60px; height: 60px; }
+        th { background: #fff; font-size: 11px; font-weight: bold; }
+        td { font-size: 13px; min-height: 60px; height: 60px; }
 
-        .notes-section { margin: 5px 0; border: 2px solid #000; padding: 5px; }
-        .notes-label { font-size: 9px; font-weight: bold; margin-bottom: 2px; }
-        .notes-value { font-size: 10px; min-height: 20px; }
-
-        .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 8px; }
+        .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 12px; }}
         .sign { text-align: center; }
-        .sign-label { font-size: 9px; font-weight: bold; margin-bottom: 20px; }
-        .sign-line { border-top: 2px solid #000; padding-top: 3px; font-size: 9px; }
+        .sign-label { font-size: 11px; font-weight: bold; margin-bottom: 20px; }
+        .sign-line { border-top: 2px solid #000; padding-top: 3px; font-size: 11px; }
 
         .delivered-stamp {
           position: absolute;
@@ -322,11 +318,6 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
               </tr>
             </tbody>
           </table>
-        </div>
-
-        <div class="notes-section">
-          <div class="notes-label">Keterangan</div>
-          <div class="notes-value">${shipment.notes || '-'}</div>
         </div>
 
         <div class="sign-row">
@@ -473,11 +464,6 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
             </table>
           </div>
 
-          <div class="notes-section">
-            <div class="notes-label">Keterangan</div>
-            <div class="notes-value">${shipment.notes || '-'}</div>
-          </div>
-
           <div class="sign-row">
             <div class="sign">
               <div class="sign-label">Pengirim</div>
@@ -521,24 +507,20 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           .barcode-section img { width: 220px; height: 45px; border: 2px solid #000; padding: 2px; }
 
           .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 6px 0; }
-          .info-box { border: 2px solid #000; padding: 5px; min-height: 40px; }
-          .info-label { font-size: 9px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
-          .info-value { font-size: 12px; font-weight: bold; }
+          .info-box { border: 2px solid #000; padding: 5px; min-height: 45px; }
+          .info-label { font-size: 11px; font-weight: bold; margin-bottom: 3px; text-transform: uppercase; }
+          .info-value { font-size: 15px; font-weight: bold; }
 
           .table-wrapper { margin: 6px 0; }
           table { width: 100%; border-collapse: collapse; }
           th, td { border: 2px solid #000; padding: 5px 4px; text-align: left; vertical-align: top; }
-          th { background: #fff; font-size: 9px; font-weight: bold; }
-          td { font-size: 10px; min-height: 60px; height: 60px; }
+          th { background: #fff; font-size: 11px; font-weight: bold; }
+          td { font-size: 13px; min-height: 60px; height: 60px; }
 
-          .notes-section { margin: 5px 0; border: 2px solid #000; padding: 5px; }
-          .notes-label { font-size: 9px; font-weight: bold; margin-bottom: 2px; }
-          .notes-value { font-size: 10px; min-height: 20px; }
-
-          .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 8px; }
+          .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 12px; }}
           .sign { text-align: center; }
-          .sign-label { font-size: 9px; font-weight: bold; margin-bottom: 20px; }
-          .sign-line { border-top: 2px solid #000; padding-top: 3px; font-size: 9px; }
+          .sign-label { font-size: 11px; font-weight: bold; margin-bottom: 20px; }
+          .sign-line { border-top: 2px solid #000; padding-top: 3px; font-size: 11px; }
 
           .delivered-stamp {
             position: absolute;

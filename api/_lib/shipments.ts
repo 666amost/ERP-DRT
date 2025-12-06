@@ -130,12 +130,12 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
             s.id, s.spb_number, s.customer_id,
             coalesce(s.customer_name, c.name) as customer_name,
             coalesce(s.customer_address, c.address) as customer_address,
-            s.sender_name, s.sender_address, s.pengirim_name, s.penerima_name, s.penerima_phone,
-            s.origin, s.destination, s.eta, s.status, s.total_colli, s.qty, s.satuan, 
-            coalesce(s.berat, 0)::float as berat, s.macam_barang, 
-            coalesce(s.nominal, 0)::float as nominal, s.public_code, s.vehicle_plate_region, 
-            s.shipping_address, s.service_type, s.jenis, s.dbl_id, coalesce(s.invoice_generated, false) as invoice_generated, 
-            s.keterangan, s.created_at
+            s.sender_name, s.sender_address, s.pengirim_name as sender_name, s.penerima_name as recipient_name, s.penerima_phone as recipient_phone,
+            s.origin as origin_city, s.destination as destination_city, s.eta, s.status, s.total_colli, s.qty, s.satuan, 
+            coalesce(s.berat, 0)::float as total_weight, s.macam_barang as description, 
+            coalesce(s.nominal, 0)::float as nominal, s.public_code as tracking_code, s.vehicle_plate_region, 
+            s.shipping_address as recipient_address, s.service_type, s.jenis, s.dbl_id, coalesce(s.invoice_generated, false) as invoice_generated, 
+            s.keterangan as notes, s.created_at
           from shipments s
           left join customers c on c.id = s.customer_id
           where s.status = ${status}
@@ -154,12 +154,12 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
             s.id, s.spb_number, s.customer_id,
             coalesce(s.customer_name, c.name) as customer_name,
             coalesce(s.customer_address, c.address) as customer_address,
-            s.sender_name, s.sender_address, s.pengirim_name, s.penerima_name, s.penerima_phone,
-            s.origin, s.destination, s.eta, s.status, s.total_colli, s.qty, s.satuan,
-            coalesce(s.berat, 0)::float as berat, s.macam_barang, 
-            coalesce(s.nominal, 0)::float as nominal, s.public_code, s.vehicle_plate_region, 
-            s.shipping_address, s.service_type, s.jenis, s.dbl_id, coalesce(s.invoice_generated, false) as invoice_generated, 
-            s.keterangan, s.created_at
+            s.sender_name, s.sender_address, s.pengirim_name as sender_name, s.penerima_name as recipient_name, s.penerima_phone as recipient_phone,
+            s.origin as origin_city, s.destination as destination_city, s.eta, s.status, s.total_colli, s.qty, s.satuan,
+            coalesce(s.berat, 0)::float as total_weight, s.macam_barang as description, 
+            coalesce(s.nominal, 0)::float as nominal, s.public_code as tracking_code, s.vehicle_plate_region, 
+            s.shipping_address as recipient_address, s.service_type, s.jenis, s.dbl_id, coalesce(s.invoice_generated, false) as invoice_generated, 
+            s.keterangan as notes, s.created_at
           from shipments s
           left join customers c on c.id = s.customer_id
           order by s.created_at desc

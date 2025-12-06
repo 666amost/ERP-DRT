@@ -62,7 +62,7 @@ const loadShipments = async (): Promise<void> => {
           id: String(s.id),
           tracking_code: s.public_code as string || '',
           spb_number: s.spb_number as string || '',
-          sender_name: s.sender_name as string || s.customer_name as string || '',
+          sender_name: s.pengirim_name as string || s.customer_name as string || '',
           recipient_name: s.penerima_name as string || '',
           recipient_address: s.shipping_address as string || '',
           recipient_phone: s.penerima_phone as string || '',
@@ -269,7 +269,7 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         </div>
 
         <div class="barcode-section">
-          <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode" alt="Barcode" />
+          <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode&hideText=1" alt="Barcode" />
         </div>
 
         <div class="info-grid">
@@ -371,18 +371,18 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
     let pagesHtml = ''
     data.items.forEach((s: Record<string, unknown>, index: number) => {
       const spbNumber = s.spb_number as string || '-'
-      const publicCode = s.public_code as string || ''
+      const publicCode = s.tracking_code as string || s.public_code as string || ''
       const shipment = {
         spb_number: spbNumber,
         tracking_code: publicCode,
-        sender_name: s.pengirim_name as string || s.customer_name as string || '',
-        recipient_name: s.penerima_name as string || '',
-        recipient_phone: s.penerima_phone as string || '',
-        origin_city: s.origin as string || '',
-        destination_city: s.destination as string || '',
+        sender_name: s.sender_name as string || s.pengirim_name as string || s.customer_name as string || '',
+        recipient_name: s.recipient_name as string || s.penerima_name as string || '',
+        recipient_phone: s.recipient_phone as string || s.penerima_phone as string || '',
+        origin_city: s.origin_city as string || s.origin as string || '',
+        destination_city: s.destination_city as string || s.destination as string || '',
         total_colli: Number(s.total_colli) || 0,
-        total_weight: Number(s.berat) || 0,
-        description: s.macam_barang as string || '',
+        total_weight: Number(s.total_weight) || Number(s.berat) || 0,
+        description: s.description as string || s.macam_barang as string || '',
         notes: s.keterangan as string || '',
         status: s.status as string || '',
         created_at: s.created_at as string || '',
@@ -412,7 +412,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           </div>
 
           <div class="barcode-section">
-            <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode" alt="Barcode" />
+            <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode&hideText=1" alt="Barcode" />
           </div>
 
           <div class="info-grid">

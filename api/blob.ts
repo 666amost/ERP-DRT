@@ -25,6 +25,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   if (endpoint === 'generate' && req.method === 'GET') {
     const code = url.searchParams.get('code');
     const type = url.searchParams.get('type') || 'qr';
+    const hideText = url.searchParams.get('hideText') === '1';
     
     if (!code) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -40,7 +41,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             text: code,
             scale: 4,
             height: 15,
-            includetext: true,
+            includetext: !hideText,
             textxalign: 'center'
           });
           res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=31536000, immutable' });
@@ -53,7 +54,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
               bcid: 'code128',
               text: code,
               scale: 3,
-              includetext: true,
+              includetext: !hideText,
               textxalign: 'center',
               format: 'svg'
             });

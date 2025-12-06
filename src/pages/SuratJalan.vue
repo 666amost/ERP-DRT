@@ -205,11 +205,11 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         .brand-title { font-weight: bold; font-size: 14px; line-height: 1.2; }
         .brand-sub { font-size: 9px; margin-top: 1px; }
         .addr { font-size: 10px; margin-top: 3px; line-height: 1.3; font-weight: 500; }
-        .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 6px; }
+        .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
         .right-box .spb { font-size: 16px; font-weight: bold; }
 
-        .barcode-section { text-align: center; margin: 4px 0; }
-        .barcode-section img { width: 220px; height: 45px; border: 1px solid #000; padding: 2px; }
+        .barcode-section { text-align: right; margin: 2px 0 4px 0; padding-right: 2px; }
+        .barcode-section img { width: 150px; height: 32px; border: 1px solid #000; padding: 1px; }
 
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 6px 0; }
         .info-box { border: 1px solid #000; padding: 5px; min-height: 45px; }
@@ -496,11 +496,11 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           .brand-title { font-weight: bold; font-size: 14px; line-height: 1.2; }
           .brand-sub { font-size: 9px; margin-top: 1px; }
           .addr { font-size: 10px; margin-top: 3px; line-height: 1.3; font-weight: 500; }
-          .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 6px; }
+          .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
           .right-box .spb { font-size: 16px; font-weight: bold; }
 
-          .barcode-section { text-align: center; margin: 4px 0; }
-          .barcode-section img { width: 220px; height: 45px; border: 1px solid #000; padding: 2px; }
+          .barcode-section { text-align: right; margin: 2px 0 4px 0; padding-right: 2px; }
+          .barcode-section img { width: 150px; height: 32px; border: 1px solid #000; padding: 1px; }
 
           .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 6px 0; }
           .info-box { border: 1px solid #000; padding: 5px; min-height: 45px; }

@@ -17,7 +17,9 @@ interface Shipment {
   recipient_address: string
   recipient_phone: string
   origin_city: string
+  origin_province: string | null
   destination_city: string
+  destination_province: string | null
   total_colli: number
   total_weight: number
   service_type: string
@@ -67,7 +69,9 @@ const loadShipments = async (): Promise<void> => {
           recipient_address: s.shipping_address as string || '',
           recipient_phone: s.penerima_phone as string || '',
           origin_city: s.origin as string || '',
+          origin_province: s.origin_province as string | null,
           destination_city: s.destination as string || '',
+          destination_province: s.destination_province as string | null,
           total_colli: Number(s.total_colli) || 0,
           total_weight: Number(s.berat) || 0,
           service_type: s.service_type as string || 'CARGO',
@@ -161,6 +165,15 @@ const formatDateLong = (dateStr: string): string => {
     month: 'long',
     year: 'numeric'
   })
+}
+
+const formatDestination = (city: string, province: string | null): string => {
+  const cityStr = city || ''
+  const provinceStr = province || ''
+  if (cityStr && provinceStr) {
+    return `${cityStr}, ${provinceStr}`
+  }
+  return cityStr || '-'
 }
 
 const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
@@ -295,7 +308,7 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
           </div>
           <div class="info-box">
             <div class="info-label">Tujuan Pengiriman</div>
-            <div class="info-value">${shipment.destination_city}</div>
+            <div class="info-value">${formatDestination(shipment.destination_city, shipment.destination_province)}</div>
           </div>
         </div>
 
@@ -379,7 +392,9 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
         recipient_name: s.recipient_name as string || s.penerima_name as string || '',
         recipient_phone: s.recipient_phone as string || s.penerima_phone as string || '',
         origin_city: s.origin_city as string || s.origin as string || '',
+        origin_province: s.origin_province as string | null,
         destination_city: s.destination_city as string || s.destination as string || '',
+        destination_province: s.destination_province as string | null,
         total_colli: Number(s.total_colli) || 0,
         total_weight: Number(s.total_weight) || Number(s.berat) || 0,
         description: s.description as string || s.macam_barang as string || '',
@@ -438,7 +453,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
             </div>
             <div class="info-box">
               <div class="info-label">TUJUAN</div>
-              <div class="info-value">${shipment.destination_city}</div>
+              <div class="info-value">${formatDestination(shipment.destination_city, shipment.destination_province)}</div>
             </div>
           </div>
 

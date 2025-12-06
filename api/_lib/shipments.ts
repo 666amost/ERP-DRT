@@ -14,7 +14,9 @@ type Shipment = {
   penerima_name: string | null;
   penerima_phone: string | null;
   origin: string;
+  origin_province: string | null;
   destination: string;
+  destination_province: string | null;
   eta: string | null;
   status: string;
   total_colli: number;
@@ -131,13 +133,16 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
             coalesce(s.customer_name, c.name) as customer_name,
             coalesce(s.customer_address, c.address) as customer_address,
             s.sender_name, s.sender_address, s.pengirim_name, s.penerima_name, s.penerima_phone,
-            s.origin, s.destination, s.eta, s.status, s.total_colli, s.qty, s.satuan, 
+            s.origin, co.province as origin_province, s.destination, cd.province as destination_province, 
+            s.eta, s.status, s.total_colli, s.qty, s.satuan, 
             coalesce(s.berat, 0)::float as berat, s.macam_barang, 
             coalesce(s.nominal, 0)::float as nominal, s.public_code, s.vehicle_plate_region, 
             s.shipping_address, s.service_type, s.jenis, s.dbl_id, coalesce(s.invoice_generated, false) as invoice_generated, 
             s.keterangan, s.created_at
           from shipments s
           left join customers c on c.id = s.customer_id
+          left join cities co on lower(co.name) = lower(s.origin)
+          left join cities cd on lower(cd.name) = lower(s.destination)
           where s.status = ${status}
           order by s.created_at desc
           limit ${limit} offset ${offset}
@@ -155,13 +160,16 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
             coalesce(s.customer_name, c.name) as customer_name,
             coalesce(s.customer_address, c.address) as customer_address,
             s.sender_name, s.sender_address, s.pengirim_name, s.penerima_name, s.penerima_phone,
-            s.origin, s.destination, s.eta, s.status, s.total_colli, s.qty, s.satuan,
+            s.origin, co.province as origin_province, s.destination, cd.province as destination_province,
+            s.eta, s.status, s.total_colli, s.qty, s.satuan,
             coalesce(s.berat, 0)::float as berat, s.macam_barang, 
             coalesce(s.nominal, 0)::float as nominal, s.public_code, s.vehicle_plate_region, 
             s.shipping_address, s.service_type, s.jenis, s.dbl_id, coalesce(s.invoice_generated, false) as invoice_generated, 
             s.keterangan, s.created_at
           from shipments s
           left join customers c on c.id = s.customer_id
+          left join cities co on lower(co.name) = lower(s.origin)
+          left join cities cd on lower(cd.name) = lower(s.destination)
           order by s.created_at desc
           limit ${limit} offset ${offset}
         ` as Shipment[];

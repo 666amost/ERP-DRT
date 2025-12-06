@@ -202,7 +202,7 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid #000; }
         .brand { display: flex; gap: 6px; align-items: center; }
         .brand img { width: 40px; height: 40px; object-fit: contain; }
-        .brand-title { font-weight: bold; font-size: 14px; line-height: 1.2; }
+        .brand-title { font-weight: bold; font-size: 16px; line-height: 1.2; }
         .brand-sub { font-size: 9px; margin-top: 1px; }
         .addr { font-size: 10px; margin-top: 3px; line-height: 1.3; font-weight: 500; }
         .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
@@ -282,7 +282,7 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
             <div class="info-value">${shipment.recipient_name || '-'}</div>
           </div>
           <div class="info-box">
-            <div class="info-label">Alamat Pengirim</div>
+            <div class="info-label">ALAMAT PENGIRIMAN</div>
             <div class="info-value">${shipment.origin_city}</div>
           </div>
           <div class="info-box">
@@ -290,12 +290,12 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
             <div class="info-value">${shipment.recipient_phone || '-'}</div>
           </div>
           <div class="info-box">
-            <div class="info-label">Tujuan Pengiriman</div>
-            <div class="info-value">${shipment.destination_city}</div>
-          </div>
-          <div class="info-box">
             <div class="info-label">Banyaknya</div>
             <div class="info-value">${shipment.total_colli} Koli</div>
+          </div>
+          <div class="info-box">
+            <div class="info-label">Tujuan Pengiriman</div>
+            <div class="info-value">${shipment.destination_city}</div>
           </div>
         </div>
 
@@ -425,7 +425,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
               <div class="info-value">${shipment.recipient_name || '-'}</div>
             </div>
             <div class="info-box">
-              <div class="info-label">Alamat Pengirim</div>
+              <div class="info-label">ALAMAT PENGIRIMAN</div>
               <div class="info-value">${shipment.origin_city}</div>
             </div>
             <div class="info-box">
@@ -433,12 +433,12 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
               <div class="info-value">${shipment.recipient_phone || '-'}</div>
             </div>
             <div class="info-box">
-              <div class="info-label">Tujuan Pengiriman</div>
-              <div class="info-value">${shipment.destination_city}</div>
-            </div>
-            <div class="info-box">
               <div class="info-label">Banyaknya</div>
               <div class="info-value">${shipment.total_colli} Koli</div>
+            </div>
+            <div class="info-box">
+              <div class="info-label">Tujuan Pengiriman</div>
+              <div class="info-value">${shipment.destination_city}</div>
             </div>
           </div>
 
@@ -493,7 +493,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid #000; }
           .brand { display: flex; gap: 6px; align-items: center; }
           .brand img { width: 40px; height: 40px; object-fit: contain; }
-          .brand-title { font-weight: bold; font-size: 14px; line-height: 1.2; }
+          .brand-title { font-weight: bold; font-size: 16px; line-height: 1.2; }
           .brand-sub { font-size: 9px; margin-top: 1px; }
           .addr { font-size: 10px; margin-top: 3px; line-height: 1.3; font-weight: 500; }
           .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }

@@ -193,74 +193,71 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
       <title>Surat Jalan - ${spbNumber}</title>
       <meta charset="utf-8" />
       <style>
-        @page { size: 9.5in 11in portrait; margin: 0; }
-        :root { --ink:#000; --line:#000; --muted:#000; --paper:#fff; }
+        @page { size: A4 portrait; margin: 0; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body { height: 100%; font-family: 'Courier New', Courier, monospace; font-size: 12px; color: var(--ink); }
-        body { margin: 0; padding: 0; }
-        .sheet { width: 9.5in; height: 11in; max-width: 9.5in; background: var(--paper); padding: 10px 18px; position: relative; }
-        .top { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 6px; }
-        .brand { display: flex; gap: 8px; align-items: center; }
-        .brand img { width: 45px; height: 45px; object-fit: contain; }
-        .brand-title { font-weight: 800; font-size: 13px; letter-spacing: .3px; }
-        .brand-sub { font-size: 10px; color: #000; margin-top: 2px; }
-        .addr { font-size: 9px; color: #000; margin-top: 3px; white-space: pre-line; line-height: 1.2; }
-        .right-box { margin-left: auto; border: 3px solid #000; padding: 5px 9px; text-align: center; min-width: 230px; }
-        .right-box .title { font-weight: 800; font-size: 12px; letter-spacing: .4px; }
-        .right-box .spb { margin-top: 3px; font-size: 11px; font-weight: 700; }
-        .right-box .code { margin-top: 2px; font-size: 10px; }
+        html, body { font-family: Arial, sans-serif; color: #000; }
+        body { margin: 0; padding: 20mm 15mm; background: #fff; }
+        .sheet { width: 100%; max-width: 210mm; background: #fff; position: relative; }
+        
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 3px solid #000; }
+        .brand { display: flex; gap: 12px; align-items: center; }
+        .brand img { width: 60px; height: 60px; object-fit: contain; }
+        .brand-title { font-weight: bold; font-size: 18px; }
+        .brand-sub { font-size: 12px; margin-top: 4px; }
+        .addr { font-size: 11px; margin-top: 6px; line-height: 1.4; }
+        .right-box { border: 3px solid #000; padding: 8px 12px; text-align: center; min-width: 280px; }
+        .right-box .title { font-weight: bold; font-size: 16px; }
+        .right-box .spb { margin-top: 6px; font-size: 14px; font-weight: bold; }
 
-        .barcode { text-align: right; margin: 5px 0 6px; }
-        .barcode img { width: 300px; height: 65px; object-fit: contain; border: 3px solid #000; padding: 4px; background: #fff; }
+        .barcode-section { text-align: center; margin: 15px 0; }
+        .barcode-section img { width: 350px; height: 80px; border: 3px solid #000; padding: 6px; }
 
-        .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
-        .field { border: 3px solid #000; padding: 5px 7px; min-height: 42px; }
-        .label { font-size: 9px; font-weight: 700; color: #000; margin-bottom: 2px; text-transform: uppercase; }
-        .value { font-size: 11px; font-weight: 600; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0; }
+        .info-box { border: 3px solid #000; padding: 12px; min-height: 70px; }
+        .info-label { font-size: 13px; font-weight: bold; margin-bottom: 6px; text-transform: uppercase; }
+        .info-value { font-size: 16px; font-weight: bold; }
 
-        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-        th, td { border: 3px solid #000; font-size: 10px; padding: 5px 7px; }
-        thead th { background: #fff; font-weight: 700; }
+        .table-wrapper { margin: 20px 0; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 3px solid #000; padding: 12px 10px; text-align: left; }
+        th { background: #fff; font-size: 13px; font-weight: bold; }
+        td { font-size: 14px; }
 
-        .bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; align-items: start; }
-        .tnc { border: 3px solid #000; padding: 6px; font-size: 8px; line-height: 1.3; color: #000; }
-        .tnc h4 { margin: 0 0 3px; font-size: 9px; font-weight: 700; }
-        .badge-note { display: inline-block; border: 3px solid #000; padding: 3px 6px; font-weight: 700; margin-top: 4px; font-size: 8px; }
+        .notes-section { margin: 20px 0; border: 3px solid #000; padding: 12px; }
+        .notes-label { font-size: 13px; font-weight: bold; margin-bottom: 6px; }
+        .notes-value { font-size: 14px; min-height: 60px; }
 
-        .sign-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 12px; }
-        .sign { text-align: center; font-size: 10px; font-weight: 600; }
-        .line { border-top: 3px solid #000; margin-top: 40px; padding-top: 3px; }
-
-        .right-summary { text-align: right; font-size: 11px; font-weight: 600; }
-        .right-summary .date { margin-top: 8px; }
+        .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 30px; margin-top: 40px; }
+        .sign { text-align: center; }
+        .sign-label { font-size: 13px; font-weight: bold; margin-bottom: 60px; }
+        .sign-line { border-top: 2px solid #000; padding-top: 8px; font-size: 13px; }
 
         .delivered-stamp {
           position: absolute;
           top: 50%;
           left: 50%;
           transform: translate(-50%, -50%) rotate(-15deg);
-          font-size: 48px;
+          font-size: 72px;
           font-weight: 900;
-          color: rgba(0, 0, 0, 0.15);
-          border: 6px solid rgba(0, 0, 0, 0.15);
-          padding: 12px 28px;
+          color: rgba(0, 0, 0, 0.1);
+          border: 8px solid rgba(0, 0, 0, 0.1);
+          padding: 20px 40px;
           text-transform: uppercase;
-          letter-spacing: 4px;
+          letter-spacing: 6px;
           pointer-events: none;
         }
 
         @media print {
-          html, body { width: 9.5in; height: 11in; }
-          body { padding: 0; }
-          .sheet { border: 0; width: 9.5in; height: 11in; max-width: none; padding: 8mm 12mm; }
-          .delivered-stamp { color: rgba(0, 0, 0, 0.2); border-color: rgba(0, 0, 0, 0.2); }
+          body { padding: 10mm 12mm; }
+          .delivered-stamp { color: rgba(0, 0, 0, 0.15); border-color: rgba(0, 0, 0, 0.15); }
         }
       </style>
     </head>
     <body>
       <div class="sheet">
         ${deliveredStamp}
-        <div class="top">
+        
+        <div class="header">
           <div>
             <div class="brand">
               <img src="${LOGO_URL}" alt="Logo" />
@@ -274,86 +271,72 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
           <div class="right-box">
             <div class="title">SURAT PENGANTAR BARANG</div>
             <div class="spb">No. SPB: ${spbNumber}</div>
-            <div class="code">Kode: ${publicCode}</div>
           </div>
         </div>
 
-        <div class="barcode">
+        <div class="barcode-section">
           <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode" alt="Barcode" />
         </div>
 
-        <div class="row">
-          <div class="field">
-            <div class="label">Pengirim</div>
-            <div class="value">${shipment.sender_name || '-'}</div>
+        <div class="info-grid">
+          <div class="info-box">
+            <div class="info-label">Pengirim</div>
+            <div class="info-value">${shipment.sender_name || '-'}</div>
           </div>
-          <div class="field">
-            <div class="label">Kepada Yth</div>
-            <div class="value">${shipment.recipient_name || '-'}</div>
+          <div class="info-box">
+            <div class="info-label">Penerima</div>
+            <div class="info-value">${shipment.recipient_name || '-'}</div>
           </div>
-        </div>
-        <div class="row" style="margin-top:10px;">
-          <div class="field">
-            <div class="label">Dari</div>
-            <div class="value">${shipment.origin_city}</div>
+          <div class="info-box">
+            <div class="info-label">Alamat</div>
+            <div class="info-value">${shipment.origin_city}</div>
           </div>
-          <div class="field">
-            <div class="label">Tanggal</div>
-            <div class="value">${formatDateLong(shipment.created_at)}</div>
+          <div class="info-box">
+            <div class="info-label">No. Telp</div>
+            <div class="info-value">${shipment.recipient_phone || '-'}</div>
+          </div>
+          <div class="info-box">
+            <div class="info-label">Pengiriman</div>
+            <div class="info-value">${shipment.destination_city}</div>
+          </div>
+          <div class="info-box">
+            <div class="info-label">Banyaknya</div>
+            <div class="info-value">${shipment.total_colli} Koli</div>
           </div>
         </div>
 
-        <table>
-          <thead>
-            <tr>
-              <th style="width:12%">Banyaknya</th>
-              <th>Nama barang menurut keterangan pengirim</th>
-              <th style="width:14%">Berat Barang</th>
-              <th style="width:18%">Ongkos Kirim</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>${shipment.total_colli}</td>
-              <td>${shipment.description || 'Barang kiriman'}</td>
-              <td>${shipment.total_weight || ''}</td>
-              <td>${formatRupiah(shipment.nominal)}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:15%">Kg/M3</th>
+                <th>Nama Barang</th>
+                <th style="width:25%">Ongkos Kirim</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>${shipment.total_weight || '-'}</td>
+                <td>${shipment.description || 'Barang kiriman'}</td>
+                <td>${formatRupiah(shipment.nominal)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-        <div class="bottom">
-          <div>
-            <div class="tnc">
-              <h4>Persyaratan Pengiriman</h4>
-              <div>
-                1) Pengirim menjamin isi barang sesuai dengan keterangan.<br/>
-                2) Kerusakan/kehilangan akibat force majeure tidak menjadi tanggung jawab pengangkut.<br/>
-                3) Barang mudah pecah/cepat rusak harus diberi pengaman memadai.<br/>
-                4) Klaim disertai bukti sah dan diajukan selambat-lambatnya 3x24 jam setelah diterima.<br/>
-                5) Perhitungan berat berdasarkan Kg/M3 yang lebih besar.
-              </div>
-              <div class="badge-note">Isi dalam tidak diperiksa</div>
-            </div>
-          </div>
-          <div class="right-summary">
-            <div><strong>Jumlah</strong></div>
-            <div class="date">${shipment.destination_city}, ${formatDate(shipment.created_at)}</div>
-          </div>
+        <div class="notes-section">
+          <div class="notes-label">Keterangan</div>
+          <div class="notes-value">${shipment.notes || '-'}</div>
         </div>
 
         <div class="sign-row">
           <div class="sign">
-            <div>Pengirim</div>
-            <div class="line">(..............................)</div>
+            <div class="sign-label">Pengirim</div>
+            <div class="sign-line">( ${shipment.sender_name || '................................'} )</div>
           </div>
           <div class="sign">
-            <div>Yang Menerima</div>
-            <div class="line">(..............................)</div>
-          </div>
-          <div class="sign">
-            <div>Hormat kami</div>
-            <div class="line">(..............................)</div>
+            <div class="sign-label">Yang Menerima</div>
+            <div class="sign-line">( ................................ )</div>
           </div>
         </div>
       </div>
@@ -405,11 +388,13 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
         tracking_code: publicCode,
         sender_name: s.pengirim_name as string || s.customer_name as string || '',
         recipient_name: s.penerima_name as string || '',
+        recipient_phone: s.penerima_phone as string || '',
         origin_city: s.origin as string || '',
         destination_city: s.destination as string || '',
         total_colli: Number(s.total_colli) || 0,
         total_weight: Number(s.berat) || 0,
         description: s.macam_barang as string || '',
+        notes: s.keterangan as string || '',
         status: s.status as string || '',
         created_at: s.created_at as string || '',
         nominal: Number(s.nominal) || 0
@@ -420,7 +405,8 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
         <div class="sheet ${index > 0 ? 'page-break' : ''}">
           ${deliveredStamp}
           <div class="dbl-banner">DBL: ${dbl.dbl_number} | Kendaraan: ${dbl.vehicle_plate} | Sopir: ${dbl.driver_name}</div>
-          <div class="top">
+          
+          <div class="header">
             <div>
               <div class="brand">
                 <img src="${LOGO_URL}" alt="Logo" />
@@ -434,86 +420,72 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
             <div class="right-box">
               <div class="title">SURAT PENGANTAR BARANG</div>
               <div class="spb">No. SPB: ${spbNumber}</div>
-              <div class="code">Kode: ${publicCode}</div>
             </div>
           </div>
 
-          <div class="barcode">
+          <div class="barcode-section">
             <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode" alt="Barcode" />
           </div>
 
-          <div class="row">
-            <div class="field">
-              <div class="label">Pengirim</div>
-              <div class="value">${shipment.sender_name || '-'}</div>
+          <div class="info-grid">
+            <div class="info-box">
+              <div class="info-label">Pengirim</div>
+              <div class="info-value">${shipment.sender_name || '-'}</div>
             </div>
-            <div class="field">
-              <div class="label">Kepada Yth</div>
-              <div class="value">${shipment.recipient_name || '-'}</div>
+            <div class="info-box">
+              <div class="info-label">Penerima</div>
+              <div class="info-value">${shipment.recipient_name || '-'}</div>
             </div>
-          </div>
-          <div class="row" style="margin-top:10px;">
-            <div class="field">
-              <div class="label">Dari</div>
-              <div class="value">${shipment.origin_city}</div>
+            <div class="info-box">
+              <div class="info-label">Alamat</div>
+              <div class="info-value">${shipment.origin_city}</div>
             </div>
-            <div class="field">
-              <div class="label">Tanggal</div>
-              <div class="value">${formatDateLong(shipment.created_at)}</div>
+            <div class="info-box">
+              <div class="info-label">No. Telp</div>
+              <div class="info-value">${shipment.recipient_phone || '-'}</div>
+            </div>
+            <div class="info-box">
+              <div class="info-label">Pengiriman</div>
+              <div class="info-value">${shipment.destination_city}</div>
+            </div>
+            <div class="info-box">
+              <div class="info-label">Banyaknya</div>
+              <div class="info-value">${shipment.total_colli} Koli</div>
             </div>
           </div>
 
-          <table>
-            <thead>
-              <tr>
-                <th style="width:12%">Banyaknya</th>
-                <th>Nama barang menurut keterangan pengirim</th>
-                <th style="width:14%">Berat Barang</th>
-                <th style="width:18%">Ongkos Kirim</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>${shipment.total_colli}</td>
-                <td>${shipment.description || 'Barang kiriman'}</td>
-                <td>${shipment.total_weight || ''}</td>
-                <td>${formatRupiah(shipment.nominal)}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:15%">Kg/M3</th>
+                  <th>Nama Barang</th>
+                  <th style="width:25%">Ongkos Kirim</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>${shipment.total_weight || '-'}</td>
+                  <td>${shipment.description || 'Barang kiriman'}</td>
+                  <td>${formatRupiah(shipment.nominal)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-          <div class="bottom">
-            <div>
-              <div class="tnc">
-                <h4>Persyaratan Pengiriman</h4>
-                <div>
-                  1) Pengirim menjamin isi barang sesuai dengan keterangan.<br/>
-                  2) Kerusakan/kehilangan akibat force majeure tidak menjadi tanggung jawab pengangkut.<br/>
-                  3) Barang mudah pecah/cepat rusak harus diberi pengaman memadai.<br/>
-                  4) Klaim disertai bukti sah dan diajukan selambat-lambatnya 3x24 jam setelah diterima.<br/>
-                  5) Perhitungan berat berdasarkan Kg/M3 yang lebih besar.
-                </div>
-                <div class="badge-note">Isi dalam tidak diperiksa</div>
-              </div>
-            </div>
-            <div class="right-summary">
-              <div><strong>Jumlah</strong></div>
-              <div class="date">${shipment.destination_city}, ${formatDate(shipment.created_at)}</div>
-            </div>
+          <div class="notes-section">
+            <div class="notes-label">Keterangan</div>
+            <div class="notes-value">${shipment.notes || '-'}</div>
           </div>
 
           <div class="sign-row">
             <div class="sign">
-              <div>Pengirim</div>
-              <div class="line">(..............................)</div>
+              <div class="sign-label">Pengirim</div>
+              <div class="sign-line">( ${shipment.sender_name || '................................'} )</div>
             </div>
             <div class="sign">
-              <div>Yang Menerima</div>
-              <div class="line">(..............................)</div>
-            </div>
-            <div class="sign">
-              <div>Hormat kami</div>
-              <div class="line">(..............................)</div>
+              <div class="sign-label">Yang Menerima</div>
+              <div class="sign-line">( ................................ )</div>
             </div>
           </div>
         </div>
@@ -527,70 +499,66 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
         <title>Bulk Surat Jalan - ${dbl.dbl_number}</title>
         <meta charset="utf-8" />
         <style>
-          @page { size: 9.5in 11in portrait; margin: 0; }
-          :root { --ink:#000; --line:#000; --muted:#000; --paper:#fff; }
+          @page { size: A4 portrait; margin: 0; }
           * { box-sizing: border-box; margin: 0; padding: 0; }
-          html, body { height: 100%; font-family: 'Courier New', Courier, monospace; font-size: 12px; color: var(--ink); }
-          body { margin: 0; padding: 0; }
-          .sheet { width: 9.5in; height: 11in; max-width: 9.5in; background: var(--paper); padding: 10px 18px; position: relative; }
+          html, body { font-family: Arial, sans-serif; color: #000; }
+          body { margin: 0; padding: 0; background: #fff; }
+          .sheet { width: 100%; max-width: 210mm; background: #fff; position: relative; padding: 20mm 15mm; }
           .page-break { page-break-before: always; }
-          .dbl-banner { background: #000; color: #fff; text-align: center; padding: 3px 6px; font-size: 10px; font-weight: 700; margin-bottom: 5px; }
-          .top { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 6px; }
-          .brand { display: flex; gap: 8px; align-items: center; }
-          .brand img { width: 45px; height: 45px; object-fit: contain; }
-          .brand-title { font-weight: 800; font-size: 13px; letter-spacing: .3px; }
-          .brand-sub { font-size: 10px; color: #000; margin-top: 2px; }
-          .addr { font-size: 9px; color: #000; margin-top: 3px; white-space: pre-line; line-height: 1.2; }
-          .right-box { margin-left: auto; border: 3px solid #000; padding: 5px 9px; text-align: center; min-width: 230px; }
-          .right-box .title { font-weight: 800; font-size: 12px; letter-spacing: .4px; }
-          .right-box .spb { margin-top: 3px; font-size: 11px; font-weight: 700; }
-          .right-box .code { margin-top: 2px; font-size: 10px; }
+          .dbl-banner { background: #000; color: #fff; text-align: center; padding: 6px 10px; font-size: 12px; font-weight: bold; margin-bottom: 15px; }
+          
+          .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 3px solid #000; }
+          .brand { display: flex; gap: 12px; align-items: center; }
+          .brand img { width: 60px; height: 60px; object-fit: contain; }
+          .brand-title { font-weight: bold; font-size: 18px; }
+          .brand-sub { font-size: 12px; margin-top: 4px; }
+          .addr { font-size: 11px; margin-top: 6px; line-height: 1.4; }
+          .right-box { border: 3px solid #000; padding: 8px 12px; text-align: center; min-width: 280px; }
+          .right-box .title { font-weight: bold; font-size: 16px; }
+          .right-box .spb { margin-top: 6px; font-size: 14px; font-weight: bold; }
 
-          .barcode { text-align: right; margin: 5px 0 6px; }
-          .barcode img { width: 300px; height: 65px; object-fit: contain; border: 3px solid #000; padding: 4px; background: #fff; }
+          .barcode-section { text-align: center; margin: 15px 0; }
+          .barcode-section img { width: 350px; height: 80px; border: 3px solid #000; padding: 6px; }
 
-          .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
-          .field { border: 3px solid #000; padding: 5px 7px; min-height: 42px; }
-          .label { font-size: 9px; font-weight: 700; color: #000; margin-bottom: 2px; text-transform: uppercase; }
-          .value { font-size: 11px; font-weight: 600; }
+          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0; }
+          .info-box { border: 3px solid #000; padding: 12px; min-height: 70px; }
+          .info-label { font-size: 13px; font-weight: bold; margin-bottom: 6px; text-transform: uppercase; }
+          .info-value { font-size: 16px; font-weight: bold; }
 
-          table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-          th, td { border: 3px solid #000; font-size: 10px; padding: 5px 7px; }
-          thead th { background: #fff; font-weight: 700; }
+          .table-wrapper { margin: 20px 0; }
+          table { width: 100%; border-collapse: collapse; }
+          th, td { border: 3px solid #000; padding: 12px 10px; text-align: left; }
+          th { background: #fff; font-size: 13px; font-weight: bold; }
+          td { font-size: 14px; }
 
-          .bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; align-items: start; }
-          .tnc { border: 3px solid #000; padding: 6px; font-size: 8px; line-height: 1.3; color: #000; }
-          .tnc h4 { margin: 0 0 3px; font-size: 9px; font-weight: 700; }
-          .badge-note { display: inline-block; border: 3px solid #000; padding: 3px 6px; font-weight: 700; margin-top: 4px; font-size: 8px; }
+          .notes-section { margin: 20px 0; border: 3px solid #000; padding: 12px; }
+          .notes-label { font-size: 13px; font-weight: bold; margin-bottom: 6px; }
+          .notes-value { font-size: 14px; min-height: 60px; }
 
-          .sign-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 12px; }
-          .sign { text-align: center; font-size: 10px; font-weight: 600; }
-          .line { border-top: 3px solid #000; margin-top: 40px; padding-top: 3px; }
-
-          .right-summary { text-align: right; font-size: 11px; font-weight: 600; }
-          .right-summary .date { margin-top: 8px; }
+          .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 30px; margin-top: 40px; }
+          .sign { text-align: center; }
+          .sign-label { font-size: 13px; font-weight: bold; margin-bottom: 60px; }
+          .sign-line { border-top: 2px solid #000; padding-top: 8px; font-size: 13px; }
 
           .delivered-stamp {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%) rotate(-15deg);
-            font-size: 48px;
+            font-size: 72px;
             font-weight: 900;
-            color: rgba(0, 0, 0, 0.15);
-            border: 6px solid rgba(0, 0, 0, 0.15);
-            padding: 12px 28px;
+            color: rgba(0, 0, 0, 0.1);
+            border: 8px solid rgba(0, 0, 0, 0.1);
+            padding: 20px 40px;
             text-transform: uppercase;
-            letter-spacing: 4px;
+            letter-spacing: 6px;
             pointer-events: none;
           }
 
           @media print {
-            html, body { width: 9.5in; height: 11in; }
             body { padding: 0; }
-            .sheet { border: 0; width: 9.5in; height: 11in; max-width: none; padding: 8mm 12mm; margin-bottom: 0; }
-            .page-break { page-break-before: always; }
-            .delivered-stamp { color: rgba(0, 0, 0, 0.2); border-color: rgba(0, 0, 0, 0.2); }
+            .sheet { padding: 10mm 12mm; }
+            .delivered-stamp { color: rgba(0, 0, 0, 0.15); border-color: rgba(0, 0, 0, 0.15); }
           }
         </style>
       </head>

@@ -221,15 +221,15 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         table { width: 100%; border-collapse: collapse; }
         th, td { border: 3px solid #000; padding: 6px 5px; text-align: left; vertical-align: top; }
         th { background: #fff; font-size: 10px; font-weight: bold; }
-        td { font-size: 11px; min-height: 120px; height: 120px; }
+        td { font-size: 11px; min-height: 80px; height: 80px; }
 
-        .notes-section { margin: 8px 0; border: 3px solid #000; padding: 6px; }
+        .notes-section { margin: 6px 0; border: 3px solid #000; padding: 6px; }
         .notes-label { font-size: 10px; font-weight: bold; margin-bottom: 3px; }
-        .notes-value { font-size: 11px; min-height: 35px; }
+        .notes-value { font-size: 11px; min-height: 25px; }
 
-        .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-top: 15px; }
+        .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-top: 10px; }
         .sign { text-align: center; }
-        .sign-label { font-size: 10px; font-weight: bold; margin-bottom: 35px; }
+        .sign-label { font-size: 10px; font-weight: bold; margin-bottom: 25px; }
         .sign-line { border-top: 2px solid #000; padding-top: 4px; font-size: 10px; }
 
         .delivered-stamp {
@@ -529,15 +529,15 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           table { width: 100%; border-collapse: collapse; }
           th, td { border: 3px solid #000; padding: 6px 5px; text-align: left; vertical-align: top; }
           th { background: #fff; font-size: 10px; font-weight: bold; }
-          td { font-size: 11px; min-height: 120px; height: 120px; }
+          td { font-size: 11px; min-height: 80px; height: 80px; }
 
-          .notes-section { margin: 8px 0; border: 3px solid #000; padding: 6px; }
+          .notes-section { margin: 6px 0; border: 3px solid #000; padding: 6px; }
           .notes-label { font-size: 10px; font-weight: bold; margin-bottom: 3px; }
-          .notes-value { font-size: 11px; min-height: 35px; }
+          .notes-value { font-size: 11px; min-height: 25px; }
 
-          .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-top: 15px; }
+          .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-top: 10px; }
           .sign { text-align: center; }
-          .sign-label { font-size: 10px; font-weight: bold; margin-bottom: 35px; }
+          .sign-label { font-size: 10px; font-weight: bold; margin-bottom: 25px; }
           .sign-line { border-top: 2px solid #000; padding-top: 4px; font-size: 10px; }
 
           .delivered-stamp {

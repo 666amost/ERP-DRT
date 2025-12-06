@@ -425,7 +425,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
               <div class="info-value">${shipment.recipient_name || '-'}</div>
             </div>
             <div class="info-box">
-              <div class="info-label">ALAMAT PENGIRIMAN</div>
+              <div class="info-label">ALAMAT PENGIRIM</div>
               <div class="info-value">${shipment.origin_city}</div>
             </div>
             <div class="info-box">
@@ -437,7 +437,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
               <div class="info-value">${shipment.total_colli} Koli</div>
             </div>
             <div class="info-box">
-              <div class="info-label">Tujuan Pengiriman</div>
+              <div class="info-label">TUJUAN</div>
               <div class="info-value">${shipment.destination_city}</div>
             </div>
           </div>

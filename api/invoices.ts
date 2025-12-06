@@ -145,7 +145,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
   if (endpoint === 'list' && req.method === 'GET') {
     const page = parseInt(url.searchParams.get('page') || '1');
-    const limit = parseInt(url.searchParams.get('limit') || '20');
+    const limit = parseInt(url.searchParams.get('limit') || '9999');
     const status = url.searchParams.get('status');
     const offset = (page - 1) * limit;
     

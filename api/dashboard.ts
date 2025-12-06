@@ -139,7 +139,6 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           id, invoice_number, customer_name, amount, status, issued_at
         from invoices
         order by issued_at desc
-        limit 10
       ` as Invoice[];
       
       writeJson(res, { items: invoices });
@@ -154,7 +153,6 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         left join trips t on t.id = ti.trip_id
         where s.status in ('IN_TRANSIT', 'LOADING')
         order by s.created_at desc
-        limit 10
       ` as Shipment[];
       
       writeJson(res, { items: shipments });

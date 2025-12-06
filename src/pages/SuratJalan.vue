@@ -204,18 +204,17 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         .brand img { width: 40px; height: 40px; object-fit: contain; }
         .brand-title { font-weight: bold; font-size: 13px; line-height: 1.2; }
         .brand-sub { font-size: 8px; margin-top: 1px; }
-        .addr { font-size: 7px; margin-top: 2px; line-height: 1.2; }
-        .right-box { border: 2px solid #000; padding: 3px 6px; text-align: center; min-width: 200px; margin-top: 6px; }
-        .right-box .title { font-weight: bold; font-size: 12px; }
-        .right-box .spb { margin-top: 2px; font-size: 10px; font-weight: bold; }
+        .addr { font-size: 9px; margin-top: 2px; line-height: 1.3; font-weight: 500; }
+        .right-box { border: 2px solid #000; padding: 6px 10px; text-align: center; min-width: 180px; margin-top: 6px; }
+        .right-box .spb { font-size: 16px; font-weight: bold; }
 
-        .barcode-section { text-align: center; margin: 3px 0; }
-        .barcode-section img { width: 220px; height: 45px; border: 2px solid #000; padding: 2px; }
-
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 6px 0; }
-        .info-box { border: 2px solid #000; padding: 5px; min-height: 45px; }
-        .info-label { font-size: 11px; font-weight: bold; margin-bottom: 3px; text-transform: uppercase; }
-        .info-value { font-size: 15px; font-weight: bold; }
+        .info-tables { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+        .info-table { border: 2px solid #000; }
+        .info-table table { width: 100%; border-collapse: collapse; }
+        .info-table td { border-bottom: 2px solid #000; padding: 6px 8px; }
+        .info-table td:last-child { border-bottom: none; }
+        .info-table .label { font-size: 10px; font-weight: bold; text-transform: uppercase; background: #f5f5f5; }
+        .info-table .value { font-size: 14px; font-weight: bold; }
 
         .table-wrapper { margin: 6px 0; }
         table { width: 100%; border-collapse: collapse; }
@@ -265,39 +264,48 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
             <div class="addr">${company?.address ?? ''}</div>
           </div>
           <div class="right-box">
-            <div class="title">SURAT PENGANTAR BARANG</div>
             <div class="spb">No. SPB: ${spbNumber}</div>
           </div>
         </div>
 
-        <div class="barcode-section">
-          <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode" alt="Barcode" />
-        </div>
-
-        <div class="info-grid">
-          <div class="info-box">
-            <div class="info-label">Pengirim</div>
-            <div class="info-value">${shipment.sender_name || '-'}</div>
+        <div class="info-tables">
+          <div class="info-table">
+            <table>
+              <tr>
+                <td class="label">PENGIRIM</td>
+              </tr>
+              <tr>
+                <td class="value">${shipment.sender_name || '-'}</td>
+              </tr>
+            </table>
           </div>
-          <div class="info-box">
-            <div class="info-label">Penerima</div>
-            <div class="info-value">${shipment.recipient_name || '-'}</div>
-          </div>
-          <div class="info-box">
-            <div class="info-label">Alamat</div>
-            <div class="info-value">${shipment.origin_city}</div>
-          </div>
-          <div class="info-box">
-            <div class="info-label">No. Telp</div>
-            <div class="info-value">${shipment.recipient_phone || '-'}</div>
-          </div>
-          <div class="info-box">
-            <div class="info-label">Pengiriman</div>
-            <div class="info-value">${shipment.destination_city}</div>
-          </div>
-          <div class="info-box">
-            <div class="info-label">Banyaknya</div>
-            <div class="info-value">${shipment.total_colli} Koli</div>
+          <div class="info-table">
+            <table>
+              <tr>
+                <td class="label">PENERIMA</td>
+              </tr>
+              <tr>
+                <td class="value">${shipment.recipient_name || '-'}</td>
+              </tr>
+              <tr>
+                <td class="label">ALAMAT</td>
+              </tr>
+              <tr>
+                <td class="value">${shipment.destination_city}</td>
+              </tr>
+              <tr>
+                <td class="label">NO. TELP</td>
+              </tr>
+              <tr>
+                <td class="value">${shipment.recipient_phone || '-'}</td>
+              </tr>
+              <tr>
+                <td class="label">BANYAKNYA</td>
+              </tr>
+              <tr>
+                <td class="value">${shipment.total_colli} Koli</td>
+              </tr>
+            </table>
           </div>
         </div>
 
@@ -409,39 +417,48 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
               <div class="addr">${company?.address ?? ''}</div>
             </div>
             <div class="right-box">
-              <div class="title">SURAT PENGANTAR BARANG</div>
               <div class="spb">No. SPB: ${spbNumber}</div>
             </div>
           </div>
 
-          <div class="barcode-section">
-            <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode" alt="Barcode" />
-          </div>
-
-          <div class="info-grid">
-            <div class="info-box">
-              <div class="info-label">Pengirim</div>
-              <div class="info-value">${shipment.sender_name || '-'}</div>
+          <div class="info-tables">
+            <div class="info-table">
+              <table>
+                <tr>
+                  <td class="label">PENGIRIM</td>
+                </tr>
+                <tr>
+                  <td class="value">${shipment.sender_name || '-'}</td>
+                </tr>
+              </table>
             </div>
-            <div class="info-box">
-              <div class="info-label">Penerima</div>
-              <div class="info-value">${shipment.recipient_name || '-'}</div>
-            </div>
-            <div class="info-box">
-              <div class="info-label">Alamat</div>
-              <div class="info-value">${shipment.origin_city}</div>
-            </div>
-            <div class="info-box">
-              <div class="info-label">No. Telp</div>
-              <div class="info-value">${shipment.recipient_phone || '-'}</div>
-            </div>
-            <div class="info-box">
-              <div class="info-label">Pengiriman</div>
-              <div class="info-value">${shipment.destination_city}</div>
-            </div>
-            <div class="info-box">
-              <div class="info-label">Banyaknya</div>
-              <div class="info-value">${shipment.total_colli} Koli</div>
+            <div class="info-table">
+              <table>
+                <tr>
+                  <td class="label">PENERIMA</td>
+                </tr>
+                <tr>
+                  <td class="value">${shipment.recipient_name || '-'}</td>
+                </tr>
+                <tr>
+                  <td class="label">ALAMAT</td>
+                </tr>
+                <tr>
+                  <td class="value">${shipment.destination_city}</td>
+                </tr>
+                <tr>
+                  <td class="label">NO. TELP</td>
+                </tr>
+                <tr>
+                  <td class="value">${shipment.recipient_phone || '-'}</td>
+                </tr>
+                <tr>
+                  <td class="label">BANYAKNYA</td>
+                </tr>
+                <tr>
+                  <td class="value">${shipment.total_colli} Koli</td>
+                </tr>
+              </table>
             </div>
           </div>
 
@@ -498,18 +515,17 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           .brand img { width: 40px; height: 40px; object-fit: contain; }
           .brand-title { font-weight: bold; font-size: 13px; line-height: 1.2; }
           .brand-sub { font-size: 8px; margin-top: 1px; }
-          .addr { font-size: 7px; margin-top: 2px; line-height: 1.2; }
-          .right-box { border: 2px solid #000; padding: 3px 6px; text-align: center; min-width: 200px; margin-top: 6px; }
-          .right-box .title { font-weight: bold; font-size: 12px; }
-          .right-box .spb { margin-top: 2px; font-size: 10px; font-weight: bold; }
+          .addr { font-size: 9px; margin-top: 2px; line-height: 1.3; font-weight: 500; }
+          .right-box { border: 2px solid #000; padding: 6px 10px; text-align: center; min-width: 180px; margin-top: 6px; }
+          .right-box .spb { font-size: 16px; font-weight: bold; }
 
-          .barcode-section { text-align: center; margin: 3px 0; }
-          .barcode-section img { width: 220px; height: 45px; border: 2px solid #000; padding: 2px; }
-
-          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 6px 0; }
-          .info-box { border: 2px solid #000; padding: 5px; min-height: 45px; }
-          .info-label { font-size: 11px; font-weight: bold; margin-bottom: 3px; text-transform: uppercase; }
-          .info-value { font-size: 15px; font-weight: bold; }
+          .info-tables { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+          .info-table { border: 2px solid #000; }
+          .info-table table { width: 100%; border-collapse: collapse; }
+          .info-table td { border-bottom: 2px solid #000; padding: 6px 8px; }
+          .info-table td:last-child { border-bottom: none; }
+          .info-table .label { font-size: 10px; font-weight: bold; text-transform: uppercase; background: #f5f5f5; }
+          .info-table .value { font-size: 14px; font-weight: bold; }
 
           .table-wrapper { margin: 6px 0; }
           table { width: 100%; border-collapse: collapse; }

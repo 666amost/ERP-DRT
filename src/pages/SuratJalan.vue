@@ -197,7 +197,7 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { font-family: Arial, sans-serif; color: #000; }
         body { margin: 0; padding: 8mm 10mm; background: #fff; }
-        .sheet { width: 125%; background: #fff; position: relative; transform: scale(0.8); transform-origin: top left; }
+        .sheet { width: 100%; background: #fff; position: relative; }
         
         .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 3px solid #000; }
         .brand { display: flex; gap: 8px; align-items: center; }
@@ -209,10 +209,10 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         .right-box .title { font-weight: bold; font-size: 13px; }
         .right-box .spb { margin-top: 3px; font-size: 11px; font-weight: bold; }
 
-        .barcode-section { text-align: center; margin: 3px 0; }
-        .barcode-section img { width: 220px; height: 45px; border: 3px solid #000; padding: 3px; }
+        .barcode-section { text-align: center; margin: 5px 0; }
+        .barcode-section img { width: 280px; height: 55px; border: 3px solid #000; padding: 3px; }
 
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 6px 0; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
         .info-box { border: 3px solid #000; padding: 6px; min-height: 48px; }
         .info-label { font-size: 10px; font-weight: bold; margin-bottom: 3px; text-transform: uppercase; }
         .info-value { font-size: 13px; font-weight: bold; }
@@ -248,7 +248,8 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         }
 
         @media print {
-          body { padding: 6mm 8mm; }
+          html, body { margin: 0; padding: 0; }
+          body { transform: scale(0.8); transform-origin: top left; width: 125%; }
           .delivered-stamp { color: rgba(0, 0, 0, 0.12); border-color: rgba(0, 0, 0, 0.12); }
         }
       </style>
@@ -503,7 +504,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           * { box-sizing: border-box; margin: 0; padding: 0; }
           html, body { font-family: Arial, sans-serif; color: #000; }
           body { margin: 0; padding: 0; background: #fff; }
-          .sheet { width: 125%; background: #fff; position: relative; padding: 8mm 10mm; transform: scale(0.8); transform-origin: top left; }
+          .sheet { width: 100%; background: #fff; position: relative; padding: 8mm 10mm; }
           .page-break { page-break-before: always; }
           .dbl-banner { background: #000; color: #fff; text-align: center; padding: 4px 8px; font-size: 10px; font-weight: bold; margin-bottom: 6px; }
           
@@ -517,10 +518,10 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           .right-box .title { font-weight: bold; font-size: 13px; }
           .right-box .spb { margin-top: 3px; font-size: 11px; font-weight: bold; }
 
-          .barcode-section { text-align: center; margin: 3px 0; }
-          .barcode-section img { width: 220px; height: 45px; border: 3px solid #000; padding: 3px; }
+          .barcode-section { text-align: center; margin: 5px 0; }
+          .barcode-section img { width: 280px; height: 55px; border: 3px solid #000; padding: 3px; }
 
-          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 6px 0; }
+          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
           .info-box { border: 3px solid #000; padding: 6px; min-height: 48px; }
           .info-label { font-size: 10px; font-weight: bold; margin-bottom: 3px; text-transform: uppercase; }
           .info-value { font-size: 13px; font-weight: bold; }
@@ -556,7 +557,8 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           }
 
           @media print {
-            body { padding: 0; }
+            html, body { margin: 0; padding: 0; }
+            body { transform: scale(0.8); transform-origin: top left; width: 125%; }
             .sheet { padding: 6mm 8mm; }
             .delivered-stamp { color: rgba(0, 0, 0, 0.12); border-color: rgba(0, 0, 0, 0.12); }
           }

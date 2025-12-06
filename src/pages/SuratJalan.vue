@@ -193,7 +193,7 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
       <title>Surat Jalan - ${spbNumber}</title>
       <meta charset="utf-8" />
       <style>
-        @page { size: 9.5in 11in; margin: 0; }
+        @page { size: 9.5in 11in portrait; margin: 0; }
         :root { --ink:#000; --line:#000; --muted:#000; --paper:#fff; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { height: 100%; font-family: 'Courier New', Courier, monospace; font-size: 12px; color: var(--ink); }
@@ -527,7 +527,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
         <title>Bulk Surat Jalan - ${dbl.dbl_number}</title>
         <meta charset="utf-8" />
         <style>
-          @page { size: 9.5in 11in; margin: 0; }
+          @page { size: 9.5in 11in portrait; margin: 0; }
           :root { --ink:#000; --line:#000; --muted:#000; --paper:#fff; }
           * { box-sizing: border-box; margin: 0; padding: 0; }
           html, body { height: 100%; font-family: 'Courier New', Courier, monospace; font-size: 12px; color: var(--ink); }

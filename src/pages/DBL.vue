@@ -406,6 +406,7 @@ async function printDaftarMuat(dbl: DBL) {
       <td class="border px-2 py-1">${esc(s.spb_number || s.public_code)}</td>
       <td class="border px-2 py-1">${esc(s.pengirim_name)}</td>
       <td class="border px-2 py-1">${esc(s.penerima_name)}</td>
+      <td class="border px-2 py-1">${esc(s.destination)}</td>
       <td class="border px-2 py-1">${esc(s.macam_barang)}</td>
       <td class="border px-2 py-1 text-center">${s.total_colli || 0}</td>
       <td class="border px-2 py-1 text-right">${formatRupiah(s.nominal || 0)}</td>
@@ -415,27 +416,31 @@ async function printDaftarMuat(dbl: DBL) {
   win.document.write(`<!DOCTYPE html><html><head><title>Daftar Muatan - ${esc(dbl.dbl_number)}</title>
   <script src="https://cdn.tailwindcss.com"></` + `script>
   <style>
-    @page { size: A4; margin: 10mm; }
+    @page { size: A4; margin: 8mm; orphans: 3; widows: 3; }
     @media print { body { -webkit-print-color-adjust: exact; } }
-    body { font-family: 'Inter', Arial, sans-serif; font-size: 11px; }
+    body { font-family: Arial, sans-serif; font-size: 10px; }
     .border { border: 1px solid #374151; }
     table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #374151; }
+    th, td { border: 1px solid #374151; padding: 4px 2px; }
+    th { font-size: 9px; font-weight: bold; }
+    tbody tr { page-break-inside: avoid; }
+    .page-break { page-break-after: always; }
+    .footer-section { page-break-inside: avoid; }
   </style>
-  </head><body class="p-4">
+  </head><body class="p-2">
   
-  <div class="flex justify-between items-start mb-4">
-    <div class="text-xl font-bold">DAFTAR MUATAN</div>
-    <div class="text-right">
-      <div class="text-lg font-bold">No: ${esc(dbl.dbl_number)}</div>
-      <div>Tanggal: ${esc(dblDate)}</div>
+  <div class="flex justify-between items-start mb-2">
+    <div class="text-lg font-bold">DAFTAR MUATAN</div>
+    <div class="text-right text-sm">
+      <div class="font-bold">No: ${esc(dbl.dbl_number)}</div>
+      <div>Tgl: ${esc(dblDate)}</div>
     </div>
   </div>
 
-  <div class="mb-4 p-2 bg-gray-100 rounded">
-    <div class="grid grid-cols-2 gap-2 text-sm">
-      <div><strong>Plat Kendaraan:</strong> ${esc(dbl.vehicle_plate)}</div>
-      <div><strong>Supir:</strong> ${esc(dbl.driver_name)} ${dbl.driver_phone ? '/ ' + esc(dbl.driver_phone) : ''}</div>
+  <div class="mb-2 p-1 bg-gray-100 rounded text-xs">
+    <div class="grid grid-cols-2 gap-1">
+      <div><strong>Plat:</strong> ${esc(dbl.vehicle_plate)}</div>
+      <div><strong>Supir:</strong> ${esc(dbl.driver_name)}</div>
       <div><strong>Asal:</strong> ${esc(dbl.origin)}</div>
       <div><strong>Tujuan:</strong> ${esc(dbl.destination)}</div>
     </div>
@@ -448,48 +453,51 @@ async function printDaftarMuat(dbl: DBL) {
         <th class="border px-2 py-1">TTB/Resi</th>
         <th class="border px-2 py-1">Pengirim</th>
         <th class="border px-2 py-1">Penerima</th>
+        <th class="border px-2 py-1">Alamat</th>
         <th class="border px-2 py-1">Macam Barang</th>
-        <th class="border px-2 py-1 w-16">Colli</th>
-        <th class="border px-2 py-1 w-28">Jumlah</th>
+        <th class="border px-2 py-1 w-12">Colli</th>
+        <th class="border px-2 py-1 w-20">Jumlah</th>
       </tr>
     </thead>
-    <tbody>
-      ${rows}
+    <tfoot>
       <tr class="font-bold bg-gray-100">
-        <td colspan="5" class="border px-2 py-1 text-right">TOTAL</td>
+        <td colspan="6" class="border px-2 py-1 text-right">TOTAL</td>
         <td class="border px-2 py-1 text-center">${totalCol}</td>
         <td class="border px-2 py-1 text-right">${formatRupiah(totalNom)}</td>
       </tr>
+    </tfoot>
+    <tbody>
+      ${rows}
     </tbody>
   </table>
 
-  <div class="grid grid-cols-2 gap-4 mb-4">
-    <div class="border p-2 rounded">
-      <div class="font-bold mb-2 border-b pb-1">CATATAN:</div>
-      <div class="text-sm text-gray-600">${esc(dbl.catatan) || '-'}</div>
+  <div class="footer-section grid grid-cols-2 gap-2 mb-2 text-xs">
+    <div class="border p-1 rounded">
+      <div class="font-bold mb-1 border-b pb-0.5">CATATAN:</div>
+      <div class="text-gray-600 text-xs">${esc(dbl.catatan) || '-'}</div>
     </div>
 
-    <div class="border p-2 rounded">
-      <table class="w-full text-sm mb-4">
+    <div class="border p-1 rounded">
+      <table class="w-full text-xs mb-2">
         <tr><td class="font-bold">TOTAL NOMINAL</td><td class="text-right font-bold">Rp. ${formatRupiah(totalNom)}</td></tr>
       </table>
       
-      <div class="grid grid-cols-2 gap-4 mt-8">
-        <div class="text-center">
-          <div class="font-bold">PENGURUS</div>
-          <div class="h-16"></div>
-          <div class="border-t border-black pt-1">${esc(dbl.pengurus_name) || '________________'}</div>
+      <div class="grid grid-cols-2 gap-2 mt-4">
+        <div class="text-center text-xs">
+          <div class="font-bold text-xs">PENGURUS</div>
+          <div class="h-10"></div>
+          <div class="border-t border-black pt-0.5 text-xs">${esc(dbl.pengurus_name) || '________________'}</div>
         </div>
-        <div class="text-center">
-          <div class="font-bold">SUPIR</div>
-          <div class="h-16"></div>
-          <div class="border-t border-black pt-1">${esc(dbl.driver_name) || '________________'}</div>
+        <div class="text-center text-xs">
+          <div class="font-bold text-xs">SUPIR</div>
+          <div class="h-10"></div>
+          <div class="border-t border-black pt-0.5 text-xs">${esc(dbl.driver_name) || '________________'}</div>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="text-xs text-gray-500 text-center mt-4">
+  <div class="text-xs text-gray-500 text-center mt-2">
     ${printedAt} | ${esc(company?.name || '')}
   </div>
 

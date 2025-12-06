@@ -199,34 +199,34 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         body { margin: 0; padding: 8mm 10mm; background: #fff; }
         .sheet { width: 100%; background: #fff; position: relative; }
         
-        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid #000; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 2px solid #000; }
         .brand { display: flex; gap: 6px; align-items: center; }
         .brand img { width: 40px; height: 40px; object-fit: contain; }
         .brand-title { font-weight: bold; font-size: 13px; line-height: 1.2; }
         .brand-sub { font-size: 8px; margin-top: 1px; }
-        .addr { font-size: 9px; margin-top: 2px; line-height: 1.3; font-weight: 500; }
-        .right-box { border: 1px solid #000; padding: 8px 10px; text-align: center; min-width: 220px; margin-top: 6px; }
-        .right-box .label { font-size: 11px; margin-bottom: 3px; }
-        .right-box .spb { font-size: 20px; font-weight: bold; letter-spacing: 0.5px; }
+        .addr { font-size: 7px; margin-top: 2px; line-height: 1.2; }
+        .right-box { border: 2px solid #000; padding: 3px 6px; text-align: center; min-width: 200px; margin-top: 6px; }
+        .right-box .title { font-weight: bold; font-size: 12px; }
+        .right-box .spb { margin-top: 2px; font-size: 10px; font-weight: bold; }
 
         .barcode-section { text-align: center; margin: 3px 0; }
         .barcode-section img { width: 220px; height: 45px; border: 2px solid #000; padding: 2px; }
 
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 6px 0; }
-        .info-box { border: 1px solid #000; padding: 6px; min-height: 48px; }
-        .info-label { font-size: 11px; font-weight: 600; margin-bottom: 3px; text-transform: uppercase; }
+        .info-box { border: 2px solid #000; padding: 5px; min-height: 45px; }
+        .info-label { font-size: 11px; font-weight: bold; margin-bottom: 3px; text-transform: uppercase; }
         .info-value { font-size: 15px; font-weight: bold; }
 
-        .table-wrapper { margin: 8px 0; }
+        .table-wrapper { margin: 6px 0; }
         table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #000; padding: 6px 5px; text-align: left; vertical-align: top; }
-        th { background: #fff; font-size: 11px; font-weight: 600; }
-        td { font-size: 13px; font-weight: bold; min-height: 60px; height: 60px; }
+        th, td { border: 2px solid #000; padding: 5px 4px; text-align: left; vertical-align: top; }
+        th { background: #fff; font-size: 11px; font-weight: bold; }
+        td { font-size: 13px; min-height: 60px; height: 60px; }
 
-        .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 12px; }
+        .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 12px; }}
         .sign { text-align: center; }
-        .sign-label { font-size: 11px; font-weight: 600; margin-bottom: 20px; }
-        .sign-line { border-top: 1px solid #000; padding-top: 3px; font-size: 11px; font-weight: bold; }
+        .sign-label { font-size: 11px; font-weight: bold; margin-bottom: 20px; }
+        .sign-line { border-top: 2px solid #000; padding-top: 3px; font-size: 11px; }
 
         .delivered-stamp {
           position: absolute;
@@ -265,9 +265,13 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
             <div class="addr">${company?.address ?? ''}</div>
           </div>
           <div class="right-box">
-            <div class="label">No. SPB:</div>
-            <div class="spb">${spbNumber}</div>
+            <div class="title">SURAT PENGANTAR BARANG</div>
+            <div class="spb">No. SPB: ${spbNumber}</div>
           </div>
+        </div>
+
+        <div class="barcode-section">
+          <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode" alt="Barcode" />
         </div>
 
         <div class="info-grid">
@@ -405,9 +409,13 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
               <div class="addr">${company?.address ?? ''}</div>
             </div>
             <div class="right-box">
-              <div class="label">No. SPB:</div>
-              <div class="spb">${spbNumber}</div>
+              <div class="title">SURAT PENGANTAR BARANG</div>
+              <div class="spb">No. SPB: ${spbNumber}</div>
             </div>
+          </div>
+
+          <div class="barcode-section">
+            <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode" alt="Barcode" />
           </div>
 
           <div class="info-grid">

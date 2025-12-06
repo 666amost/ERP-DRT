@@ -218,7 +218,7 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
 
         .table-wrapper { margin: 6px 0; }
         table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #000; padding: 5px 4px; text-align: left; vertical-align: top; }
+        th, td { border: 1px solid #000; padding: 5px 4px; text-align: left; vertical-align: top; white-space: pre-wrap; word-wrap: break-word; }
         th { background: #fff; font-size: 10px; }
         td { font-size: 14px; font-weight: bold; min-height: 60px; height: 60px; }
 
@@ -311,7 +311,7 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
             <tbody>
               <tr>
                 <td>${shipment.total_weight || '-'}</td>
-                <td>${shipment.description || 'Barang kiriman'}</td>
+                <td>${(shipment.description || 'Barang kiriman').split(', ').join('\n')}</td>
                 <td>${formatRupiah(shipment.nominal)}</td>
               </tr>
             </tbody>
@@ -454,7 +454,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
               <tbody>
                 <tr>
                   <td>${shipment.total_weight || '-'}</td>
-                  <td>${shipment.description || 'Barang kiriman'}</td>
+                  <td>${(shipment.description || 'Barang kiriman').split(', ').join('\n')}</td>
                   <td>${formatRupiah(shipment.nominal)}</td>
                 </tr>
               </tbody>
@@ -509,7 +509,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
 
           .table-wrapper { margin: 6px 0; }
           table { width: 100%; border-collapse: collapse; }
-          th, td { border: 1px solid #000; padding: 5px 4px; text-align: left; vertical-align: top; }
+          th, td { border: 1px solid #000; padding: 5px 4px; text-align: left; vertical-align: top; white-space: pre-wrap; word-wrap: break-word; }
           th { background: #fff; font-size: 10px; }
           td { font-size: 14px; font-weight: bold; min-height: 60px; height: 60px; }
 

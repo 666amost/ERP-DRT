@@ -54,13 +54,13 @@ async function handleLogin() {
           <div
             class="h-12 w-12 rounded-lg bg-primary text-white flex items-center justify-center font-bold text-xl mx-auto mb-3"
           >
-            EP
+            STE
           </div>
           <h1 class="text-2xl font-bold text-gray-900">
-            Enterprise ERP
+            SUMBER TRANS EXPRESS
           </h1>
           <p class="text-sm text-gray-500 mt-1">
-            Masuk ke dashboard
+            Dashboard
           </p>
         </div>
 
@@ -122,7 +122,14 @@ async function handleLogin() {
         </form>
 
         <div class="mt-6 text-center text-xs text-gray-500">
-          Hubungi amos jika ada error
+          <a
+            href="https://wa.me/628811995452?text=Ada%20erorr%20STE"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-primary hover:underline"
+          >
+            Hubungi amos jika ada error
+          </a>
         </div>
       </div>
     </div>

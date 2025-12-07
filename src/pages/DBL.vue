@@ -87,6 +87,10 @@ const availableShipments = ref<Shipment[]>([]);
 const selectedShipmentIds = ref<number[]>([]);
 const loadingShipments = ref(false);
 
+const availableShipmentsPage = ref(1);
+const availableShipmentsTotal = ref(0);
+const availableShipmentsLimit = 100;
+
 const pphPercent = ref<string>('0');
 
 const form = ref<DBLForm>({
@@ -272,11 +276,12 @@ async function openShipmentModal(dbl: DBL) {
   loadingShipments.value = true;
   showShipmentModal.value = true;
   selectedShipmentIds.value = [];
+  availableShipmentsPage.value = 1;
   
   try {
     const [itemsRes, availRes] = await Promise.all([
       fetch(`/api/dbl?endpoint=items&id=${dbl.id}`),
-      fetch(`/api/dbl?endpoint=available-shipments`)
+      fetch(`/api/dbl?endpoint=available-shipments&page=1&limit=${availableShipmentsLimit}`)
     ]);
     
     if (itemsRes.ok) {
@@ -287,9 +292,31 @@ async function openShipmentModal(dbl: DBL) {
     if (availRes.ok) {
       const data = await availRes.json();
       availableShipments.value = data.items || [];
+      availableShipmentsTotal.value = data.pagination?.total || 0;
     }
   } catch (e) {
     console.error('Failed to load shipments:', e);
+  } finally {
+    loadingShipments.value = false;
+  }
+}
+
+async function loadMoreShipments() {
+  if (loadingShipments.value) return;
+  availableShipmentsPage.value++;
+  loadingShipments.value = true;
+
+  try {
+    const res = await fetch(`/api/dbl?endpoint=available-shipments&page=${availableShipmentsPage.value}&limit=${availableShipmentsLimit}`);
+    
+    if (res.ok) {
+      const data = await res.json();
+      availableShipments.value = [...availableShipments.value, ...(data.items || [])];
+      availableShipmentsTotal.value = data.pagination?.total || 0;
+    }
+  } catch (e) {
+    console.error('Failed to load more shipments:', e);
+    availableShipmentsPage.value--;
   } finally {
     loadingShipments.value = false;
   }
@@ -731,7 +758,7 @@ onMounted(async () => {
             </div>
             
             <div>
-              <h4 class="font-medium mb-2 dark:text-gray-200">Tambah Resi ({{ availableShipments.length }} tersedia)</h4>
+              <h4 class="font-medium mb-2 dark:text-gray-200">Tambah Resi ({{ availableShipments.length }}/{{ availableShipmentsTotal }} tersedia)</h4>
               <div v-if="availableShipments.length === 0" class="text-sm text-gray-500 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
                 Tidak ada resi yang tersedia. Pastikan sudah membuat resi di menu "Barang Keluar" terlebih dahulu.
               </div>
@@ -747,7 +774,12 @@ onMounted(async () => {
                   </div>
                 </label>
               </div>
-              <Button v-if="selectedShipmentIds.length > 0" variant="primary" class="mt-2" @click="addSelectedShipments">
+              <div v-if="availableShipments.length < availableShipmentsTotal" class="flex gap-2 mt-2">
+                <Button variant="default" class="flex-1" @click="loadMoreShipments" :disabled="loadingShipments">
+                  {{ loadingShipments ? 'Loading...' : `Muat lebih banyak (${availableShipments.length}/${availableShipmentsTotal})` }}
+                </Button>
+              </div>
+              <Button v-if="selectedShipmentIds.length > 0" variant="primary" class="w-full mt-2" @click="addSelectedShipments">
                 Tambahkan {{ selectedShipmentIds.length }} Resi
               </Button>
             </div>

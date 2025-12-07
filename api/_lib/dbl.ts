@@ -413,6 +413,10 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
 
     } else if (endpoint === 'available-shipments' && req.method === 'GET') {
       try {
+        const page = parseInt(url.searchParams.get('page') || '1');
+        const limit = parseInt(url.searchParams.get('limit') || '100');
+        const offset = (page - 1) * limit;
+
         const items = await sql`
           select 
             s.id, 
@@ -437,10 +441,22 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
           and s.status in ('LOADING', 'BOOKED', 'READY')
           and coalesce(s.invoice_generated, false) = false
           order by s.created_at desc
-          limit 100
+          limit ${limit} offset ${offset}
         `;
 
-        writeJson(res, { items });
+        const countResult = await sql`
+          select count(*)::int as count from shipments s
+          where s.dbl_id is null 
+          and s.status in ('LOADING', 'BOOKED', 'READY')
+          and coalesce(s.invoice_generated, false) = false
+        ` as [{ count: number }];
+
+        const total = countResult[0]?.count || 0;
+
+        writeJson(res, { 
+          items,
+          pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+        });
         return
       } catch (err) {
         console.error('[dbl/available-shipments] Error:', err);

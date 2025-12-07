@@ -158,15 +158,6 @@ const formatDate = (dateStr: string): string => {
   })
 }
 
-const formatDateLong = (dateStr: string): string => {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('id-ID', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric'
-  })
-}
-
 const formatDestination = (city: string, province: string | null): string => {
   const cityStr = city || ''
   const provinceStr = province || ''

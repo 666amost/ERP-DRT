@@ -140,28 +140,36 @@ function getStatusVariant(status: string): 'default' | 'info' | 'warning' | 'suc
   return (opt?.variant || 'default') as 'default' | 'info' | 'warning' | 'success';
 }
 
-const filteredAvailableShipments = computed(() => {
-  if (!shipmentSearchQuery.value.trim()) {
-    return availableShipments.value;
-  }
-  
-  const q = shipmentSearchQuery.value.toLowerCase();
-  return availableShipments.value.filter(s =>
-    (s.spb_number || '').toLowerCase().includes(q) ||
-    (s.public_code || '').toLowerCase().includes(q) ||
-    (s.customer_name || '').toLowerCase().includes(q) ||
-    (s.pengirim_name || '').toLowerCase().includes(q) ||
-    (s.penerima_name || '').toLowerCase().includes(q) ||
-    (s.origin || '').toLowerCase().includes(q) ||
-    (s.destination || '').toLowerCase().includes(q) ||
-    (s.macam_barang || '').toLowerCase().includes(q)
-  );
+let shipmentSearchDebounceTimer: NodeJS.Timeout | null = null;
+
+watch(shipmentSearchQuery, () => {
+  if (shipmentSearchDebounceTimer) clearTimeout(shipmentSearchDebounceTimer);
+  shipmentSearchDebounceTimer = setTimeout(() => {
+    loadAvailableShipments();
+  }, 300);
 });
+
+async function loadAvailableShipments() {
+  loadingShipments.value = true;
+  try {
+    const searchParam = shipmentSearchQuery.value.trim() ? `&search=${encodeURIComponent(shipmentSearchQuery.value)}` : '';
+    const res = await fetch(`/api/dbl?endpoint=available-shipments&page=1${searchParam}`);
+    if (res.ok) {
+      const data = await res.json();
+      availableShipments.value = data.items || [];
+      availableShipmentsTotal.value = data.pagination?.total || 0;
+    }
+  } catch (e) {
+    console.error('Failed to load available shipments:', e);
+  } finally {
+    loadingShipments.value = false;
+  }
+}
 
 async function loadDBLList() {
   loading.value = true;
   try {
-    const res = await fetch('/api/dbl?endpoint=list');
+    const res = await fetch('/api/dbl?endpoint=list&limit=200');
     const data = await res.json();
     dblList.value = data.items || [];
     filterDBLList();
@@ -299,9 +307,8 @@ async function openShipmentModal(dbl: DBL) {
   shipmentSearchQuery.value = '';
   
   try {
-    const [itemsRes, availRes] = await Promise.all([
-      fetch(`/api/dbl?endpoint=items&id=${dbl.id}`),
-      fetch(`/api/dbl?endpoint=available-shipments&page=1&limit=${availableShipmentsLimit}`)
+    const [itemsRes] = await Promise.all([
+      fetch(`/api/dbl?endpoint=items&id=${dbl.id}`)
     ]);
     
     if (itemsRes.ok) {
@@ -309,11 +316,7 @@ async function openShipmentModal(dbl: DBL) {
       dblShipments.value = data.items || [];
     }
     
-    if (availRes.ok) {
-      const data = await availRes.json();
-      availableShipments.value = data.items || [];
-      availableShipmentsTotal.value = data.pagination?.total || 0;
-    }
+    await loadAvailableShipments();
   } catch (e) {
     console.error('Failed to load shipments:', e);
   } finally {
@@ -789,10 +792,10 @@ onMounted(async () => {
                 Tidak ada resi yang tersedia. Pastikan sudah membuat resi di menu "Barang Keluar" terlebih dahulu.
               </div>
               <div v-else class="space-y-2 max-h-64 overflow-auto border border-gray-200 dark:border-gray-600 rounded-lg p-2">
-                <div v-if="filteredAvailableShipments.length === 0" class="text-sm text-gray-500 p-2 text-center">
+                <div v-if="availableShipments.length === 0" class="text-sm text-gray-500 p-2 text-center">
                   Tidak ada resi yang cocok dengan pencarian
                 </div>
-                <label v-for="s in filteredAvailableShipments" :key="s.id" class="flex items-center gap-2 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer">
+                <label v-for="s in availableShipments" :key="s.id" class="flex items-center gap-2 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer">
                   <input type="checkbox" :value="s.id" v-model="selectedShipmentIds" class="rounded" />
                   <div class="text-sm flex-1">
                     <div class="font-medium dark:text-gray-200">{{ s.spb_number || s.public_code || 'RESI-' + s.id }}</div>

@@ -11,10 +11,34 @@ const corsHeaders = {
   'Access-Control-Allow-Credentials': 'true'
 };
 
+let companyCache: { data: any; timestamp: number } | null = null;
+const CACHE_TTL = 60 * 60 * 1000; // 1 hour in milliseconds
+
+function getCachedCompany(): any | null {
+  if (companyCache && (Date.now() - companyCache.timestamp) < CACHE_TTL) {
+    return companyCache.data;
+  }
+  return null;
+}
+
+function setCachedCompany(data: any): void {
+  companyCache = { data, timestamp: Date.now() };
+}
+
+function clearCompanyCache(): void {
+  companyCache = null;
+}
+
 export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method === 'OPTIONS') { res.writeHead(204, corsHeaders); res.end(); return; }
 
   if (req.method === 'GET') {
+    const cached = getCachedCompany();
+    if (cached) {
+      writeJson(res, { company: cached });
+      return;
+    }
+
     try {
       const sql = getSql();
       const rows = await sql`select id, name, address, phone, email, website, notes from company_config order by id desc limit 1` as Array<any>;
@@ -23,12 +47,14 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         try {
           const detailedRows = await sql`select id, name, address, phone, email, website, notes, bank_name, bank_account, account_holder from company_config where id = ${company.id} limit 1` as Array<any>;
           if (detailedRows && detailedRows.length) {
+            setCachedCompany(detailedRows[0]);
             writeJson(res, { company: detailedRows[0] });
             return;
           }
         } catch (bankErr) {
           console.warn('Bank columns query failed, using basic columns:', bankErr);
         }
+        setCachedCompany(company);
         writeJson(res, { company });
         return;
       }
@@ -36,11 +62,14 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       console.error('company GET DB error:', e);
     }
     const company = getCompanyConfig();
+    setCachedCompany(company);
     writeJson(res, { company });
     return;
   }
 
   if (req.method === 'PUT') {
+    clearCompanyCache();
+    
     let body: any;
     try {
       body = await readJsonNode(req);

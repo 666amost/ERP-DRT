@@ -87,7 +87,7 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
   try {
     if (endpoint === 'list' && req.method === 'GET') {
       const page = parseInt(url.searchParams.get('page') || '1');
-      const limit = parseInt(url.searchParams.get('limit') || '20');
+      const limit = parseInt(url.searchParams.get('limit') || '50');
       const status = url.searchParams.get('status');
       const offset = (page - 1) * limit;
 
@@ -414,10 +414,33 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
     } else if (endpoint === 'available-shipments' && req.method === 'GET') {
       try {
         const page = parseInt(url.searchParams.get('page') || '1');
-        const limit = parseInt(url.searchParams.get('limit') || '100');
+        const searchQuery = (url.searchParams.get('search') || '').replace(/'/g, "''");
+        const limit = parseInt(url.searchParams.get('limit') || (searchQuery ? '9999' : '1000'));
         const offset = (page - 1) * limit;
 
-        const items = await sql`
+        const whereConditions: string[] = [
+          's.dbl_id is null',
+          `s.status in ('LOADING', 'BOOKED', 'READY')`,
+          'coalesce(s.invoice_generated, false) = false'
+        ];
+
+        if (searchQuery) {
+          const searchTerm = '%' + searchQuery + '%';
+          whereConditions.push(`(
+            s.public_code ilike '${searchTerm}' or
+            s.spb_number ilike '${searchTerm}' or
+            s.customer_name ilike '${searchTerm}' or
+            s.pengirim_name ilike '${searchTerm}' or
+            s.penerima_name ilike '${searchTerm}' or
+            s.origin ilike '${searchTerm}' or
+            s.destination ilike '${searchTerm}' or
+            s.macam_barang ilike '${searchTerm}'
+          )`);
+        }
+
+        const whereClause = 'where ' + whereConditions.join(' and ');
+
+        const query = `
           select 
             s.id, 
             s.spb_number, 
@@ -437,19 +460,19 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
             s.status,
             coalesce(s.invoice_generated, false) as invoice_generated
           from shipments s
-          where s.dbl_id is null 
-          and s.status in ('LOADING', 'BOOKED', 'READY')
-          and coalesce(s.invoice_generated, false) = false
+          ${whereClause}
           order by s.created_at desc
           limit ${limit} offset ${offset}
-        `;
+        ` as string;
 
-        const countResult = await sql`
+        const items = await sql(query as never);
+
+        const countQuery = `
           select count(*)::int as count from shipments s
-          where s.dbl_id is null 
-          and s.status in ('LOADING', 'BOOKED', 'READY')
-          and coalesce(s.invoice_generated, false) = false
-        ` as [{ count: number }];
+          ${whereClause}
+        ` as string;
+
+        const countResult = await sql(countQuery as never) as [{ count: number }];
 
         const total = countResult[0]?.count || 0;
 

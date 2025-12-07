@@ -295,7 +295,7 @@ function calcTotal(): number {
 async function loadInvoices() {
   loading.value = true;
   try {
-    const res = await fetch('/api/invoices?endpoint=list');
+    const res = await fetch('/api/invoices?endpoint=list&limit=500');
     const data = await res.json();
     invoices.value = (data.items || []).map((x: Partial<Invoice>) => ({
       ...x,

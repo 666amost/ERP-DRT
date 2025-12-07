@@ -103,6 +103,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           left join invoices ii_inv on ii_inv.id = ii.invoice_id
           left join invoices spb_inv on spb_inv.spb_number = s.spb_number and ii.id is null
           where s.nominal > 0
+            and s.created_at >= current_date - interval '90 days'
             and (
               (ii_inv.id is null and spb_inv.id is null)
               or (ii_inv.id is not null and ii_inv.status in ('pending', 'partial'))

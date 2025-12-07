@@ -119,67 +119,74 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
 
     if (endpoint === 'list' && req.method === 'GET') {
       const page = parseInt(url.searchParams.get('page') || '1');
-      const limit = parseInt(url.searchParams.get('limit') || '9999');
+      const searchQuery = (url.searchParams.get('search') || '').replace(/'/g, "''");
+      const limit = parseInt(url.searchParams.get('limit') || (searchQuery ? '9999' : '500'));
       const status = url.searchParams.get('status');
+      const days = parseInt(url.searchParams.get('days') || '0');
       const offset = (page - 1) * limit;
 
       let shipments: Shipment[];
       let total: number;
 
+      const whereConditions: string[] = [];
+      const params: Record<string, unknown> = {};
+
       if (status && ['DRAFT', 'READY', 'LOADING', 'IN_TRANSIT', 'DELIVERED'].includes(status)) {
-        shipments = await sql`
-          select 
-            s.id, s.spb_number, s.customer_id,
-            coalesce(s.customer_name, c.name) as customer_name,
-            coalesce(s.customer_address, c.address) as customer_address,
-            s.sender_name, s.sender_address, s.pengirim_name, s.penerima_name, s.penerima_phone,
-            s.origin, co.province as origin_province, s.destination, cd.province as destination_province, 
-            s.eta, s.status, s.total_colli, s.qty, s.satuan, 
-            coalesce(s.berat, 0)::float as berat, s.macam_barang, 
-            coalesce(s.nominal, 0)::float as nominal, s.public_code, s.vehicle_plate_region, 
-            s.shipping_address, s.service_type, s.jenis, s.dbl_id, coalesce(s.invoice_generated, false) as invoice_generated, 
-            s.keterangan, s.created_at
-          from shipments s
-          left join customers c on c.id = s.customer_id
-          left join cities co on lower(co.name) = lower(s.origin)
-          left join cities cd on lower(cd.name) = lower(s.destination)
-          where s.status = ${status}
-          order by s.created_at desc
-          limit ${limit} offset ${offset}
-        ` as Shipment[];
-
-        const countResult = await sql`
-          select count(*)::int as count from shipments where status = ${status}
-        ` as [{ count: number }];
-
-        total = countResult[0]?.count || 0;
-      } else {
-        shipments = await sql`
-          select 
-            s.id, s.spb_number, s.customer_id,
-            coalesce(s.customer_name, c.name) as customer_name,
-            coalesce(s.customer_address, c.address) as customer_address,
-            s.sender_name, s.sender_address, s.pengirim_name, s.penerima_name, s.penerima_phone,
-            s.origin, co.province as origin_province, s.destination, cd.province as destination_province,
-            s.eta, s.status, s.total_colli, s.qty, s.satuan,
-            coalesce(s.berat, 0)::float as berat, s.macam_barang, 
-            coalesce(s.nominal, 0)::float as nominal, s.public_code, s.vehicle_plate_region, 
-            s.shipping_address, s.service_type, s.jenis, s.dbl_id, coalesce(s.invoice_generated, false) as invoice_generated, 
-            s.keterangan, s.created_at
-          from shipments s
-          left join customers c on c.id = s.customer_id
-          left join cities co on lower(co.name) = lower(s.origin)
-          left join cities cd on lower(cd.name) = lower(s.destination)
-          order by s.created_at desc
-          limit ${limit} offset ${offset}
-        ` as Shipment[];
-
-        const countResult = await sql`
-          select count(*)::int as count from shipments
-        ` as [{ count: number }];
-
-        total = countResult[0]?.count || 0;
+        whereConditions.push(`s.status = '${status}'`);
       }
+
+      if (days > 0) {
+        whereConditions.push(`s.created_at >= current_date - interval '${days} days'`);
+      }
+
+      if (searchQuery) {
+        const searchTerm = '%' + searchQuery + '%';
+        whereConditions.push(`(
+          s.public_code ilike '${searchTerm}' or
+          s.spb_number ilike '${searchTerm}' or
+          coalesce(s.customer_name, c.name) ilike '${searchTerm}' or
+          s.pengirim_name ilike '${searchTerm}' or
+          s.penerima_name ilike '${searchTerm}' or
+          s.origin ilike '${searchTerm}' or
+          s.destination ilike '${searchTerm}' or
+          s.macam_barang ilike '${searchTerm}'
+        )`);
+      }
+
+      const whereClause = whereConditions.length > 0 ? 'where ' + whereConditions.join(' and ') : '';
+
+      const query = `
+        select 
+          s.id, s.spb_number, s.customer_id,
+          coalesce(s.customer_name, c.name) as customer_name,
+          coalesce(s.customer_address, c.address) as customer_address,
+          s.sender_name, s.sender_address, s.pengirim_name, s.penerima_name, s.penerima_phone,
+          s.origin, co.province as origin_province, s.destination, cd.province as destination_province, 
+          s.eta, s.status, s.total_colli, s.qty, s.satuan, 
+          coalesce(s.berat, 0)::float as berat, s.macam_barang, 
+          coalesce(s.nominal, 0)::float as nominal, s.public_code, s.vehicle_plate_region, 
+          s.shipping_address, s.service_type, s.jenis, s.dbl_id, coalesce(s.invoice_generated, false) as invoice_generated, 
+          s.keterangan, s.created_at
+        from shipments s
+        left join customers c on c.id = s.customer_id
+        left join cities co on lower(co.name) = lower(s.origin)
+        left join cities cd on lower(cd.name) = lower(s.destination)
+        ${whereClause}
+        order by s.created_at desc
+        limit ${limit} offset ${offset}
+      ` as string;
+
+      shipments = await sql(query as never) as Shipment[];
+
+      const countQuery = `
+        select count(*)::int as count 
+        from shipments s
+        left join customers c on c.id = s.customer_id
+        ${whereClause}
+      ` as string;
+
+      const countResult = await sql(countQuery as never) as [{ count: number }];
+      total = countResult[0]?.count || 0;
 
       writeJson(res, {
         items: shipments,

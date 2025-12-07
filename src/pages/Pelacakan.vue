@@ -39,10 +39,9 @@ const statusOptions = [
 async function loadShipments() {
   loading.value = true;
   try {
-    const url = statusFilter.value 
-      ? `/api/shipments?endpoint=list&status=${statusFilter.value}` 
-      : '/api/shipments?endpoint=list';
-    const res = await fetch(url);
+    const statusParam = statusFilter.value ? `&status=${statusFilter.value}` : '';
+    const searchParam = searchQuery.value.trim() ? `&search=${encodeURIComponent(searchQuery.value)}` : '';
+    const res = await fetch(`/api/shipments?endpoint=list${statusParam}${searchParam}`);
     const data = await res.json();
     shipments.value = data.items || [];
   } catch (e) {
@@ -68,37 +67,20 @@ function getStatusVariant(status: string): 'default' | 'info' | 'warning' | 'suc
   return (opt?.variant || 'default') as 'default' | 'info' | 'warning' | 'success';
 }
 
-const filteredShipments = ref<Shipment[]>([]);
-
-function filterShipments() {
-  if (!searchQuery.value.trim()) {
-    filteredShipments.value = shipments.value;
-  } else {
-    const query = searchQuery.value.toLowerCase();
-    filteredShipments.value = shipments.value.filter(s => 
-      s.public_code?.toLowerCase().includes(query) ||
-      s.spb_number?.toLowerCase().includes(query) ||
-      s.origin.toLowerCase().includes(query) ||
-      s.destination.toLowerCase().includes(query) ||
-      s.driver_name?.toLowerCase().includes(query) ||
-      s.customer_name?.toLowerCase().includes(query) ||
-      s.carrier_name?.toLowerCase().includes(query) ||
-      s.status?.toLowerCase().includes(query)
-    );
-  }
-}
-
 onMounted(() => {
-  // Initialize from route query if present
   if (route.query.q) {
     searchQuery.value = String(route.query.q || '');
   }
   loadShipments();
 });
 
-// remove duplicate watch import
-watch([shipments, searchQuery], () => {
-  filterShipments();
+let searchDebounceTimer: NodeJS.Timeout | null = null;
+
+watch(searchQuery, () => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(() => {
+    loadShipments();
+  }, 300);
 });
 
 // Reflect route query changes (when header triggers new search)
@@ -154,14 +136,14 @@ watch(statusFilter, () => {
       class="space-y-3"
     >
       <div
-        v-if="filteredShipments.length === 0"
+        v-if="shipments.length === 0"
         class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-8 text-center text-gray-500 dark:text-gray-300 card"
       >
         Tidak ada shipment yang sesuai
       </div>
 
       <div
-        v-for="ship in filteredShipments"
+        v-for="ship in shipments"
         :key="ship.id"
         class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 card break-words min-w-0"
       >

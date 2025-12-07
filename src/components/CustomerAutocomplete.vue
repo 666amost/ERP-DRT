@@ -19,6 +19,7 @@ const newPhone = ref('');
 const newAddress = ref('');
 const loading = ref(false);
 const selectedId = ref<number|null>(null);
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 function closeDropdownDelayed(): void {
   setTimeout(() => { show.value = false; }, 200);
@@ -53,10 +54,15 @@ function pick(c:Customer) {
 }
 
 watch(query, () => {
-  filter();
-  // propagate typed value to parent so free typing updates v-model
-  emitUpdateModelValue(query.value);
-  if (document.activeElement && (document.activeElement as HTMLElement).tagName==='INPUT') show.value=true;
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+  }
+  
+  debounceTimer = setTimeout(() => {
+    filter();
+    emitUpdateModelValue(query.value);
+    if (document.activeElement && (document.activeElement as HTMLElement).tagName==='INPUT') show.value=true;
+  }, 300);
 });
 watch(() => props.modelValue, (v) => { if (v && v !== query.value) { query.value = v; const found = customers.value.find(c=>c.name===v); selectedId.value = found?found.id:null; }});
 

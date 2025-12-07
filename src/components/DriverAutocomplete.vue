@@ -27,6 +27,7 @@ const showCreateForm = ref(false);
 const newDriverName = ref('');
 const newDriverPhone = ref('');
 const containerRef = ref<HTMLElement | null>(null);
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 watch(() => props.modelValue, (val) => {
   inputValue.value = val;
@@ -57,7 +58,14 @@ function onInput(e: Event) {
   inputValue.value = val;
   emit('update:modelValue', val);
   emit('select-id', null);
-  searchDrivers(val);
+  
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+  }
+  
+  debounceTimer = setTimeout(() => {
+    searchDrivers(val);
+  }, 300);
   showSuggestions.value = true;
 }
 

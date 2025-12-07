@@ -26,9 +26,9 @@ const newCityName = ref('');
 const newCityCode = ref('');
 const newCityProvince = ref('');
 const loading = ref(false);
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 function closeDropdownDelayed() {
-  // Use script scope setTimeout (global) and update ref value
   setTimeout(() => {
     showDropdown.value = false;
   }, 200);
@@ -98,13 +98,17 @@ async function addNewCity() {
 }
 
 watch(searchQuery, () => {
-  filterCities();
-  // propagate typed value to parent so free typing updates v-model
-  updateModelValue(searchQuery.value);
-  // Only show dropdown when user types (length change due to user input)
-  if (document.activeElement && (document.activeElement as HTMLElement).tagName === 'INPUT') {
-    showDropdown.value = true;
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
   }
+  
+  debounceTimer = setTimeout(() => {
+    filterCities();
+    updateModelValue(searchQuery.value);
+    if (document.activeElement && (document.activeElement as HTMLElement).tagName === 'INPUT') {
+      showDropdown.value = true;
+    }
+  }, 300);
 });
 
 watch(() => props.modelValue, (val) => {

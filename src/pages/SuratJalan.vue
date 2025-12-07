@@ -59,7 +59,7 @@ const loadShipments = async (): Promise<void> => {
     const data = await res.json()
     if (data.items) {
       shipments.value = data.items
-        .filter((s: Shipment) => ['IN_TRANSIT', 'DELIVERED'].includes(s.status))
+        .filter((s: Shipment) => s.status !== 'DRAFT')
         .map((s: Record<string, unknown>) => ({
           id: String(s.id),
           tracking_code: s.public_code as string || '',
@@ -309,13 +309,15 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
               <tr>
                 <th style="width:12%">Kg/M3</th>
                 <th>Nama Barang</th>
-                <th style="width:22%">Ongkos Kirim</th>
+                <th style="width:18%">Per Satuan</th>
+                <th style="width:18%">Ongkos Kirim</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td>${shipment.total_weight || '-'}</td>
                 <td>${(shipment.description || 'Barang kiriman').split(', ').join('\n')}</td>
+                <td>${formatRupiah(shipment.total_colli > 0 ? shipment.nominal / shipment.total_colli : shipment.nominal)}</td>
                 <td>${formatRupiah(shipment.nominal)}</td>
               </tr>
             </tbody>
@@ -454,13 +456,15 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
                 <tr>
                   <th style="width:12%">Kg/M3</th>
                   <th>Nama Barang</th>
-                  <th style="width:22%">Ongkos Kirim</th>
+                  <th style="width:18%">Per Satuan</th>
+                  <th style="width:18%">Ongkos Kirim</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
                   <td>${shipment.total_weight || '-'}</td>
                   <td>${(shipment.description || 'Barang kiriman').split(', ').join('\n')}</td>
+                  <td>${formatRupiah(shipment.total_colli > 0 ? shipment.nominal / shipment.total_colli : shipment.nominal)}</td>
                   <td>${formatRupiah(shipment.nominal)}</td>
                 </tr>
               </tbody>

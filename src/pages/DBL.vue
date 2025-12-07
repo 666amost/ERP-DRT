@@ -90,6 +90,7 @@ const loadingShipments = ref(false);
 const availableShipmentsPage = ref(1);
 const availableShipmentsTotal = ref(0);
 const availableShipmentsLimit = 100;
+const shipmentSearchQuery = ref('');
 
 const pphPercent = ref<string>('0');
 
@@ -138,6 +139,24 @@ function getStatusVariant(status: string): 'default' | 'info' | 'warning' | 'suc
   const opt = statusOptions.find(o => o.value === status);
   return (opt?.variant || 'default') as 'default' | 'info' | 'warning' | 'success';
 }
+
+const filteredAvailableShipments = computed(() => {
+  if (!shipmentSearchQuery.value.trim()) {
+    return availableShipments.value;
+  }
+  
+  const q = shipmentSearchQuery.value.toLowerCase();
+  return availableShipments.value.filter(s =>
+    (s.spb_number || '').toLowerCase().includes(q) ||
+    (s.public_code || '').toLowerCase().includes(q) ||
+    (s.customer_name || '').toLowerCase().includes(q) ||
+    (s.pengirim_name || '').toLowerCase().includes(q) ||
+    (s.penerima_name || '').toLowerCase().includes(q) ||
+    (s.origin || '').toLowerCase().includes(q) ||
+    (s.destination || '').toLowerCase().includes(q) ||
+    (s.macam_barang || '').toLowerCase().includes(q)
+  );
+});
 
 async function loadDBLList() {
   loading.value = true;
@@ -277,6 +296,7 @@ async function openShipmentModal(dbl: DBL) {
   showShipmentModal.value = true;
   selectedShipmentIds.value = [];
   availableShipmentsPage.value = 1;
+  shipmentSearchQuery.value = '';
   
   try {
     const [itemsRes, availRes] = await Promise.all([
@@ -759,11 +779,20 @@ onMounted(async () => {
             
             <div>
               <h4 class="font-medium mb-2 dark:text-gray-200">Tambah Resi ({{ availableShipments.length }}/{{ availableShipmentsTotal }} tersedia)</h4>
+              <input 
+                v-model="shipmentSearchQuery" 
+                type="text" 
+                placeholder="Cari no SPB, kota, pengirim, penerima, barang..." 
+                class="w-full px-3 py-2 mb-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100 text-sm"
+              />
               <div v-if="availableShipments.length === 0" class="text-sm text-gray-500 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
                 Tidak ada resi yang tersedia. Pastikan sudah membuat resi di menu "Barang Keluar" terlebih dahulu.
               </div>
               <div v-else class="space-y-2 max-h-64 overflow-auto border border-gray-200 dark:border-gray-600 rounded-lg p-2">
-                <label v-for="s in availableShipments" :key="s.id" class="flex items-center gap-2 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer">
+                <div v-if="filteredAvailableShipments.length === 0" class="text-sm text-gray-500 p-2 text-center">
+                  Tidak ada resi yang cocok dengan pencarian
+                </div>
+                <label v-for="s in filteredAvailableShipments" :key="s.id" class="flex items-center gap-2 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer">
                   <input type="checkbox" :value="s.id" v-model="selectedShipmentIds" class="rounded" />
                   <div class="text-sm flex-1">
                     <div class="font-medium dark:text-gray-200">{{ s.spb_number || s.public_code || 'RESI-' + s.id }}</div>

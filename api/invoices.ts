@@ -614,6 +614,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         coalesce(s.berat, 0)::float as total_weight,
         coalesce(s.nominal, 0)::float as nominal,
         s.created_at,
+        s.dbl_id, d.dbl_number, d.driver_name, d.driver_phone,
+        d.vehicle_plate, d.dbl_date,
         coalesce(ii_inv.id, spb_inv.id) as invoice_id, 
         coalesce(ii_inv.invoice_number, spb_inv.invoice_number) as invoice_number,
         case 
@@ -631,6 +633,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           'no_invoice'
         ) as invoice_status
       from shipments s
+      left join dbl d on d.id = s.dbl_id
       left join invoice_items ii on ii.shipment_id = s.id
       left join invoices ii_inv on ii_inv.id = ii.invoice_id
       left join invoices spb_inv on spb_inv.spb_number = s.spb_number and ii.id is null
@@ -642,6 +645,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         )
       group by s.id, s.spb_number, s.public_code, s.customer_id, s.customer_name,
                s.origin, s.destination, s.total_colli, s.berat, s.nominal, s.created_at,
+               s.dbl_id, d.dbl_number, d.driver_name, d.driver_phone, d.vehicle_plate, d.dbl_date,
                ii_inv.id, ii_inv.invoice_number, ii_inv.remaining_amount, ii_inv.amount, ii_inv.subtotal, ii_inv.status,
                spb_inv.id, spb_inv.invoice_number, spb_inv.remaining_amount, spb_inv.status
       order by s.created_at desc

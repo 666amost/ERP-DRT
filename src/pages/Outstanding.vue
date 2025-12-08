@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import Button from '../components/ui/Button.vue';
 import { useFormatters } from '../composables/useFormatters';
@@ -25,6 +25,12 @@ type OutstandingItem = {
   nominal: number;
   remaining_amount: number;
   created_at: string;
+  dbl_id: number | null;
+  dbl_number: string | null;
+  driver_name?: string | null;
+  driver_phone?: string | null;
+  vehicle_plate?: string | null;
+  dbl_date?: string | null;
   invoice_id: number | null;
   invoice_number: string | null;
   invoice_status: string | null;
@@ -34,6 +40,7 @@ const items = ref<OutstandingItem[]>([]);
 const loading = ref(true);
 const searchQuery = ref('');
 const selectedCustomer = ref('');
+const selectedDbl = ref('');
 const dateFrom = ref('');
 const dateTo = ref('');
 const company = ref<CompanyProfile | null>(null);
@@ -44,6 +51,13 @@ const customers = computed(() => {
   return [...new Set(names)].sort();
 });
 
+const dblNumbers = computed(() => {
+  const numbers = items.value.map(i => i.dbl_number).filter((n): n is string => Boolean(n));
+  return [...new Set(numbers)].sort();
+});
+
+const hasUnassignedDbl = computed(() => items.value.some(i => !i.dbl_number));
+
 const filteredItems = computed(() => {
   let result = items.value;
   if (searchQuery.value) {
@@ -51,6 +65,7 @@ const filteredItems = computed(() => {
     result = result.filter(i =>
       (i.public_code || '').toLowerCase().includes(q) ||
       (i.spb_number || '').toLowerCase().includes(q) ||
+      (i.dbl_number || '').toLowerCase().includes(q) ||
       (i.customer_name || '').toLowerCase().includes(q) ||
       (i.invoice_number || '').toLowerCase().includes(q) ||
       (i.origin || '').toLowerCase().includes(q) ||
@@ -59,6 +74,11 @@ const filteredItems = computed(() => {
   }
   if (selectedCustomer.value) {
     result = result.filter(i => i.customer_name === selectedCustomer.value);
+  }
+  if (selectedDbl.value === '__no_dbl') {
+    result = result.filter(i => !i.dbl_number);
+  } else if (selectedDbl.value) {
+    result = result.filter(i => i.dbl_number === selectedDbl.value);
   }
   if (dateFrom.value) {
     result = result.filter(i => new Date(i.created_at) >= new Date(dateFrom.value));
@@ -91,6 +111,7 @@ async function loadOutstanding() {
 function resetFilters() {
   searchQuery.value = '';
   selectedCustomer.value = '';
+  selectedDbl.value = '';
   dateFrom.value = '';
   dateTo.value = '';
 }
@@ -100,6 +121,7 @@ function exportExcel() {
     no: idx + 1,
     kode: item.public_code || '-',
     spb: item.spb_number || '-',
+    dbl: item.dbl_number || '-',
     customer: item.customer_name || '-',
     rute: `${item.origin} → ${item.destination}`,
     colli: item.total_colli,
@@ -118,6 +140,7 @@ function exportExcel() {
       { header: 'No', key: 'no', width: 5, type: 'number', align: 'center' },
       { header: 'Kode', key: 'kode', width: 18, type: 'text' },
       { header: 'SPB', key: 'spb', width: 12, type: 'text' },
+      { header: 'DBL', key: 'dbl', width: 14, type: 'text' },
       { header: 'Customer', key: 'customer', width: 20, type: 'text' },
       { header: 'Rute', key: 'rute', width: 28, type: 'text' },
       { header: 'Colli', key: 'colli', width: 8, type: 'number', align: 'center' },
@@ -177,14 +200,14 @@ onMounted(async () => {
     </div>
 
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-4 print:hidden">
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         <div>
           <label class="block text-sm font-medium mb-1 dark:text-gray-300">Cari</label>
           <input
             v-model="searchQuery"
             type="text"
             class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg text-sm"
-            placeholder="Kode, SPB, Customer..."
+            placeholder="Kode, SPB, Customer, DBL..."
           />
         </div>
         <div>
@@ -192,6 +215,14 @@ onMounted(async () => {
           <select v-model="selectedCustomer" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg text-sm">
             <option value="">Semua Customer</option>
             <option v-for="c in customers" :key="c || 'unknown'" :value="c">{{ c || '-' }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">DBL</label>
+          <select v-model="selectedDbl" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg text-sm">
+            <option value="">Semua DBL</option>
+            <option v-if="hasUnassignedDbl" value="__no_dbl">Belum ada DBL</option>
+            <option v-for="d in dblNumbers" :key="d" :value="d">DBL {{ d }}</option>
           </select>
         </div>
         <div>
@@ -234,6 +265,7 @@ onMounted(async () => {
                 <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">No</th>
                 <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Kode</th>
                 <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">SPB</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">DBL</th>
                 <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Customer</th>
                 <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Rute</th>
                 <th class="px-2 py-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">Colli</th>
@@ -248,6 +280,12 @@ onMounted(async () => {
                 <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ idx + 1 }}</td>
                 <td class="px-2 py-2 font-medium text-gray-900 dark:text-gray-100">{{ item.public_code || '-' }}</td>
                 <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ item.spb_number || '-' }}</td>
+                <td class="px-2 py-2 text-gray-700 dark:text-gray-300">
+                  <div class="text-xs">
+                    <div>{{ item.dbl_number || '-' }}</div>
+                    <div v-if="item.driver_name" class="text-gray-500">{{ item.driver_name }}</div>
+                  </div>
+                </td>
                 <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ item.customer_name || '-' }}</td>
                 <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ item.origin }} → {{ item.destination }}</td>
                 <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ item.total_colli }}</td>
@@ -259,7 +297,7 @@ onMounted(async () => {
             </tbody>
             <tfoot class="bg-gray-100 dark:bg-gray-700 font-semibold">
               <tr>
-                <td colspan="5" class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">Total:</td>
+                <td colspan="6" class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">Total:</td>
                 <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ totalColli }}</td>
                 <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ totalWeight.toFixed(1) }}</td>
                 <td class="px-2 py-2 text-right text-gray-500"></td>
@@ -276,6 +314,10 @@ onMounted(async () => {
               <div class="min-w-0 flex-1">
                 <div class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{{ item.public_code || '-' }}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400">SPB: {{ item.spb_number || '-' }}</div>
+                <div v-if="item.dbl_number || hasUnassignedDbl" class="text-[11px] text-gray-500 dark:text-gray-400">
+                  DBL: {{ item.dbl_number || 'Belum ada' }}
+                  <span v-if="item.driver_name" class="text-gray-400">| {{ item.driver_name }}</span>
+                </div>
               </div>
               <div class="text-right">
                 <div class="text-sm font-bold text-red-600">{{ formatRupiah(item.remaining_amount || item.nominal) }}</div>
@@ -320,15 +362,16 @@ onMounted(async () => {
         <thead>
           <tr>
             <th class="text-center" style="width: 5%">No</th>
-            <th style="width: 14%">Kode</th>
-            <th style="width: 8%">SPB</th>
-            <th style="width: 14%">Customer</th>
-            <th style="width: 18%">Rute</th>
+            <th style="width: 12%">Kode</th>
+            <th style="width: 7%">SPB</th>
+            <th style="width: 10%">DBL</th>
+            <th style="width: 13%">Customer</th>
+            <th style="width: 16%">Rute</th>
             <th class="text-center" style="width: 6%">Colli</th>
             <th class="text-right" style="width: 7%">Kg</th>
-            <th class="text-right" style="width: 10%">Nominal</th>
-            <th class="text-right" style="width: 10%">Sisa</th>
-            <th class="text-center" style="width: 10%">Tanggal</th>
+            <th class="text-right" style="width: 9%">Nominal</th>
+            <th class="text-right" style="width: 9%">Sisa</th>
+            <th class="text-center" style="width: 6%">Tanggal</th>
           </tr>
         </thead>
         <tbody>
@@ -336,6 +379,10 @@ onMounted(async () => {
             <td class="text-center">{{ index + 1 }}</td>
             <td>{{ item.public_code || '-' }}</td>
             <td>{{ item.spb_number || '-' }}</td>
+            <td>
+              {{ item.dbl_number || '-' }}
+              <span v-if="item.driver_name">({{ item.driver_name }})</span>
+            </td>
             <td>{{ item.customer_name || '-' }}</td>
             <td>{{ item.origin }} → {{ item.destination }}</td>
             <td class="text-center">{{ item.total_colli }}</td>
@@ -347,7 +394,7 @@ onMounted(async () => {
         </tbody>
         <tfoot>
           <tr class="total-row">
-            <td colspan="5" class="text-right">Total:</td>
+            <td colspan="6" class="text-right">Total:</td>
             <td class="text-center">{{ totalColli }}</td>
             <td class="text-right">{{ totalWeight.toFixed(1) }}</td>
             <td class="text-right"></td>
@@ -503,3 +550,4 @@ onMounted(async () => {
   }
 }
 </style>
+

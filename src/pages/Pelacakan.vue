@@ -19,6 +19,9 @@ type Shipment = {
   driver_phone: string | null;
   eta: string | null;
   customer_name: string | null;
+  dbl_number?: string | null;
+  vehicle_plate?: string | null;
+  dbl_status?: string | null;
 };
 
 const shipments = ref<Shipment[]>([]);
@@ -74,7 +77,7 @@ onMounted(() => {
   loadShipments();
 });
 
-let searchDebounceTimer: NodeJS.Timeout | null = null;
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 watch(searchQuery, () => {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
@@ -105,7 +108,7 @@ watch(statusFilter, () => {
       <input
         v-model="searchQuery"
         type="text"
-        placeholder="Cari kode tracking, kota, driver..."
+        placeholder="Cari kode tracking, kota, DBL, driver..."
         class="w-full sm:flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 dark:border-gray-600"
       >
       <select
@@ -157,9 +160,25 @@ watch(statusFilter, () => {
                 SPB: {{ ship.spb_number }}
               </span>
             </div>
-            <div class="text-xs sm:text-sm text-gray-600 dark:text-gray-300 truncate min-w-0 mt-1">
-              {{ ship.driver_name || 'Driver' }} 
-              <span v-if="ship.driver_phone" class="hidden sm:inline">• {{ ship.driver_phone }}</span>
+            <div class="text-xs sm:text-sm text-gray-600 dark:text-gray-300 mt-1 flex flex-wrap gap-2">
+              <span
+                v-if="ship.dbl_number"
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100"
+              >
+                {{ ship.dbl_number }}
+              </span>
+              <span
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200"
+              >
+                {{ ship.driver_name || 'Belum ada supir' }}
+                <span v-if="ship.driver_phone" class="hidden sm:inline text-[11px] font-normal text-gray-500 dark:text-gray-400">| {{ ship.driver_phone }}</span>
+              </span>
+              <span
+                v-if="ship.vehicle_plate"
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200"
+              >
+                {{ ship.vehicle_plate }}
+              </span>
             </div>
           </div>
           <Badge :variant="getStatusVariant(ship.status)" class="flex-shrink-0">
@@ -177,7 +196,7 @@ watch(statusFilter, () => {
             </div>
           </div>
           <div class="text-gray-400 dark:text-gray-500 flex-shrink-0">
-            →
+            ->
           </div>
           <div class="flex-1 min-w-0">
             <div class="text-gray-500 text-xs">

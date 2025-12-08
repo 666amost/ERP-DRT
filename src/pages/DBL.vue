@@ -140,7 +140,7 @@ function getStatusVariant(status: string): 'default' | 'info' | 'warning' | 'suc
   return (opt?.variant || 'default') as 'default' | 'info' | 'warning' | 'success';
 }
 
-let shipmentSearchDebounceTimer: NodeJS.Timeout | null = null;
+let shipmentSearchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 watch(shipmentSearchQuery, () => {
   if (shipmentSearchDebounceTimer) clearTimeout(shipmentSearchDebounceTimer);

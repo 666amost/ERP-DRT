@@ -34,6 +34,11 @@ type Shipment = {
   invoice_generated: boolean;
   keterangan: string | null;
   created_at: string;
+  driver_name?: string | null;
+  driver_phone?: string | null;
+  vehicle_plate?: string | null;
+  dbl_number?: string | null;
+  dbl_status?: string | null;
 };
 
 type CreateShipmentBody = {
@@ -129,7 +134,6 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
       let total: number;
 
       const whereConditions: string[] = [];
-      const params: Record<string, unknown> = {};
 
       if (status && ['DRAFT', 'READY', 'LOADING', 'IN_TRANSIT', 'DELIVERED'].includes(status)) {
         whereConditions.push(`s.status = '${status}'`);
@@ -149,7 +153,9 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
           s.penerima_name ilike '${searchTerm}' or
           s.origin ilike '${searchTerm}' or
           s.destination ilike '${searchTerm}' or
-          s.macam_barang ilike '${searchTerm}'
+          s.macam_barang ilike '${searchTerm}' or
+          d.dbl_number ilike '${searchTerm}' or
+          d.driver_name ilike '${searchTerm}'
         )`);
       }
 
@@ -166,9 +172,12 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
           coalesce(s.berat, 0)::float as berat, s.macam_barang, 
           coalesce(s.nominal, 0)::float as nominal, s.public_code, s.vehicle_plate_region, 
           s.shipping_address, s.service_type, s.jenis, s.dbl_id, coalesce(s.invoice_generated, false) as invoice_generated, 
-          s.keterangan, s.created_at
+          s.keterangan, s.created_at,
+          d.dbl_number, d.driver_name, d.driver_phone, 
+          d.vehicle_plate, d.status as dbl_status
         from shipments s
         left join customers c on c.id = s.customer_id
+        left join dbl d on d.id = s.dbl_id
         left join cities co on lower(co.name) = lower(s.origin)
         left join cities cd on lower(cd.name) = lower(s.destination)
         ${whereClause}
@@ -182,6 +191,7 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
         select count(*)::int as count 
         from shipments s
         left join customers c on c.id = s.customer_id
+        left join dbl d on d.id = s.dbl_id
         ${whereClause}
       ` as string;
 
@@ -411,6 +421,8 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
         select 
           s.id, s.spb_number, s.public_code as tracking_code, 
           s.customer_id, coalesce(s.customer_name, c.name, 'Tanpa Customer') as customer_name,
+          s.dbl_id, d.dbl_number, d.driver_name, d.driver_phone,
+          d.vehicle_plate, d.dbl_date,
           s.macam_barang as description,
           coalesce(s.berat, 0)::float as weight,
           coalesce(s.qty, 1)::int as qty,
@@ -424,6 +436,7 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
           s.status
         from shipments s
         left join customers c on c.id = s.customer_id
+        left join dbl d on d.id = s.dbl_id
         left join invoice_items ii on ii.shipment_id = s.id
         left join invoices i on i.id = ii.invoice_id
         where s.nominal > 0

@@ -54,6 +54,10 @@ type Shipment = {
   invoice_generated: boolean;
   keterangan: string | null;
   created_at: string;
+  dbl_number?: string | null;
+  driver_name?: string | null;
+  driver_phone?: string | null;
+  vehicle_plate?: string | null;
 };
 
 type ShipmentForm = {
@@ -325,7 +329,7 @@ async function loadShipments() {
   }
 }
 
-let searchDebounceTimer: NodeJS.Timeout | null = null;
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 watch(searchQuery, () => {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
@@ -666,7 +670,7 @@ onMounted(() => {
           <input
             v-model="searchQuery"
             type="text"
-            placeholder="Cari kode, SPB, customer, rute..."
+            placeholder="Cari kode, SPB, DBL, supir, customer, rute..."
             class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 dark:border-gray-600"
           >
         </div>
@@ -699,6 +703,7 @@ onMounted(() => {
               <tr>
                 <th class="px-3 py-2 w-28 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Kode</th>
                 <th class="px-3 py-2 w-28 text-left text-xs font-medium text-gray-600 dark:text-gray-300">SPB</th>
+                <th class="px-3 py-2 w-44 text-left text-xs font-medium text-gray-600 dark:text-gray-300">DBL / Supir</th>
                 <th class="px-3 py-2 w-56 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Customer</th>
                 <th class="px-3 py-2 w-48 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Rute</th>
                 <th class="px-3 py-2 w-16 text-center text-xs font-medium text-gray-600 dark:text-gray-300">Colli</th>
@@ -709,7 +714,7 @@ onMounted(() => {
             </thead>
             <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
               <tr v-if="shipments.length === 0">
-                <td colspan="8" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">Belum ada shipment</td>
+                <td colspan="9" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">Belum ada shipment</td>
               </tr>
               <tr v-for="ship in shipments" :key="ship.id" class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
                 <td class="px-3 py-2 text-sm font-medium dark:text-gray-200">
@@ -721,6 +726,18 @@ onMounted(() => {
                   <span class="inline-block text-[11px] leading-tight bg-black text-white rounded px-1.5 py-0.5">
                     {{ ship.spb_number || `SPB-${ship.id}` }}
                   </span>
+                </td>
+                <td class="px-3 py-2 text-sm dark:text-gray-300 min-w-0">
+                  <div class="flex flex-col gap-1">
+                    <div class="text-xs text-gray-500">
+                      <span v-if="ship.dbl_number">{{ ship.dbl_number }}</span>
+                      <span v-else class="text-gray-400">Belum masuk DBL</span>
+                    </div>
+                    <div class="text-xs text-gray-500">
+                      <span>{{ ship.driver_name || '-' }}</span>
+                      <span v-if="ship.vehicle_plate" class="text-gray-400"> • {{ ship.vehicle_plate }}</span>
+                    </div>
+                  </div>
                 </td>
                 <td class="px-3 py-2 text-sm dark:text-gray-300 min-w-0">
                   <div class="font-medium truncate">{{ ship.customer_name || '-' }}</div>
@@ -765,7 +782,7 @@ onMounted(() => {
                 v-model="searchQuery"
                 type="text"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                placeholder="Cari kode, SPB, customer, rute, barang..."
+                placeholder="Cari kode, SPB, DBL, supir, customer, rute, barang..."
               />
             </div>
             <Button variant="primary" @click="openCreateModal" class="ml-2">+ Tambah</Button>
@@ -779,6 +796,18 @@ onMounted(() => {
                     <div class="mt-0.5">
                       <span class="inline-block text-[11px] leading-tight bg-black text-white rounded px-1.5 py-0.5">
                         SPB: {{ s.spb_number || `SPB-${s.id}` }}
+                      </span>
+                    </div>
+                    <div class="flex flex-wrap gap-2 mt-1">
+                      <span
+                        v-if="s.dbl_number"
+                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100 text-[11px]"
+                      >
+                        {{ s.dbl_number }}
+                      </span>
+                      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-[11px]">
+                        {{ s.driver_name || 'Belum ada supir' }}
+                        <span v-if="s.vehicle_plate" class="text-gray-500 dark:text-gray-400">| {{ s.vehicle_plate }}</span>
                       </span>
                     </div>
                     <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{{ s.customer_name || '-' }}</div>

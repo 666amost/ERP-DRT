@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import Button from '../components/ui/Button.vue';
@@ -54,6 +54,7 @@ type CreateInvoiceForm = {
 type Item = {
   id?: number;
   shipment_id?: number | null;
+  dbl_id?: number | null;
   spb_number?: string;
   tracking_code?: string;
   description: string;
@@ -69,6 +70,11 @@ type Item = {
   _unit_price_display?: string;
   customer_name?: string;
   customer_id?: number | null;
+  dbl_number?: string | null;
+  driver_name?: string | null;
+  driver_phone?: string | null;
+  vehicle_plate?: string | null;
+  dbl_date?: string | null;
 };
 
 type UnpaidShipment = {
@@ -88,6 +94,12 @@ type UnpaidShipment = {
   amount: number;
   created_at: string;
   status: string;
+  dbl_id?: number | null;
+  dbl_number?: string | null;
+  driver_name?: string | null;
+  driver_phone?: string | null;
+  vehicle_plate?: string | null;
+  dbl_date?: string | null;
 };
 
 const invoices = ref<Invoice[]>([]);
@@ -124,6 +136,7 @@ const form = ref<CreateInvoiceForm>({
 const items = ref<Item[]>([]);
 const allUnpaidShipments = ref<Item[]>([]);
 const selectedShipmentIds = ref<Set<number>>(new Set());
+const selectedDblNumber = ref<string>('');
 const taxPercent = ref<number>(0);
 const discountAmount = ref<number>(0);
 const notes = ref<string>('');
@@ -146,6 +159,18 @@ const uniqueCustomerNames = computed(() => {
   return Array.from(names).sort();
 });
 
+const uniqueDblNumbers = computed(() => {
+  const nums = new Set<string>();
+  allUnpaidShipments.value.forEach(s => {
+    if (s.dbl_number) {
+      nums.add(s.dbl_number);
+    }
+  });
+  return Array.from(nums).sort();
+});
+
+const hasUnassignedDbl = computed(() => allUnpaidShipments.value.some(s => !s.dbl_number));
+
 async function loadAllUnpaidShipments(): Promise<void> {
   loadingUnpaidShipments.value = true;
   try {
@@ -155,6 +180,7 @@ async function loadAllUnpaidShipments(): Promise<void> {
     if (data.shipments && data.shipments.length > 0) {
       allUnpaidShipments.value = data.shipments.map((s: UnpaidShipment) => ({
         shipment_id: s.id,
+        dbl_id: s.dbl_id ?? null,
         spb_number: s.spb_number,
         tracking_code: s.tracking_code,
         customer_name: s.customer_name || '-',
@@ -166,6 +192,11 @@ async function loadAllUnpaidShipments(): Promise<void> {
         recipient_name: s.recipient_name || '-',
         destination_city: s.destination_city || '-',
         unit_price: s.amount || 0,
+        dbl_number: s.dbl_number || null,
+        driver_name: s.driver_name || null,
+        driver_phone: s.driver_phone || null,
+        vehicle_plate: s.vehicle_plate || null,
+        dbl_date: s.dbl_date || null,
         pph_rate: pphPercent.value,
         tax_type: 'include',
         item_discount: 0,
@@ -183,13 +214,17 @@ async function loadAllUnpaidShipments(): Promise<void> {
 }
 
 function getFilteredUnpaidShipments(): Item[] {
-  if (!form.value.customer_name) {
-    return allUnpaidShipments.value;
+  let result = allUnpaidShipments.value;
+  if (form.value.customer_name) {
+    const customerName = form.value.customer_name.toLowerCase();
+    result = result.filter(s => s.customer_name?.toLowerCase() === customerName);
   }
-  const customerName = form.value.customer_name.toLowerCase();
-  return allUnpaidShipments.value.filter(s => {
-    return s.customer_name?.toLowerCase() === customerName;
-  });
+  if (selectedDblNumber.value === '__no_dbl') {
+    result = result.filter(s => !s.dbl_number);
+  } else if (selectedDblNumber.value) {
+    result = result.filter(s => s.dbl_number === selectedDblNumber.value);
+  }
+  return result;
 }
 
 function toggleShipmentSelection(shipmentId: number): void {
@@ -332,6 +367,7 @@ function openCreateModal(): void {
   items.value = [];
   allUnpaidShipments.value = [];
   selectedShipmentIds.value = new Set();
+  selectedDblNumber.value = '';
   taxPercent.value = 0;
   discountAmount.value = 0;
   notes.value = '';
@@ -1421,25 +1457,45 @@ watch([items, pphPercent], () => {
         </div>
         <div class="space-y-3">
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-            <div class="sm:col-span-2">
-              <label class="block text-sm font-medium mb-1">Customer</label>
-              <select
-                v-model="form.customer_name"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                @change="onCustomerChange"
-                :disabled="loadingUnpaidShipments"
-              >
-                <option value="">-- Pilih Customer --</option>
-                <option v-for="name in uniqueCustomerNames" :key="name" :value="name">
-                  {{ name }}
-                </option>
-              </select>
-              <div v-if="loadingUnpaidShipments" class="text-xs text-gray-500 mt-1">
-                🔄 Memuat SPB yang belum dibayar...
+            <div class="sm:col-span-2 space-y-2">
+              <div>
+                <label class="block text-sm font-medium mb-1">Customer</label>
+                <select
+                  v-model="form.customer_name"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  @change="onCustomerChange"
+                  :disabled="loadingUnpaidShipments"
+                >
+                  <option value="">-- Pilih Customer --</option>
+                  <option v-for="name in uniqueCustomerNames" :key="name" :value="name">
+                    {{ name }}
+                  </option>
+                </select>
               </div>
-              <div v-if="!editingId && allUnpaidShipments.length > 0" class="text-xs text-gray-500 mt-1">
-                Total {{ allUnpaidShipments.length }} SPB belum dibayar.
+              <div v-if="!editingId">
+                <label class="block text-sm font-medium mb-1">Filter DBL (opsional)</label>
+                <select
+                  v-model="selectedDblNumber"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  @change="onCustomerChange"
+                  :disabled="loadingUnpaidShipments"
+                >
+                  <option value="">Semua DBL</option>
+                  <option v-if="hasUnassignedDbl" value="__no_dbl">Belum ada DBL</option>
+                  <option v-for="dbl in uniqueDblNumbers" :key="dbl" :value="dbl">
+                    DBL {{ dbl }}
+                  </option>
+                </select>
+              </div>
+              <div v-if="loadingUnpaidShipments" class="text-xs text-gray-500 mt-1">
+                Memuat SPB yang belum dibayar...
+              </div>
+              <div v-if="!editingId && allUnpaidShipments.length > 0" class="text-xs text-gray-500 mt-1 space-x-1">
+                <span>Total {{ allUnpaidShipments.length }} SPB belum dibayar.</span>
                 <span v-if="form.customer_name">Filter: {{ getFilteredUnpaidShipments().length }} SPB untuk "{{ form.customer_name }}"</span>
+                <span v-if="selectedDblNumber">
+                  | DBL: {{ selectedDblNumber === '__no_dbl' ? 'Belum ada DBL' : selectedDblNumber }}
+                </span>
               </div>
             </div>
             <div class="flex flex-col gap-3">
@@ -1448,7 +1504,7 @@ watch([items, pphPercent], () => {
                   <label class="block text-sm font-medium">Dibayar (Rp)</label>
                   <label class="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
                     <input type="checkbox" v-model="manualAmountMode" class="h-3 w-3" />
-                    Partial
+                    Cicilan
                   </label>
                 </div>
                 <input
@@ -1475,7 +1531,7 @@ watch([items, pphPercent], () => {
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 >
                   <option value="partial">
-                    Partial
+                    Cicilan
                   </option>
                   <option value="paid">
                     Paid
@@ -1494,7 +1550,7 @@ watch([items, pphPercent], () => {
                   @click="selectAllFiltered"
                   :disabled="getFilteredUnpaidShipments().length === 0"
                 >
-                  ✓ Pilih Semua ({{ getFilteredUnpaidShipments().length }})
+                  Pilih Semua ({{ getFilteredUnpaidShipments().length }})
                 </button>
                 <button
                   type="button"
@@ -1502,12 +1558,12 @@ watch([items, pphPercent], () => {
                   @click="deselectAll"
                   :disabled="selectedShipmentIds.size === 0"
                 >
-                  ✕ Hapus Semua ({{ selectedShipmentIds.size }})
+                  Hapus Semua ({{ selectedShipmentIds.size }})
                 </button>
               </div>
             </div>
             <div v-if="loadingUnpaidShipments" class="text-center py-4 text-gray-500">
-              <span class="animate-pulse">🔄 Memuat SPB yang belum dibayar...</span>
+              <span class="animate-pulse">Memuat SPB yang belum dibayar...</span>
             </div>
             <div v-else-if="allUnpaidShipments.length === 0" class="text-center py-4 text-gray-400">
               Tidak ada SPB yang belum dibayar
@@ -1515,11 +1571,14 @@ watch([items, pphPercent], () => {
             <div v-else-if="form.customer_name && getFilteredUnpaidShipments().length === 0" class="text-center py-4 text-gray-400">
               Tidak ada SPB belum dibayar untuk customer ini
             </div>
+            <div v-else-if="selectedDblNumber && getFilteredUnpaidShipments().length === 0" class="text-center py-4 text-gray-400">
+              Tidak ada SPB untuk DBL ini
+            </div>
             <div v-else class="overflow-x-auto max-h-60 overflow-y-auto">
               <table class="w-full text-sm">
                 <thead class="bg-gray-50 sticky top-0">
                   <tr>
-                    <th class="px-2 py-2 text-center text-xs font-medium w-10">✓</th>
+                    <th class="px-2 py-2 text-center text-xs font-medium w-10"></th>
                     <th class="px-2 py-2 text-left text-xs font-medium">No. SPB / RESI</th>
                     <th class="px-2 py-2 text-left text-xs font-medium">Customer</th>
                     <th class="px-2 py-2 text-left text-xs font-medium">Nama Barang</th>
@@ -1548,6 +1607,10 @@ watch([items, pphPercent], () => {
                       <div class="text-xs font-mono">
                         <div>{{ it.spb_number || '-' }}</div>
                         <div class="text-gray-500">{{ it.tracking_code || '-' }}</div>
+                        <div v-if="it.dbl_number" class="text-gray-500">
+                          DBL: {{ it.dbl_number }}
+                          <span v-if="it.driver_name" class="font-normal">| {{ it.driver_name }}</span>
+                        </div>
                       </div>
                     </td>
                     <td class="px-2 py-2">
@@ -1596,6 +1659,10 @@ watch([items, pphPercent], () => {
                       <div class="text-xs font-mono">
                         <div>{{ it.spb_number || '-' }}</div>
                         <div class="text-gray-500">{{ it.tracking_code || '-' }}</div>
+                        <div v-if="it.dbl_number" class="text-gray-500">
+                          DBL: {{ it.dbl_number }}
+                          <span v-if="it.driver_name" class="font-normal">| {{ it.driver_name }}</span>
+                        </div>
                       </div>
                     </td>
                     <td class="px-2 py-2 text-xs">{{ it.customer_name || '-' }}</td>
@@ -1649,6 +1716,10 @@ watch([items, pphPercent], () => {
                       <div class="text-xs font-mono">
                         <div>{{ it.spb_number || '-' }}</div>
                         <div class="text-gray-500">{{ it.tracking_code || '-' }}</div>
+                        <div v-if="it.dbl_number" class="text-gray-500">
+                          DBL: {{ it.dbl_number }}
+                          <span v-if="it.driver_name" class="font-normal">| {{ it.driver_name }}</span>
+                        </div>
                       </div>
                     </td>
                     <td class="px-2 py-2 text-xs">{{ it.customer_name || '-' }}</td>
@@ -1824,7 +1895,7 @@ watch([items, pphPercent], () => {
             </div>
             <div v-else-if="selectedInvoice?.status === 'paid'" class="border-t border-gray-200 dark:border-gray-600 pt-4">
               <div class="text-center py-4">
-                <div class="text-green-600 font-medium">✓ Invoice sudah lunas</div>
+                <div class="text-green-600 font-medium">Invoice sudah lunas</div>
               </div>
             </div>
           </template>
@@ -1856,3 +1927,9 @@ watch([items, pphPercent], () => {
     </div>
   </div>
 </template>
+
+
+
+
+
+

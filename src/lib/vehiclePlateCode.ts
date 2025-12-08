@@ -659,6 +659,37 @@ const plateMappingData: PlateData = {
       Z: 'Jombang, Jawa Timur'
     }
   ],
+  AG: [
+    'Jawa Timur',
+    {
+      A: 'Kediri, Jawa Timur',
+      B: 'Kediri, Jawa Timur',
+      C: 'Kediri, Jawa Timur',
+      D: 'Kediri, Jawa Timur',
+      E: 'Kediri, Jawa Timur',
+      F: 'Kediri, Jawa Timur',
+      G: 'Kab. Kediri, Jawa Timur',
+      H: 'Kab. Kediri, Jawa Timur',
+      I: 'Kab. Kediri, Jawa Timur',
+      J: 'Kab. Kediri, Jawa Timur',
+      K: 'Kab. Kediri, Jawa Timur',
+      L: 'Kab. Kediri, Jawa Timur',
+      M: 'Kab. Kediri, Jawa Timur',
+      N: 'Ngawi, Jawa Timur',
+      O: 'Ngawi, Jawa Timur',
+      P: 'Ngawi, Jawa Timur',
+      Q: 'Ngawi, Jawa Timur',
+      R: 'Ngawi, Jawa Timur',
+      S: 'Ngawi, Jawa Timur',
+      T: 'Kab. Madiun, Jawa Timur',
+      U: 'Kab. Madiun, Jawa Timur',
+      V: 'Kab. Madiun, Jawa Timur',
+      W: 'Madiun, Jawa Timur',
+      X: 'Madiun, Jawa Timur',
+      Y: 'Madiun, Jawa Timur',
+      Z: 'Madiun, Jawa Timur'
+    }
+  ],
   W: [
     'Jawa Timur',
     {

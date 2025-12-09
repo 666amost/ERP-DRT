@@ -346,7 +346,7 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
       const id = url.searchParams.get('id');
       if (!id) { writeJson(res, { error: 'Missing id' }, 400); return }
 
-      await sql`update shipments set dbl_id = null where dbl_id = ${parseInt(id)}`;
+      await sql`update shipments set dbl_id = null, status = 'READY' where dbl_id = ${parseInt(id)}`;
       await sql`delete from dbl where id = ${parseInt(id)}`;
 
       writeJson(res, { success: true });

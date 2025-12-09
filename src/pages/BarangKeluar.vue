@@ -87,6 +87,8 @@ type ShipmentForm = {
 
 const shipments = ref<Shipment[]>([]);
 const loading = ref(true);
+const saving = ref(false);
+const loadModalContent = ref(false);
 const showModal = ref(false);
 const showCustomerPicker = ref(false);
 const showAddCustomerForm = ref(false);
@@ -152,39 +154,11 @@ function validateForm(): { ok: boolean; errors: Record<string, string> } {
   return { ok: Object.keys(errors).length === 0, errors };
 }
 
-// Clear specific validation errors when the related field becomes valid
-watch(() => form.value.origin, (val: string) => {
-  if (val && String(val).trim()) delete validationErrors.value.origin;
-});
 watch(() => form.value.destination, (val: string) => {
   if (val && String(val).trim()) {
     delete validationErrors.value.destination;
     autoDetectPlateCode(val);
   }
-});
-watch(() => form.value.total_colli, (val: string) => {
-  const n: number = Number(val);
-  if (!Number.isNaN(n) && n >= 1) delete validationErrors.value.total_colli;
-});
-watch(() => form.value.eta, (val: string) => {
-  if (!val) {
-    delete validationErrors.value.eta;
-  } else {
-    const d: Date = new Date(val);
-    if (!Number.isNaN(d.getTime())) delete validationErrors.value.eta;
-  }
-});
-watch(() => form.value.service_type, (val: string) => {
-  const v: string = String(val || '').toUpperCase();
-  if (!v || ['REG', 'CARGO'].includes(v)) delete validationErrors.value.service_type;
-});
-watch(() => form.value.status, (val: string) => {
-  const statuses: string[] = ['DRAFT', 'READY', 'LOADING', 'IN_TRANSIT', 'DELIVERED'];
-  if (!val || statuses.includes(val)) delete validationErrors.value.status;
-});
-watch(() => form.value.jenis, (val: string) => {
-  const jenis: string = String(val || '').toUpperCase();
-  if (!jenis || ['TJ', 'LPT', 'LJ', 'FRANCO', 'LB'].includes(jenis)) delete validationErrors.value.jenis;
 });
 
 const jenisOptions = [
@@ -216,12 +190,12 @@ async function loadFrequentCustomers() {
 }
 
 const filteredCustomerList = computed(() => {
-  if (!customerSearch.value.trim()) return customerList.value;
-  const q = customerSearch.value.toLowerCase();
+  const search = customerSearch.value.trim().toLowerCase();
+  if (!search) return customerList.value;
   return customerList.value.filter(c =>
-    c.name.toLowerCase().includes(q) ||
-    (c.phone || '').toLowerCase().includes(q) ||
-    (c.address || '').toLowerCase().includes(q)
+    c.name.toLowerCase().includes(search) ||
+    (c.phone || '').toLowerCase().includes(search) ||
+    (c.address || '').toLowerCase().includes(search)
   );
 });
 
@@ -366,6 +340,7 @@ function openCreateModal() {
   };
   validationErrors.value = {};
   showModal.value = true;
+  loadModalContent.value = true;
 }
 
 function openEditModal(shipment: Shipment) {
@@ -395,6 +370,7 @@ function openEditModal(shipment: Shipment) {
     regenerate_code: false
   };
   showModal.value = true;
+  loadModalContent.value = true;
   validationErrors.value = {};
 }
 
@@ -413,6 +389,7 @@ async function saveShipment() {
     return;
   }
 
+  saving.value = true;
   try {
     if (editingId.value) {
       const res = await fetch('/api/shipments?endpoint=update', {
@@ -484,11 +461,14 @@ async function saveShipment() {
       }
     }
     showModal.value = false;
+    loadModalContent.value = false;
     await loadShipments();
   } catch (e) {
     console.error('Save error:', e);
     const errorMessage = e instanceof Error ? e.message : 'Unknown error';
     alert(`Gagal menyimpan shipment: ${errorMessage}`);
+  } finally {
+    saving.value = false;
   }
 }
 
@@ -515,6 +495,13 @@ function getStatusVariant(status: string): 'default' | 'info' | 'warning' | 'suc
   const opt = allStatusOptions.find(o => o.value === status);
   return (opt?.variant || 'default') as 'default' | 'info' | 'warning' | 'success';
 }
+
+const statusLabelMap = computed(() => {
+  return allStatusOptions.reduce((map, opt) => {
+    map[opt.value] = opt;
+    return map;
+  }, {} as Record<string, { value: string; label: string; variant: string }>);
+});
 
 async function printLabel() {
   if (!selectedShipment.value) return;
@@ -698,63 +685,60 @@ onMounted(() => {
         class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden card hidden lg:block transition-all duration-200"
       >
         <div class="overflow-x-auto">
-          <table class="w-full">
-            <thead class="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 sticky top-0">
               <tr>
-                <th class="px-3 py-2 w-28 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Kode</th>
-                <th class="px-3 py-2 w-28 text-left text-xs font-medium text-gray-600 dark:text-gray-300">SPB</th>
-                <th class="px-3 py-2 w-44 text-left text-xs font-medium text-gray-600 dark:text-gray-300">DBL / Supir</th>
-                <th class="px-3 py-2 w-56 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Customer</th>
-                <th class="px-3 py-2 w-48 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Rute</th>
-                <th class="px-3 py-2 w-16 text-center text-xs font-medium text-gray-600 dark:text-gray-300">Colli</th>
-                <th class="px-3 py-2 w-24 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Status</th>
-                <th class="px-3 py-2 w-20 text-left text-xs font-medium text-gray-600 dark:text-gray-300">ETA</th>
-                <th class="px-3 py-2 w-36 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Actions</th>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Kode</th>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">SPB</th>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">DBL / Supir</th>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Penerima</th>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Rute</th>
+                <th class="px-3 py-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">Colli</th>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Status</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Actions</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
               <tr v-if="shipments.length === 0">
-                <td colspan="9" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">Belum ada shipment</td>
+                <td colspan="8" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">Belum ada shipment</td>
               </tr>
               <tr v-for="ship in shipments" :key="ship.id" class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
-                <td class="px-3 py-2 text-sm font-medium dark:text-gray-200">
-                  <div class="flex items-center gap-3">
-                    <div class="min-w-[72px]">{{ ship.public_code }}</div>
-                  </div>
+                <td class="px-2 py-2 text-xs font-medium dark:text-gray-200">
+                  {{ ship.public_code }}
                 </td>
-                <td class="px-3 py-2 text-sm dark:text-gray-300 min-w-0">
-                  <span class="inline-block text-[11px] leading-tight bg-black text-white rounded px-1.5 py-0.5">
+                <td class="px-2 py-2 text-xs dark:text-gray-300">
+                  <span class="inline-block text-[10px] leading-tight bg-black text-white rounded px-1 py-0.5">
                     {{ ship.spb_number || `SPB-${ship.id}` }}
                   </span>
                 </td>
-                <td class="px-3 py-2 text-sm dark:text-gray-300 min-w-0">
-                  <div class="flex flex-col gap-1">
-                    <div class="text-xs text-gray-500">
-                      <span v-if="ship.dbl_number">{{ ship.dbl_number }}</span>
-                      <span v-else class="text-gray-400">Belum masuk DBL</span>
+                <td class="px-2 py-2 text-xs dark:text-gray-300">
+                  <div class="flex flex-col gap-0.5">
+                    <div class="text-gray-600 dark:text-gray-400 truncate">
+                      <span v-if="ship.dbl_number" class="font-medium">{{ ship.dbl_number }}</span>
+                      <span v-else class="text-gray-400">-</span>
                     </div>
-                    <div class="text-xs text-gray-500">
-                      <span>{{ ship.driver_name || '-' }}</span>
-                      <span v-if="ship.vehicle_plate" class="text-gray-400"> • {{ ship.vehicle_plate }}</span>
+                    <div class="text-gray-500 dark:text-gray-400 truncate">
+                      {{ ship.driver_name || '-' }}
                     </div>
                   </div>
                 </td>
-                <td class="px-3 py-2 text-sm dark:text-gray-300 min-w-0">
-                  <div class="font-medium truncate">{{ ship.customer_name || '-' }}</div>
-                  <div class="text-xs text-gray-500 line-clamp-2">{{ ship.customer_address || '' }}</div>
+                <td class="px-2 py-2 text-xs dark:text-gray-300">
+                  <div class="font-medium truncate">{{ ship.penerima_name || ship.customer_name || '-' }}</div>
+                  <div class="text-gray-500 dark:text-gray-400 truncate text-[10px]">{{ ship.penerima_phone || '' }}</div>
                 </td>
-                <td class="px-3 py-2 text-sm dark:text-gray-300 min-w-0">
+                <td class="px-2 py-2 text-xs dark:text-gray-300">
                   <div class="truncate">{{ ship.origin }} → {{ ship.destination }}</div>
                 </td>
-                <td class="px-3 py-2 text-sm text-center min-w-0">{{ ship.total_colli }}</td>
-                <td class="px-3 py-2 min-w-0">
-                  <Badge :variant="getStatusVariant(ship.status)">{{ allStatusOptions.find(o => o.value === ship.status)?.label || ship.status }}</Badge>
+                <td class="px-2 py-2 text-xs text-center dark:text-gray-300">{{ ship.total_colli }}</td>
+                <td class="px-2 py-2">
+                  <Badge :variant="getStatusVariant(ship.status)" class="text-xs">{{ statusLabelMap[ship.status]?.label || ship.status }}</Badge>
                 </td>
-                <td class="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 min-w-0">{{ ship.eta ? formatDate(ship.eta) : '-' }}</td>
-                <td class="px-3 py-2 text-right space-x-2 min-w-0">
-                  <Button variant="success" class="px-3 py-1 h-8 text-xs min-w-[84px]" @click="viewBarcode(ship)" title="Barcode">Barcode</Button>
-                  <Button v-if="canEdit" variant="primary" class="px-3 py-1 h-8 text-xs min-w-[84px]" @click="openEditModal(ship)" title="Edit">Edit</Button>
-                  <Button v-if="canDelete" variant="default" class="px-3 py-1 h-8 text-xs min-w-[84px] text-red-600 hover:text-red-700 bg-red-50 dark:bg-red-900/20" @click="deleteShipment(ship.id)" title="Delete">Delete</Button>
+                <td class="px-2 py-2 text-right">
+                  <div class="flex gap-1 justify-end">
+                    <Button variant="success" class="px-2 py-1 h-7 text-xs" @click="viewBarcode(ship)" title="Barcode">Barcode</Button>
+                    <Button v-if="canEdit" variant="primary" class="px-2 py-1 h-7 text-xs" @click="openEditModal(ship)" title="Edit">Edit</Button>
+                    <Button v-if="canDelete" variant="default" class="px-2 py-1 h-7 text-xs text-red-600 hover:text-red-700 bg-red-50 dark:bg-red-900/20" @click="deleteShipment(ship.id)" title="Delete">Del</Button>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -813,7 +797,7 @@ onMounted(() => {
                     <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{{ s.customer_name || '-' }}</div>
                     <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">{{ s.customer_address || '' }}</div>
                   </div>
-                  <Badge :variant="getStatusVariant(s.status)" class="flex-shrink-0">{{ allStatusOptions.find(o => o.value === s.status)?.label || s.status }}</Badge>
+                  <Badge :variant="getStatusVariant(s.status)" class="flex-shrink-0">{{ statusLabelMap[s.status]?.label || s.status }}</Badge>
                 </div>
                 <div class="text-xs space-y-1.5">
                   <div class="flex items-start gap-2">
@@ -842,15 +826,17 @@ onMounted(() => {
     </div>
 
     <div v-if="showModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center z-50 pt-4 px-4 pb-[60px] lg:p-4" @click.self="showModal = false">
-      <div class="bg-white rounded-xl w-full max-w-4xl card flex flex-col h-[calc(100vh-60px)] lg:max-h-[90vh]">
-        <div class="p-6 overflow-auto flex-1 space-y-4">
-          <h3 class="text-lg font-semibold border-b pb-2 mb-4">Data SPB / Resi</h3>
+      <div class="bg-white rounded-xl w-full max-w-2xl card flex flex-col h-[calc(100vh-60px)] lg:max-h-[90vh]">
+        <div class="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 z-10">
+          <h3 class="text-base font-semibold">{{ editingId ? 'Edit SPB' : 'Tambah SPB Baru' }}</h3>
+        </div>
+        <div v-if="loadModalContent" class="px-4 py-3 overflow-auto flex-1 space-y-1.5">
           <div>
             <label class="block text-sm font-medium mb-1">No. SPB / Resi</label>
             <input
               v-model="form.spb_number"
               type="text"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
               placeholder="Nomor SPB/Resi (input manual)"
             />
           </div>
@@ -864,52 +850,52 @@ onMounted(() => {
             Pilih / Tambah Customer
           </button>
           
-          <div class="bg-gray-50 rounded-lg p-4 space-y-3">
-            <div class="text-sm font-medium text-gray-700">Data Penerima & Penagihan</div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="bg-gray-50 rounded-lg p-2.5 space-y-1.5">
+            <div class="text-xs font-medium text-gray-700">Data Penerima & Penagihan</div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
               <div>
-                <label class="block text-sm font-medium mb-1">Nama Pengirim</label>
+                <label class="block text-xs font-medium mb-0.5">Nama Pengirim</label>
                 <input
                   v-model="form.pengirim_name"
                   type="text"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white"
+                  class="w-full px-2 py-1 border border-gray-300 rounded-lg bg-white text-xs"
                   placeholder="Nama pengirim"
                 />
               </div>
               <div>
-                <label class="block text-sm font-medium mb-1">Nama Penerima / Customer</label>
+                <label class="block text-xs font-medium mb-0.5">Nama Penerima / Customer</label>
                 <input
                   v-model="form.penerima_name"
                   type="text"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white"
+                  class="w-full px-2 py-1 border border-gray-300 rounded-lg bg-white text-xs"
                   placeholder="Nama penerima (juga untuk penagihan)"
                 />
               </div>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
               <div>
-                <label class="block text-sm font-medium mb-1">No. Telepon Penerima</label>
+                <label class="block text-xs font-medium mb-0.5">No. Telepon Penerima</label>
                 <input
                   v-model="form.penerima_phone"
                   type="text"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white"
+                  class="w-full px-2 py-1 border border-gray-300 rounded-lg bg-white text-xs"
                   placeholder="Nomor telepon penerima"
                 />
               </div>
               <div>
-                <label class="block text-sm font-medium mb-1">Alamat Penerima</label>
+                <label class="block text-xs font-medium mb-0.5">Alamat Penerima</label>
                 <input
                   v-model="form.customer_address"
                   type="text"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white"
+                  class="w-full px-2 py-1 border border-gray-300 rounded-lg bg-white text-xs"
                   placeholder="Alamat lengkap penerima"
                 />
               </div>
             </div>
           </div>
 
-          <h3 class="text-lg font-semibold border-b pb-2 mb-4 mt-6">Rute & Detail Barang</h3>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <h3 class="text-xs font-semibold uppercase text-gray-600 mt-2 mb-1.5">Rute & Detail Barang</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
             <div>
               <CityAutocomplete v-model="form.origin" label="Kota Asal" placeholder="Kota asal" />
               <p v-if="validationErrors.origin" class="text-red-600 text-xs mt-1">{{ validationErrors.origin }}</p>
@@ -919,7 +905,7 @@ onMounted(() => {
               <p v-if="validationErrors.destination" class="text-red-600 text-xs mt-1">{{ validationErrors.destination }}</p>
             </div>
           </div>
-          <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
             <div>
               <label class="block text-sm font-medium mb-1">Macam Barang</label>
               <input
@@ -1067,14 +1053,16 @@ onMounted(() => {
           <Button
             variant="default"
             @click="showModal = false"
+            :disabled="saving"
           >
             Batal
           </Button>
           <Button
             variant="primary"
             @click="saveShipment"
+            :disabled="saving"
           >
-            Simpan
+            {{ saving ? 'Menyimpan...' : 'Simpan' }}
           </Button>
         </div>
       </div>

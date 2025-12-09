@@ -76,6 +76,7 @@ const dblList = ref<DBL[]>([]);
 const filteredDblList = ref<DBL[]>([]);
 const searchQuery = ref('');
 const loading = ref(true);
+const deletingId = ref<number | null>(null);
 const showModal = ref(false);
 const showShipmentModal = ref(false);
 const showInvoiceModal = ref(false);
@@ -288,13 +289,18 @@ async function saveDBL() {
 
 async function deleteDBL(id: number) {
   if (!confirm('Yakin ingin menghapus DBL ini?')) return;
+  deletingId.value = id;
   try {
     const res = await fetch(`/api/dbl?endpoint=delete&id=${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Delete failed');
-    loadDBLList();
+    dblList.value = dblList.value.filter(d => d.id !== id);
+    filterDBLList();
   } catch (e) {
     console.error('Delete error:', e);
     alert('Gagal menghapus DBL');
+    await loadDBLList();
+  } finally {
+    deletingId.value = null;
   }
 }
 
@@ -629,7 +635,14 @@ onMounted(async () => {
                   <Button variant="warning" class="px-2 py-1 h-7 text-xs" @click="printDaftarMuat(dbl)">Print</Button>
                   <Button v-if="permissions.canViewKeuangan" variant="info" class="px-2 py-1 h-7 text-xs" @click="openInvoiceModal(dbl)">Invoice</Button>
                   <Button variant="primary" class="px-2 py-1 h-7 text-xs" @click="openEditModal(dbl)">Edit</Button>
-                  <Button variant="default" class="px-2 py-1 h-7 text-xs text-red-600" @click="deleteDBL(dbl.id)">Hapus</Button>
+                  <Button 
+                    variant="default" 
+                    class="px-2 py-1 h-7 text-xs text-red-600" 
+                    @click="deleteDBL(dbl.id)"
+                    :disabled="deletingId === dbl.id"
+                  >
+                    {{ deletingId === dbl.id ? '...' : 'Hapus' }}
+                  </Button>
                 </td>
               </tr>
             </tbody>
@@ -676,6 +689,15 @@ onMounted(async () => {
             <Button block variant="warning" @click="printDaftarMuat(dbl)">Print</Button>
             <Button v-if="permissions.canViewKeuangan" block variant="info" @click="openInvoiceModal(dbl)">Invoice</Button>
             <Button block variant="primary" @click="openEditModal(dbl)">Edit</Button>
+            <Button 
+              block 
+              variant="default" 
+              class="col-span-2 text-red-600" 
+              @click="deleteDBL(dbl.id)"
+              :disabled="deletingId === dbl.id"
+            >
+              {{ deletingId === dbl.id ? 'Menghapus...' : 'Hapus' }}
+            </Button>
           </div>
         </div>
       </div>

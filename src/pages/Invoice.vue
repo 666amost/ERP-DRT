@@ -261,11 +261,7 @@ function updateItemsFromSelection(): void {
 }
 
 function onCustomerChange(): void {
-  const filtered = getFilteredUnpaidShipments();
   selectedShipmentIds.value.clear();
-  filtered.forEach(s => {
-    if (s.shipment_id) selectedShipmentIds.value.add(s.shipment_id);
-  });
   selectedShipmentIds.value = new Set(selectedShipmentIds.value);
   updateItemsFromSelection();
 }

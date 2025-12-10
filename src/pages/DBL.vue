@@ -779,9 +779,9 @@ onMounted(async () => {
         </div>
         
         <div class="flex-1 overflow-auto p-4 space-y-4">
-          <div v-if="loadingShipments" class="text-center py-8 text-gray-500">Loading...</div>
-          
-          <template v-else>
+          <div v-if="loadingShipments" class="text-center py-2 text-gray-500">Loading...</div>
+
+          <div class="space-y-4">
             <div class="mb-4">
               <h4 class="font-medium mb-2 dark:text-gray-200">Resi dalam DBL ini ({{ dblShipments.length }})</h4>
               <div v-if="dblShipments.length === 0" class="text-sm text-gray-500">Belum ada resi</div>
@@ -832,7 +832,7 @@ onMounted(async () => {
                 Tambahkan {{ selectedShipmentIds.length }} Resi
               </Button>
             </div>
-          </template>
+          </div>
         </div>
         
         <div class="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">

@@ -44,6 +44,7 @@ const selectedCustomer = ref('');
 const selectedDbl = ref('');
 const dateFrom = ref('');
 const dateTo = ref('');
+const sjFilter = ref('');
 const company = ref<CompanyProfile | null>(null);
 const currentUser = ref<MeUser | null>(null);
 
@@ -80,6 +81,11 @@ const filteredItems = computed(() => {
     result = result.filter(i => !i.dbl_number);
   } else if (selectedDbl.value) {
     result = result.filter(i => i.dbl_number === selectedDbl.value);
+  }
+  if (sjFilter.value === 'returned') {
+    result = result.filter(i => i.sj_returned === true);
+  } else if (sjFilter.value === 'not_returned') {
+    result = result.filter(i => i.sj_returned === false);
   }
   if (dateFrom.value) {
     result = result.filter(i => new Date(i.created_at) >= new Date(dateFrom.value));
@@ -118,6 +124,7 @@ function resetFilters() {
   selectedDbl.value = '';
   dateFrom.value = '';
   dateTo.value = '';
+  sjFilter.value = '';
 }
 
 function exportExcel() {
@@ -229,6 +236,14 @@ onMounted(async () => {
             <option value="">Semua DBL</option>
             <option v-if="hasUnassignedDbl" value="__no_dbl">Belum ada DBL</option>
             <option v-for="d in dblNumbers" :key="d" :value="d">DBL {{ d }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">SJ Balik</label>
+          <select v-model="sjFilter" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg text-sm">
+            <option value="">Semua</option>
+            <option value="returned">Sudah balik</option>
+            <option value="not_returned">Belum balik</option>
           </select>
         </div>
         <div>

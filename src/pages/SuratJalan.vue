@@ -51,6 +51,10 @@ const searchQuery = ref('')
 const dblSearchQuery = ref('')
 const loading = ref(false)
 const dblLoading = ref(false)
+const selectedShipments = ref<Set<string>>(new Set())
+const selectedDBLs = ref<Set<string>>(new Set())
+const selectAllSPB = ref(false)
+const selectAllDBL = ref(false)
 
 const loadShipments = async (): Promise<void> => {
   loading.value = true
@@ -165,6 +169,46 @@ const formatDestination = (city: string, province: string | null): string => {
     return `${cityStr}, ${provinceStr}`
   }
   return cityStr || '-'
+}
+
+const toggleShipmentSelection = (id: string): void => {
+  if (selectedShipments.value.has(id)) {
+    selectedShipments.value.delete(id)
+  } else {
+    selectedShipments.value.add(id)
+  }
+}
+
+const toggleAllShipments = (): void => {
+  if (selectAllSPB.value) {
+    selectedShipments.value.clear()
+    selectAllSPB.value = false
+  } else {
+    filteredShipments.value.forEach(s => {
+      selectedShipments.value.add(s.id)
+    })
+    selectAllSPB.value = true
+  }
+}
+
+const toggleDBLSelection = (id: string): void => {
+  if (selectedDBLs.value.has(id)) {
+    selectedDBLs.value.delete(id)
+  } else {
+    selectedDBLs.value.add(id)
+  }
+}
+
+const toggleAllDBLs = (): void => {
+  if (selectAllDBL.value) {
+    selectedDBLs.value.clear()
+    selectAllDBL.value = false
+  } else {
+    filteredDBL.value.forEach(d => {
+      selectedDBLs.value.add(d.id)
+    })
+    selectAllDBL.value = true
+  }
 }
 
 const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
@@ -368,8 +412,8 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
     })
     await Promise.all(barcodePromises)
 
-    const printWindow = window.open('', '_blank')
-    if (!printWindow) {
+    const printWindowRef = window.open('', '_blank')
+    if (!printWindowRef) {
       alert('Popup blocked. Please allow popups for this site.')
       return
     }
@@ -555,15 +599,446 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
       </body>
       </html>
     `
-    printWindow.document.write(html)
-    printWindow.document.close()
-    printWindow.focus()
+    printWindowRef.document.write(html)
+    printWindowRef.document.close()
+    printWindowRef.focus()
     setTimeout(() => {
-      printWindow.print()
+      printWindowRef.print()
     }, 250)
   } catch {
     console.error('Failed to print bulk surat jalan')
   }
+}
+
+const printSelectedShipments = async (): Promise<void> => {
+  if (selectedShipments.value.size === 0) {
+    alert('Silakan pilih minimal 1 SPB untuk dicetak')
+    return
+  }
+
+  const selected = shipments.value.filter(s => selectedShipments.value.has(s.id))
+  const company = await getCompany()
+  
+  const barcodePromises = selected.map(s => {
+    const publicCode = s.tracking_code || ''
+    return new Promise<void>((resolve) => {
+      const img = new Image()
+      img.onload = () => resolve()
+      img.onerror = () => resolve()
+      img.src = `/api/blob?endpoint=generate&code=${publicCode}&type=barcode`
+    })
+  })
+  await Promise.all(barcodePromises)
+
+  const printWindowRef = window.open('', '_blank')
+  if (!printWindowRef) {
+    alert('Popup blocked. Please allow popups for this site.')
+    return
+  }
+
+  let pagesHtml = ''
+  selected.forEach((shipment, index) => {
+    const spbNumber = shipment.spb_number || '-'
+    const publicCode = shipment.tracking_code || ''
+    const deliveredStamp = shipment.status === 'DELIVERED' ? `<div class="delivered-stamp">DELIVERED</div>` : ''
+    
+    pagesHtml += `
+      <div class="sheet ${index > 0 ? 'page-break' : ''}">
+        ${deliveredStamp}
+        
+        <div class="header">
+          <div>
+            <div class="brand">
+              <img src="${LOGO_URL}" alt="Logo" />
+              <div>
+                <div class="brand-title">${company?.name ?? 'PERUSAHAAN LOGISTIK'}</div>
+                <div class="brand-sub">Melayani: Pengiriman ke Seluruh Indonesia</div>
+              </div>
+            </div>
+            <div class="addr">${company?.address ?? ''}</div>
+          </div>
+          <div class="right-box">
+            <div class="spb">${spbNumber}</div>
+          </div>
+        </div>
+
+        <div class="barcode-section">
+          <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode&hideText=1" alt="Barcode" />
+        </div>
+
+        <div class="info-grid">
+          <div class="info-box">
+            <div class="info-label">Pengirim</div>
+            <div class="info-value">${shipment.sender_name || '-'}</div>
+          </div>
+          <div class="info-box">
+            <div class="info-label">Penerima</div>
+            <div class="info-value">${shipment.recipient_name || '-'}</div>
+          </div>
+          <div class="info-box">
+            <div class="info-label">ALAMAT PENGIRIM</div>
+            <div class="info-value">${shipment.origin_city}</div>
+          </div>
+          <div class="info-box">
+            <div class="info-label">No. Telp Penerima</div>
+            <div class="info-value">${shipment.recipient_phone || '-'}</div>
+          </div>
+          <div class="info-box">
+            <div class="info-label">Banyaknya</div>
+            <div class="info-value">${shipment.total_colli} Koli</div>
+          </div>
+          <div class="info-box">
+            <div class="info-label">TUJUAN</div>
+            <div class="info-value">${formatDestination(shipment.destination_city, shipment.destination_province)}</div>
+          </div>
+        </div>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:12%">Kg/M3</th>
+                <th>Nama Barang</th>
+                <th style="width:18%">Per Satuan</th>
+                <th style="width:18%">Ongkos Kirim</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>${shipment.total_weight || '-'}</td>
+                <td>${(shipment.description || 'Barang kiriman').split(', ').join('\n')}</td>
+                <td>${formatRupiah(shipment.total_colli > 0 ? shipment.nominal / shipment.total_colli : shipment.nominal)}</td>
+                <td>${formatRupiah(shipment.nominal)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="sign-row">
+          <div class="sign">
+            <div class="sign-label">Pengirim</div>
+            <div class="sign-line">( ${shipment.sender_name || '................................'} )</div>
+          </div>
+          <div class="sign">
+            <div class="sign-label">Yang Menerima</div>
+            <div class="sign-line">( ................................ )</div>
+          </div>
+        </div>
+      </div>
+    `
+  })
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Bulk Surat Jalan</title>
+      <meta charset="utf-8" />
+      <style>
+        @page { size: 11in 9.5in landscape; margin: 0; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { font-family: Arial, sans-serif; color: #000; }
+        body { margin: 0; padding: 0; background: #fff; }
+        .sheet { width: 100%; background: #fff; position: relative; padding: 8mm 10mm; }
+        .page-break { page-break-before: always; }
+        
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid #000; }
+        .brand { display: flex; gap: 6px; align-items: center; }
+        .brand img { width: 40px; height: 40px; object-fit: contain; }
+        .brand-title { font-weight: bold; font-size: 16px; line-height: 1.2; }
+        .brand-sub { font-size: 9px; margin-top: 1px; }
+        .addr { font-size: 10px; margin-top: 3px; line-height: 1.3; font-weight: 500; }
+        .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
+        .right-box .spb { font-size: 16px; font-weight: bold; }
+
+        .barcode-section { text-align: right; margin: 2px 0 4px 0; padding-right: 2px; }
+        .barcode-section img { width: 150px; height: 32px; border: 1px solid #000; padding: 1px; }
+
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 6px 0; }
+        .info-box { border: 1px solid #000; padding: 5px; min-height: 45px; }
+        .info-label { font-size: 10px; margin-bottom: 2px; text-transform: uppercase; }
+        .info-value { font-size: 16px; font-weight: bold; }
+
+        .table-wrapper { margin: 6px 0; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #000; padding: 5px 4px; text-align: left; vertical-align: top; white-space: pre-wrap; word-wrap: break-word; }
+        th { background: #fff; font-size: 10px; }
+        td { font-size: 14px; font-weight: bold; min-height: 60px; height: 60px; }
+
+        .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 12px; }
+        .sign { text-align: center; }
+        .sign-label { font-size: 11px; font-weight: bold; margin-bottom: 20px; }
+        .sign-line { border-top: 1px solid #000; padding-top: 3px; font-size: 11px; font-weight: bold; }
+
+        .delivered-stamp {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%) rotate(-15deg);
+          font-size: 60px;
+          font-weight: 900;
+          color: rgba(0, 0, 0, 0.08);
+          border: 6px solid rgba(0, 0, 0, 0.08);
+          padding: 15px 30px;
+          text-transform: uppercase;
+          letter-spacing: 5px;
+          pointer-events: none;
+        }
+
+        @media print {
+          body { padding: 0; }
+          .sheet { padding: 6mm 8mm; }
+          .delivered-stamp { color: rgba(0, 0, 0, 0.12); border-color: rgba(0, 0, 0, 0.12); }
+        }
+      </style>
+    </head>
+    <body>
+      ${pagesHtml}
+    </body>
+    </html>
+  `
+  printWindowRef.document.write(html)
+  printWindowRef.document.close()
+  printWindowRef.focus()
+  setTimeout(() => {
+    printWindowRef.print()
+  }, 250)
+}
+
+const printSelectedDBLs = async (): Promise<void> => {
+  if (selectedDBLs.value.size === 0) {
+    alert('Silakan pilih minimal 1 DBL untuk dicetak')
+    return
+  }
+
+  const selected = dblList.value.filter(d => selectedDBLs.value.has(d.id))
+  const company = await getCompany()
+
+  const allItems: Array<Record<string, unknown>> = []
+  const dblMap = new Map<string, DBLItem>()
+
+  for (const dbl of selected) {
+    dblMap.set(dbl.id, dbl)
+    const res = await fetch(`/api/dbl?endpoint=items&id=${dbl.id}`)
+    const data = await res.json()
+    if (data.items) {
+      allItems.push(...data.items.map((item: Record<string, unknown>) => ({
+        ...item,
+        dbl_id: dbl.id
+      })))
+    }
+  }
+
+  if (allItems.length === 0) {
+    alert('Tidak ada SPB dalam DBL yang dipilih')
+    return
+  }
+
+  const barcodePromises = allItems.map((s: Record<string, unknown>) => {
+    const publicCode = s.public_code as string || ''
+    return new Promise<void>((resolve) => {
+      const img = new Image()
+      img.onload = () => resolve()
+      img.onerror = () => resolve()
+      img.src = `/api/blob?endpoint=generate&code=${publicCode}&type=barcode`
+    })
+  })
+  await Promise.all(barcodePromises)
+
+  const printWindowRef = window.open('', '_blank')
+  if (!printWindowRef) {
+    alert('Popup blocked. Please allow popups for this site.')
+    return
+  }
+
+  let pagesHtml = ''
+  allItems.forEach((s: Record<string, unknown>, index: number) => {
+    const dbl = dblMap.get(s.dbl_id as string)
+    const spbNumber = s.spb_number as string || '-'
+    const publicCode = s.tracking_code as string || s.public_code as string || ''
+    const shipment = {
+      spb_number: spbNumber,
+      tracking_code: publicCode,
+      sender_name: s.sender_name as string || s.pengirim_name as string || s.customer_name as string || '',
+      recipient_name: s.recipient_name as string || s.penerima_name as string || '',
+      recipient_phone: s.recipient_phone as string || s.penerima_phone as string || '',
+      origin_city: s.origin_city as string || s.origin as string || '',
+      origin_province: s.origin_province as string | null,
+      destination_city: s.destination_city as string || s.destination as string || '',
+      destination_province: s.destination_province as string | null,
+      total_colli: Number(s.total_colli) || 0,
+      total_weight: Number(s.total_weight) || Number(s.berat) || 0,
+      description: s.description as string || s.macam_barang as string || '',
+      notes: s.keterangan as string || '',
+      status: s.status as string || '',
+      created_at: s.created_at as string || '',
+      nominal: Number(s.nominal) || 0
+    }
+    const deliveredStamp = shipment.status === 'DELIVERED' ? `<div class="delivered-stamp">DELIVERED</div>` : ''
+    
+    pagesHtml += `
+      <div class="sheet ${index > 0 ? 'page-break' : ''}">
+        ${deliveredStamp}
+        <div class="dbl-banner">DBL: ${dbl?.dbl_number} | Kendaraan: ${dbl?.vehicle_plate} | Sopir: ${dbl?.driver_name}</div>
+        
+        <div class="header">
+          <div>
+            <div class="brand">
+              <img src="${LOGO_URL}" alt="Logo" />
+              <div>
+                <div class="brand-title">${company?.name ?? 'PERUSAHAAN LOGISTIK'}</div>
+                <div class="brand-sub">Melayani: Pengiriman ke Seluruh Indonesia</div>
+              </div>
+            </div>
+            <div class="addr">${company?.address ?? ''}</div>
+          </div>
+          <div class="right-box">
+            <div class="spb">${spbNumber}</div>
+          </div>
+        </div>
+
+        <div class="barcode-section">
+          <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode&hideText=1" alt="Barcode" />
+        </div>
+
+        <div class="info-grid">
+          <div class="info-box">
+            <div class="info-label">Pengirim</div>
+            <div class="info-value">${shipment.sender_name || '-'}</div>
+          </div>
+          <div class="info-box">
+            <div class="info-label">Penerima</div>
+            <div class="info-value">${shipment.recipient_name || '-'}</div>
+          </div>
+          <div class="info-box">
+            <div class="info-label">ALAMAT PENGIRIM</div>
+            <div class="info-value">${shipment.origin_city}</div>
+          </div>
+          <div class="info-box">
+            <div class="info-label">No. Telp Penerima</div>
+            <div class="info-value">${shipment.recipient_phone || '-'}</div>
+          </div>
+          <div class="info-box">
+            <div class="info-label">Banyaknya</div>
+            <div class="info-value">${shipment.total_colli} Koli</div>
+          </div>
+          <div class="info-box">
+            <div class="info-label">TUJUAN</div>
+            <div class="info-value">${formatDestination(shipment.destination_city, shipment.destination_province)}</div>
+          </div>
+        </div>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:12%">Kg/M3</th>
+                <th>Nama Barang</th>
+                <th style="width:18%">Per Satuan</th>
+                <th style="width:18%">Ongkos Kirim</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>${shipment.total_weight || '-'}</td>
+                <td>${(shipment.description || 'Barang kiriman').split(', ').join('\n')}</td>
+                <td>${formatRupiah(shipment.total_colli > 0 ? shipment.nominal / shipment.total_colli : shipment.nominal)}</td>
+                <td>${formatRupiah(shipment.nominal)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="sign-row">
+          <div class="sign">
+            <div class="sign-label">Pengirim</div>
+            <div class="sign-line">( ${shipment.sender_name || '................................'} )</div>
+          </div>
+          <div class="sign">
+            <div class="sign-label">Yang Menerima</div>
+            <div class="sign-line">( ................................ )</div>
+          </div>
+        </div>
+      </div>
+    `
+  })
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Bulk Surat Jalan</title>
+      <meta charset="utf-8" />
+      <style>
+        @page { size: 11in 9.5in landscape; margin: 0; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { font-family: Arial, sans-serif; color: #000; }
+        body { margin: 0; padding: 0; background: #fff; }
+        .sheet { width: 100%; background: #fff; position: relative; padding: 8mm 10mm; }
+        .page-break { page-break-before: always; }
+        .dbl-banner { background: #000; color: #fff; text-align: center; padding: 3px 6px; font-size: 9px; font-weight: bold; margin-bottom: 4px; }
+        
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid #000; }
+        .brand { display: flex; gap: 6px; align-items: center; }
+        .brand img { width: 40px; height: 40px; object-fit: contain; }
+        .brand-title { font-weight: bold; font-size: 16px; line-height: 1.2; }
+        .brand-sub { font-size: 9px; margin-top: 1px; }
+        .addr { font-size: 10px; margin-top: 3px; line-height: 1.3; font-weight: 500; }
+        .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
+        .right-box .spb { font-size: 16px; font-weight: bold; }
+
+        .barcode-section { text-align: right; margin: 2px 0 4px 0; padding-right: 2px; }
+        .barcode-section img { width: 150px; height: 32px; border: 1px solid #000; padding: 1px; }
+
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 6px 0; }
+        .info-box { border: 1px solid #000; padding: 5px; min-height: 45px; }
+        .info-label { font-size: 10px; margin-bottom: 2px; text-transform: uppercase; }
+        .info-value { font-size: 16px; font-weight: bold; }
+
+        .table-wrapper { margin: 6px 0; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #000; padding: 5px 4px; text-align: left; vertical-align: top; white-space: pre-wrap; word-wrap: break-word; }
+        th { background: #fff; font-size: 10px; }
+        td { font-size: 14px; font-weight: bold; min-height: 60px; height: 60px; }
+
+        .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 12px; }
+        .sign { text-align: center; }
+        .sign-label { font-size: 11px; font-weight: bold; margin-bottom: 20px; }
+        .sign-line { border-top: 1px solid #000; padding-top: 3px; font-size: 11px; font-weight: bold; }
+
+        .delivered-stamp {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%) rotate(-15deg);
+          font-size: 60px;
+          font-weight: 900;
+          color: rgba(0, 0, 0, 0.08);
+          border: 6px solid rgba(0, 0, 0, 0.08);
+          padding: 15px 30px;
+          text-transform: uppercase;
+          letter-spacing: 5px;
+          pointer-events: none;
+        }
+
+        @media print {
+          body { padding: 0; }
+          .sheet { padding: 6mm 8mm; }
+          .delivered-stamp { color: rgba(0, 0, 0, 0.12); border-color: rgba(0, 0, 0, 0.12); }
+        }
+      </style>
+    </head>
+    <body>
+      ${pagesHtml}
+    </body>
+    </html>
+  `
+  printWindowRef.document.write(html)
+  printWindowRef.document.close()
+  printWindowRef.focus()
+  setTimeout(() => {
+    printWindowRef.print()
+  }, 250)
 }
 
 onMounted(() => {
@@ -613,7 +1088,7 @@ onMounted(() => {
       </div>
 
       <div v-if="activeTab === 'spb'" class="p-6">
-        <div class="mb-6">
+        <div class="mb-6 space-y-3">
           <div class="relative">
             <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
             <input
@@ -622,6 +1097,29 @@ onMounted(() => {
               placeholder="Cari SPB, Resi, Pengirim, Penerima, Tujuan..."
               class="w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-gray-700 dark:border-gray-600"
             />
+          </div>
+          <div v-if="filteredShipments.length > 0" class="flex gap-3 items-center">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                v-model="selectAllSPB"
+                @change="toggleAllShipments"
+                class="w-4 h-4 rounded border-gray-300 text-primary"
+              />
+              <span class="text-sm font-medium">Uncheck Semua</span>
+            </label>
+            <div class="text-sm text-gray-500">
+              {{ selectedShipments.size }} dari {{ filteredShipments.length }} dipilih
+            </div>
+            <Button 
+              v-if="selectedShipments.size > 0"
+              variant="success"
+              @click="printSelectedShipments"
+              class="ml-auto"
+            >
+              <svg class="h-4 w-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+              Print {{ selectedShipments.size }} SPB
+            </Button>
           </div>
         </div>
 
@@ -638,6 +1136,14 @@ onMounted(() => {
             <table class="w-full">
               <thead class="bg-gray-100 dark:bg-gray-800">
                 <tr>
+                  <th class="px-4 py-3 text-left text-sm font-medium w-12">
+                    <input
+                      type="checkbox"
+                      v-model="selectAllSPB"
+                      @change="toggleAllShipments"
+                      class="w-4 h-4 rounded border-gray-300 text-primary"
+                    />
+                  </th>
                   <th class="px-4 py-3 text-left text-sm font-medium">No. SPB</th>
                   <th class="px-4 py-3 text-left text-sm font-medium">Kode</th>
                   <th class="px-4 py-3 text-left text-sm font-medium">Pengirim</th>
@@ -649,6 +1155,14 @@ onMounted(() => {
               </thead>
               <tbody class="divide-y dark:divide-gray-700 bg-white dark:bg-gray-800">
                 <tr v-for="shipment in filteredShipments" :key="shipment.id" class="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+                  <td class="px-4 py-3 text-center">
+                    <input
+                      type="checkbox"
+                      :checked="selectedShipments.has(shipment.id)"
+                      @change="toggleShipmentSelection(shipment.id)"
+                      class="w-4 h-4 rounded border-gray-300 text-primary"
+                    />
+                  </td>
                   <td class="px-4 py-3 text-sm font-mono">{{ shipment.spb_number || '-' }}</td>
                   <td class="px-4 py-3 text-sm font-mono">{{ shipment.tracking_code }}</td>
                   <td class="px-4 py-3 text-sm">{{ shipment.sender_name || '-' }}</td>
@@ -678,9 +1192,17 @@ onMounted(() => {
             class="bg-white dark:bg-gray-800 border rounded-lg p-4 space-y-3 shadow-sm hover:shadow-md transition-shadow"
           >
             <div class="flex justify-between items-start">
-              <div>
-                <p class="font-mono text-sm font-medium">SPB: {{ shipment.spb_number || '-' }}</p>
-                <p class="text-xs text-gray-500 dark:text-gray-400 font-mono">{{ shipment.tracking_code }}</p>
+              <div class="flex gap-3 items-start flex-1">
+                <input
+                  type="checkbox"
+                  :checked="selectedShipments.has(shipment.id)"
+                  @change="toggleShipmentSelection(shipment.id)"
+                  class="w-4 h-4 rounded border-gray-300 text-primary mt-1"
+                />
+                <div>
+                  <p class="font-mono text-sm font-medium">SPB: {{ shipment.spb_number || '-' }}</p>
+                  <p class="text-xs text-gray-500 dark:text-gray-400 font-mono">{{ shipment.tracking_code }}</p>
+                </div>
               </div>
               <Badge :variant="getStatusVariant(shipment.status)">
                 {{ shipment.status }}
@@ -699,7 +1221,7 @@ onMounted(() => {
     </div>
 
       <div v-if="activeTab === 'dbl'" class="p-6">
-        <div class="mb-6">
+        <div class="mb-6 space-y-3">
           <div class="relative">
             <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
             <input
@@ -709,7 +1231,32 @@ onMounted(() => {
               class="w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-gray-700 dark:border-gray-600"
             />
           </div>
-        </div>        <div v-if="dblLoading" class="text-center py-8 text-gray-500 dark:text-gray-400">
+          <div v-if="filteredDBL.length > 0" class="flex gap-3 items-center">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                v-model="selectAllDBL"
+                @change="toggleAllDBLs"
+                class="w-4 h-4 rounded border-gray-300 text-primary"
+              />
+              <span class="text-sm font-medium">Uncheck Semua</span>
+            </label>
+            <div class="text-sm text-gray-500">
+              {{ selectedDBLs.size }} dari {{ filteredDBL.length }} dipilih
+            </div>
+            <Button 
+              v-if="selectedDBLs.size > 0"
+              variant="success"
+              @click="printSelectedDBLs"
+              class="ml-auto"
+            >
+              <svg class="h-4 w-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+              Print {{ selectedDBLs.size }} DBL
+            </Button>
+          </div>
+        </div>
+
+        <div v-if="dblLoading" class="text-center py-8 text-gray-500 dark:text-gray-400">
           Memuat data DBL...
         </div>
 
@@ -722,6 +1269,14 @@ onMounted(() => {
             <table class="w-full">
               <thead class="bg-gray-100 dark:bg-gray-800">
                 <tr>
+                  <th class="px-4 py-3 text-left text-sm font-medium w-12">
+                    <input
+                      type="checkbox"
+                      v-model="selectAllDBL"
+                      @change="toggleAllDBLs"
+                      class="w-4 h-4 rounded border-gray-300 text-primary"
+                    />
+                  </th>
                   <th class="px-4 py-3 text-left text-sm font-medium">No. DBL</th>
                   <th class="px-4 py-3 text-left text-sm font-medium">Tanggal</th>
                   <th class="px-4 py-3 text-left text-sm font-medium">Kendaraan</th>
@@ -734,6 +1289,14 @@ onMounted(() => {
               </thead>
               <tbody class="divide-y dark:divide-gray-700 bg-white dark:bg-gray-800">
                 <tr v-for="dbl in filteredDBL" :key="dbl.id" class="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+                  <td class="px-4 py-3 text-center">
+                    <input
+                      type="checkbox"
+                      :checked="selectedDBLs.has(dbl.id)"
+                      @change="toggleDBLSelection(dbl.id)"
+                      class="w-4 h-4 rounded border-gray-300 text-primary"
+                    />
+                  </td>
                   <td class="px-4 py-3 text-sm font-mono font-medium">{{ dbl.dbl_number }}</td>
                   <td class="px-4 py-3 text-sm">{{ formatDate(dbl.dbl_date) }}</td>
                   <td class="px-4 py-3 text-sm font-mono">{{ dbl.vehicle_plate || '-' }}</td>
@@ -770,9 +1333,17 @@ onMounted(() => {
             class="bg-white dark:bg-gray-800 border rounded-lg p-4 space-y-3 shadow-sm hover:shadow-md transition-shadow"
           >
             <div class="flex justify-between items-start">
-              <div>
-                <p class="font-mono text-sm font-medium">{{ dbl.dbl_number }}</p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">{{ formatDate(dbl.dbl_date) }}</p>
+              <div class="flex gap-3 items-start flex-1">
+                <input
+                  type="checkbox"
+                  :checked="selectedDBLs.has(dbl.id)"
+                  @change="toggleDBLSelection(dbl.id)"
+                  class="w-4 h-4 rounded border-gray-300 text-primary mt-1"
+                />
+                <div>
+                  <p class="font-mono text-sm font-medium">{{ dbl.dbl_number }}</p>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">{{ formatDate(dbl.dbl_date) }}</p>
+                </div>
               </div>
               <Badge :variant="dbl.status === 'IN_TRANSIT' ? 'info' : 'default'">
                 {{ dbl.status }}

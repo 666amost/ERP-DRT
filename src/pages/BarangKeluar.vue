@@ -647,27 +647,27 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-4 pb-20 lg:pb-0 overflow-x-hidden">
-    <div class="w-full max-w-6xl mx-auto min-w-0">
-      <div class="hidden lg:flex items-center justify-between flex-wrap gap-3">
+  <div class="space-y-4 pb-20 lg:pb-0 overflow-x-auto">
+    <div class="w-full min-w-0">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 px-4 lg:px-0">
         <div class="text-xl font-semibold dark:text-gray-100">
           SPB (Barang Masuk)
         </div>
-        <div class="flex gap-2 flex-1 lg:flex-initial min-w-0 max-w-md">
+        <div class="flex gap-2 w-full lg:w-auto">
           <input
             v-model="searchQuery"
             type="text"
             placeholder="Cari kode, SPB, DBL, supir, customer, rute..."
-            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 dark:border-gray-600"
+            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 dark:border-gray-600 text-sm"
           >
+          <Button
+            variant="primary"
+            class="flex-shrink-0 text-sm px-3"
+            @click="openCreateModal"
+          >
+            + Tambah
+          </Button>
         </div>
-        <Button
-          variant="primary"
-          class="flex-shrink-0 text-sm px-3"
-          @click="openCreateModal"
-        >
-          + Tambah
-        </Button>
       </div>
 
       <div
@@ -682,62 +682,64 @@ onMounted(() => {
       <!-- Desktop Table View -->
       <div
         v-else
-        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden card hidden lg:block transition-all duration-200"
+        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden card transition-all duration-200"
       >
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
+        <div class="overflow-x-auto w-full">
+          <table class="w-full text-sm border-collapse">
             <thead class="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 sticky top-0">
               <tr>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Kode</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">SPB</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">DBL / Supir</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Penerima</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Rute</th>
-                <th class="px-3 py-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">Colli</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Status</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Actions</th>
+                <th class="px-3 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap min-w-max">Kode</th>
+                <th class="px-3 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap min-w-max">SPB</th>
+                <th class="px-3 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap min-w-[120px]">DBL / Supir</th>
+                <th class="px-3 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap min-w-[150px]">Penerima</th>
+                <th class="px-3 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap min-w-[180px]">Rute</th>
+                <th class="px-3 py-3 text-center text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap">Colli</th>
+                <th class="px-3 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap">Status</th>
+                <th class="px-3 py-3 text-right text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
               <tr v-if="shipments.length === 0">
                 <td colspan="8" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">Belum ada shipment</td>
               </tr>
-              <tr v-for="ship in shipments" :key="ship.id" class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
-                <td class="px-2 py-2 text-xs font-medium dark:text-gray-200">
-                  {{ ship.public_code }}
+              <tr v-for="ship in shipments" :key="ship.id" class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-150 border-b border-gray-100 dark:border-gray-700">
+                <td class="px-3 py-3 text-xs font-medium dark:text-gray-200 whitespace-nowrap">
+                  {{ ship.public_code || '-' }}
                 </td>
-                <td class="px-2 py-2 text-xs dark:text-gray-300">
-                  <span class="inline-block text-[10px] leading-tight bg-black text-white rounded px-1 py-0.5">
+                <td class="px-3 py-3 text-xs dark:text-gray-300">
+                  <span class="inline-block text-[10px] leading-tight bg-black text-white rounded px-2 py-1 font-medium">
                     {{ ship.spb_number || `SPB-${ship.id}` }}
                   </span>
                 </td>
-                <td class="px-2 py-2 text-xs dark:text-gray-300">
-                  <div class="flex flex-col gap-0.5">
-                    <div class="text-gray-600 dark:text-gray-400 truncate">
-                      <span v-if="ship.dbl_number" class="font-medium">{{ ship.dbl_number }}</span>
+                <td class="px-3 py-3 text-xs dark:text-gray-300">
+                  <div class="flex flex-col gap-1">
+                    <div class="font-medium whitespace-nowrap">
+                      <span v-if="ship.dbl_number">{{ ship.dbl_number }}</span>
                       <span v-else class="text-gray-400">-</span>
                     </div>
-                    <div class="text-gray-500 dark:text-gray-400 truncate">
+                    <div class="text-gray-500 dark:text-gray-400 whitespace-nowrap text-[11px]">
                       {{ ship.driver_name || '-' }}
                     </div>
                   </div>
                 </td>
-                <td class="px-2 py-2 text-xs dark:text-gray-300">
-                  <div class="font-medium truncate">{{ ship.penerima_name || ship.customer_name || '-' }}</div>
-                  <div class="text-gray-500 dark:text-gray-400 truncate text-[10px]">{{ ship.penerima_phone || '' }}</div>
+                <td class="px-3 py-3 text-xs dark:text-gray-300 min-w-[150px]">
+                  <div class="font-medium">{{ ship.penerima_name || ship.customer_name || '-' }}</div>
+                  <div class="text-gray-500 dark:text-gray-400 text-[10px]">{{ ship.penerima_phone || '' }}</div>
                 </td>
-                <td class="px-2 py-2 text-xs dark:text-gray-300">
-                  <div class="truncate">{{ ship.origin }} → {{ ship.destination }}</div>
+                <td class="px-3 py-3 text-xs dark:text-gray-300 whitespace-nowrap">
+                  <div class="font-medium">{{ ship.origin }} → {{ ship.destination }}</div>
                 </td>
-                <td class="px-2 py-2 text-xs text-center dark:text-gray-300">{{ ship.total_colli }}</td>
-                <td class="px-2 py-2">
-                  <Badge :variant="getStatusVariant(ship.status)" class="text-xs">{{ statusLabelMap[ship.status]?.label || ship.status }}</Badge>
+                <td class="px-3 py-3 text-xs text-center dark:text-gray-300 font-medium whitespace-nowrap">
+                  {{ ship.total_colli }}
                 </td>
-                <td class="px-2 py-2 text-right">
-                  <div class="flex gap-1 justify-end">
-                    <Button variant="success" class="px-2 py-1 h-7 text-xs" @click="viewBarcode(ship)" title="Barcode">Barcode</Button>
-                    <Button v-if="canEdit" variant="primary" class="px-2 py-1 h-7 text-xs" @click="openEditModal(ship)" title="Edit">Edit</Button>
-                    <Button v-if="canDelete" variant="default" class="px-2 py-1 h-7 text-xs text-red-600 hover:text-red-700 bg-red-50 dark:bg-red-900/20" @click="deleteShipment(ship.id)" title="Delete">Del</Button>
+                <td class="px-3 py-3">
+                  <Badge :variant="getStatusVariant(ship.status)" class="text-xs inline-block whitespace-nowrap">{{ statusLabelMap[ship.status]?.label || ship.status }}</Badge>
+                </td>
+                <td class="px-3 py-3 text-right">
+                  <div class="flex gap-1 justify-end flex-wrap">
+                    <Button variant="success" class="px-2 py-1 h-7 text-xs whitespace-nowrap" @click="viewBarcode(ship)" title="Barcode">Barcode</Button>
+                    <Button v-if="canEdit" variant="primary" class="px-2 py-1 h-7 text-xs whitespace-nowrap" @click="openEditModal(ship)" title="Edit">Edit</Button>
+                    <Button v-if="canDelete" variant="default" class="px-2 py-1 h-7 text-xs text-red-600 hover:text-red-700 bg-red-50 dark:bg-red-900/20 whitespace-nowrap" @click="deleteShipment(ship.id)" title="Delete">Del</Button>
                   </div>
                 </td>
               </tr>
@@ -749,7 +751,7 @@ onMounted(() => {
       <!-- Mobile Card View -->
       <div
         v-if="!loading"
-        class="lg:hidden space-y-3"
+        class="lg:hidden space-y-3 px-4 lg:px-0"
       >
         <div
           v-if="shipments.length === 0"
@@ -759,65 +761,51 @@ onMounted(() => {
             Belum ada shipment
           </p>
         </div>
-        <div class="flex-1 w-full max-w-5xl mx-auto py-4 px-2 lg:px-0 space-y-4">
-          <div class="flex items-center justify-between gap-2 mb-2">
-            <div class="flex-1 min-w-0">
-              <input
-                v-model="searchQuery"
-                type="text"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                placeholder="Cari kode, SPB, DBL, supir, customer, rute, barang..."
-              />
-            </div>
-            <Button variant="primary" @click="openCreateModal" class="ml-2">+ Tambah</Button>
-          </div>
-          <div class="space-y-4">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div v-for="s in shipments" :key="s.id" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md min-w-0 flex flex-col">
-                <div class="flex items-start justify-between gap-2">
-                  <div class="flex-1 min-w-0">
-                    <div class="text-sm font-semibold dark:text-gray-100 truncate">{{ s.public_code }}</div>
-                    <div class="mt-0.5">
-                      <span class="inline-block text-[11px] leading-tight bg-black text-white rounded px-1.5 py-0.5">
-                        SPB: {{ s.spb_number || `SPB-${s.id}` }}
-                      </span>
-                    </div>
-                    <div class="flex flex-wrap gap-2 mt-1">
-                      <span
-                        v-if="s.dbl_number"
-                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100 text-[11px]"
-                      >
-                        {{ s.dbl_number }}
-                      </span>
-                      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-[11px]">
-                        {{ s.driver_name || 'Belum ada supir' }}
-                        <span v-if="s.vehicle_plate" class="text-gray-500 dark:text-gray-400">| {{ s.vehicle_plate }}</span>
-                      </span>
-                    </div>
-                    <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{{ s.customer_name || '-' }}</div>
-                    <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">{{ s.customer_address || '' }}</div>
+        <div v-else class="space-y-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div v-for="s in shipments" :key="s.id" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md flex flex-col">
+              <div class="flex items-start justify-between gap-2">
+                <div class="flex-1">
+                  <div class="text-sm font-semibold dark:text-gray-100">{{ s.public_code || 'N/A' }}</div>
+                  <div class="mt-0.5">
+                    <span class="inline-block text-[10px] leading-tight bg-black text-white rounded px-1.5 py-0.5 font-medium">
+                      {{ s.spb_number || `SPB-${s.id}` }}
+                    </span>
                   </div>
-                  <Badge :variant="getStatusVariant(s.status)" class="flex-shrink-0">{{ statusLabelMap[s.status]?.label || s.status }}</Badge>
+                  <div class="flex flex-wrap gap-1 mt-2">
+                    <span
+                      v-if="s.dbl_number"
+                      class="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-700 text-[10px]"
+                    >
+                      {{ s.dbl_number }}
+                    </span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-[10px]">
+                      {{ s.driver_name || '-' }}
+                    </span>
+                  </div>
+                  <div class="text-xs text-gray-600 dark:text-gray-400 mt-2 font-medium">{{ s.penerima_name || s.customer_name || '-' }}</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-500 truncate">{{ s.penerima_phone || '' }}</div>
                 </div>
-                <div class="text-xs space-y-1.5">
-                  <div class="flex items-start gap-2">
-                    <Icon icon="mdi:map-marker-outline" class="text-base text-gray-500 dark:text-gray-400 flex-shrink-0 mt-0.5" />
-                    <span class="dark:text-gray-300 text-xs leading-tight break-all">{{ s.origin }} → {{ s.destination }}</span>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <Icon icon="mdi:archive-outline" class="text-base text-gray-500 dark:text-gray-400 flex-shrink-0" />
-                    <span class="dark:text-gray-300 text-xs">{{ s.total_colli }} colli</span>
-                  </div>
-                  <div v-if="s.eta" class="flex items-center gap-2">
-                    <Icon icon="mdi:calendar-outline" class="text-base text-gray-500 dark:text-gray-400 flex-shrink-0" />
-                    <span class="dark:text-gray-300 text-xs">{{ formatDate(s.eta) }}</span>
-                  </div>
+                <Badge :variant="getStatusVariant(s.status)" class="flex-shrink-0 text-xs">{{ statusLabelMap[s.status]?.label || s.status }}</Badge>
+              </div>
+              <div class="border-t border-gray-100 dark:border-gray-700 pt-2 space-y-1.5 text-xs">
+                <div class="flex items-start gap-2">
+                  <Icon icon="mdi:map-marker-outline" class="text-base text-gray-400 dark:text-gray-500 flex-shrink-0 mt-0.5" />
+                  <span class="dark:text-gray-300">{{ s.origin }} → {{ s.destination }}</span>
                 </div>
-                <div class="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-700 min-w-0">
-                  <Button block variant="success" @click="viewBarcode(s)" title="Barcode">Barcode</Button>
-                  <Button v-if="canEdit" block variant="primary" @click="openEditModal(s)" title="Edit">Edit</Button>
-                  <Button v-if="canDelete" block variant="default" class="text-red-600 hover:text-red-700 bg-red-50 rounded-lg" @click="deleteShipment(s.id)" title="Hapus">Hapus</Button>
+                <div class="flex items-center gap-2">
+                  <Icon icon="mdi:archive-outline" class="text-base text-gray-400 dark:text-gray-500 flex-shrink-0" />
+                  <span class="dark:text-gray-300">{{ s.total_colli }} colli</span>
                 </div>
+                <div v-if="s.eta" class="flex items-center gap-2">
+                  <Icon icon="mdi:calendar-outline" class="text-base text-gray-400 dark:text-gray-500 flex-shrink-0" />
+                  <span class="dark:text-gray-300">{{ formatDate(s.eta) }}</span>
+                </div>
+              </div>
+              <div class="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+                <Button block variant="success" size="sm" @click="viewBarcode(s)" class="text-xs">Barcode</Button>
+                <Button v-if="canEdit" block variant="primary" size="sm" @click="openEditModal(s)" class="text-xs">Edit</Button>
+                <Button v-if="canDelete" block variant="default" size="sm" class="text-red-600 hover:text-red-700 bg-red-50 dark:bg-red-900/20 text-xs" @click="deleteShipment(s.id)">Hapus</Button>
               </div>
             </div>
           </div>

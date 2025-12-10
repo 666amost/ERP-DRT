@@ -34,6 +34,7 @@ type OutstandingItem = {
   invoice_id: number | null;
   invoice_number: string | null;
   invoice_status: string | null;
+  sj_returned?: boolean | null;
 };
 
 const items = ref<OutstandingItem[]>([]);
@@ -89,7 +90,7 @@ const filteredItems = computed(() => {
   return result;
 });
 
-const totalOutstanding = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.remaining_amount || i.nominal || 0), 0));
+const totalOutstanding = computed(() => filteredItems.value.reduce((sum, i) => sum + ((i.remaining_amount ?? i.nominal) ?? 0), 0));
 const totalColli = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_colli || 0), 0));
 const totalWeight = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_weight || 0), 0));
 
@@ -99,7 +100,10 @@ async function loadOutstanding() {
     const res = await fetch('/api/invoices?endpoint=outstanding');
     if (res.ok) {
       const data = await res.json();
-      items.value = data.items || [];
+      items.value = (data.items || []).map((i: OutstandingItem) => ({
+        ...i,
+        sj_returned: i.sj_returned ?? false
+      }));
     }
   } catch (e) {
     console.error('Failed to load outstanding:', e);
@@ -127,7 +131,8 @@ function exportExcel() {
     colli: item.total_colli,
     kg: item.total_weight || 0,
     nominal: item.nominal,
-    sisa: item.remaining_amount || item.nominal,
+    sisa: (item.remaining_amount ?? item.nominal) ?? 0,
+    sj_status: item.sj_returned ? 'Sudah balik' : 'Belum',
     tanggal: formatDate(item.created_at)
   }));
 
@@ -147,6 +152,7 @@ function exportExcel() {
       { header: 'Kg', key: 'kg', width: 10, type: 'number', align: 'right' },
       { header: 'Nominal', key: 'nominal', width: 15, type: 'currency', align: 'right' },
       { header: 'Sisa', key: 'sisa', width: 15, type: 'currency', align: 'right' },
+      { header: 'SJ', key: 'sj_status', width: 10, type: 'text', align: 'center' },
       { header: 'Tanggal', key: 'tanggal', width: 14, type: 'text', align: 'center' }
     ],
     data: exportData,
@@ -272,6 +278,7 @@ onMounted(async () => {
                 <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Kg</th>
                 <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Nominal</th>
                 <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Sisa</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">SJ Balik</th>
                 <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Tanggal</th>
               </tr>
             </thead>
@@ -291,7 +298,15 @@ onMounted(async () => {
                 <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ item.total_colli }}</td>
                 <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ (item.total_weight || 0).toFixed(1) }}</td>
                 <td class="px-2 py-2 text-right text-gray-600 dark:text-gray-400">{{ formatRupiah(item.nominal) }}</td>
-                <td class="px-2 py-2 text-right font-medium text-red-600">{{ formatRupiah(item.remaining_amount || item.nominal) }}</td>
+                <td class="px-2 py-2 text-right font-medium text-red-600">{{ formatRupiah((item.remaining_amount ?? item.nominal) ?? 0) }}</td>
+                <td class="px-2 py-2 text-left">
+                  <span
+                    class="px-2 py-0.5 rounded-full text-xs"
+                    :class="item.sj_returned ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'"
+                  >
+                    {{ item.sj_returned ? 'Sudah' : 'Belum' }}
+                  </span>
+                </td>
                 <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ formatDate(item.created_at) }}</td>
               </tr>
             </tbody>
@@ -320,7 +335,7 @@ onMounted(async () => {
                 </div>
               </div>
               <div class="text-right">
-                <div class="text-sm font-bold text-red-600">{{ formatRupiah(item.remaining_amount || item.nominal) }}</div>
+                <div class="text-sm font-bold text-red-600">{{ formatRupiah((item.remaining_amount ?? item.nominal) ?? 0) }}</div>
                 <div class="text-xs text-gray-500">{{ formatDate(item.created_at) }}</div>
               </div>
             </div>
@@ -331,6 +346,12 @@ onMounted(async () => {
             <div class="mt-2 flex gap-2 flex-wrap">
               <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-xs text-gray-700 dark:text-gray-300">{{ item.total_colli }} colli</span>
               <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-xs text-gray-700 dark:text-gray-300">{{ (item.total_weight || 0).toFixed(1) }} kg</span>
+              <span
+                class="px-2 py-0.5 rounded-full text-xs"
+                :class="item.sj_returned ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'"
+              >
+                SJ: {{ item.sj_returned ? 'Sudah' : 'Belum' }}
+              </span>
             </div>
           </div>
           <div class="border-t border-gray-200 dark:border-gray-700 pt-3 text-sm font-semibold flex justify-between">
@@ -371,6 +392,7 @@ onMounted(async () => {
             <th class="text-right" style="width: 7%">Kg</th>
             <th class="text-right" style="width: 9%">Nominal</th>
             <th class="text-right" style="width: 9%">Sisa</th>
+            <th class="text-center" style="width: 6%">SJ</th>
             <th class="text-center" style="width: 6%">Tanggal</th>
           </tr>
         </thead>
@@ -388,7 +410,8 @@ onMounted(async () => {
             <td class="text-center">{{ item.total_colli }}</td>
             <td class="text-right">{{ (item.total_weight || 0).toFixed(1) }}</td>
             <td class="text-right">{{ formatRupiah(item.nominal) }}</td>
-            <td class="text-right">{{ formatRupiah(item.remaining_amount || item.nominal) }}</td>
+            <td class="text-right">{{ formatRupiah((item.remaining_amount ?? item.nominal) ?? 0) }}</td>
+            <td class="text-center">{{ item.sj_returned ? 'Sudah' : 'Belum' }}</td>
             <td class="text-center">{{ formatDate(item.created_at) }}</td>
           </tr>
         </tbody>
@@ -399,6 +422,7 @@ onMounted(async () => {
             <td class="text-right">{{ totalWeight.toFixed(1) }}</td>
             <td class="text-right"></td>
             <td class="text-right">{{ formatRupiah(totalOutstanding) }}</td>
+            <td></td>
             <td></td>
           </tr>
         </tfoot>

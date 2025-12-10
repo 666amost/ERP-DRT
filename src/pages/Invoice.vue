@@ -31,6 +31,10 @@ type Invoice = {
   paid_amount?: number;
   remaining_amount?: number;
   dbl_id?: number | null;
+  shipment_count?: number;
+  sj_returned_count?: number;
+  sj_pending_count?: number;
+  sj_all_returned?: boolean | null;
 };
 
 type InvoicePayment = {
@@ -75,6 +79,7 @@ type Item = {
   driver_phone?: string | null;
   vehicle_plate?: string | null;
   dbl_date?: string | null;
+  sj_returned?: boolean;
 };
 
 type UnpaidShipment = {
@@ -100,6 +105,7 @@ type UnpaidShipment = {
   driver_phone?: string | null;
   vehicle_plate?: string | null;
   dbl_date?: string | null;
+  sj_returned?: boolean;
 };
 
 const invoices = ref<Invoice[]>([]);
@@ -130,17 +136,19 @@ const form = ref<CreateInvoiceForm>({
   customer_name: '',
   customer_id: null,
   amount: '',
-  status: 'partial'
+  status: 'paid'
 });
 
 const items = ref<Item[]>([]);
 const allUnpaidShipments = ref<Item[]>([]);
 const selectedShipmentIds = ref<Set<number>>(new Set());
 const selectedDblNumber = ref<string>('');
+const spbSearch = ref('');
+const showUnreturnedOnly = ref(false);
 const taxPercent = ref<number>(0);
 const discountAmount = ref<number>(0);
 const notes = ref<string>('');
-const pphPercent = ref<number>(0.5);
+const pphPercent = ref<number>(0);
 const loadingUnpaidShipments = ref(false);
 const manualAmountMode = ref(false);
 const existingPaidAmount = ref<number>(0);
@@ -197,6 +205,7 @@ async function loadAllUnpaidShipments(): Promise<void> {
         driver_phone: s.driver_phone || null,
         vehicle_plate: s.vehicle_plate || null,
         dbl_date: s.dbl_date || null,
+        sj_returned: Boolean(s.sj_returned),
         pph_rate: pphPercent.value,
         tax_type: 'include',
         item_discount: 0,
@@ -223,6 +232,18 @@ function getFilteredUnpaidShipments(): Item[] {
     result = result.filter(s => !s.dbl_number);
   } else if (selectedDblNumber.value) {
     result = result.filter(s => s.dbl_number === selectedDblNumber.value);
+  }
+  if (spbSearch.value.trim()) {
+    const q = spbSearch.value.trim().toLowerCase();
+    result = result.filter(s =>
+      (s.spb_number || '').toLowerCase().includes(q) ||
+      (s.tracking_code || '').toLowerCase().includes(q) ||
+      (s.destination_city || '').toLowerCase().includes(q) ||
+      (s.recipient_name || '').toLowerCase().includes(q)
+    );
+  }
+  if (showUnreturnedOnly.value) {
+    result = result.filter(s => !s.sj_returned);
   }
   return result;
 }
@@ -252,6 +273,24 @@ function deselectAll(): void {
   updateItemsFromSelection();
 }
 
+function setShipmentReturnStatus(shipmentId: number, value: boolean): void {
+  allUnpaidShipments.value = allUnpaidShipments.value.map(s => {
+    if (!s.shipment_id || s.shipment_id !== shipmentId) return s;
+    return { ...s, sj_returned: value };
+  });
+  items.value = items.value.map(it => {
+    if (!it.shipment_id || it.shipment_id !== shipmentId) return it;
+    return { ...it, sj_returned: value };
+  });
+}
+
+function toggleSjReturned(shipmentId?: number): void {
+  if (!shipmentId) return;
+  const target = allUnpaidShipments.value.find(s => s.shipment_id === shipmentId) || items.value.find(i => i.shipment_id === shipmentId);
+  const current = target?.sj_returned || false;
+  setShipmentReturnStatus(shipmentId, !current);
+}
+
 function updateItemsFromSelection(): void {
   items.value = allUnpaidShipments.value.filter(s => s.shipment_id && selectedShipmentIds.value.has(s.shipment_id));
   if (!manualAmountMode.value) {
@@ -266,7 +305,7 @@ function onCustomerChange(): void {
   updateItemsFromSelection();
 }
 
-async function loadItemsForInvoice(id: number | null): Promise<void> {
+async function loadItemsForInvoice(id: number | null, fallbackSpb?: string | null): Promise<void> {
   if (!id) {
     items.value = [];
     return;
@@ -274,7 +313,16 @@ async function loadItemsForInvoice(id: number | null): Promise<void> {
   try {
     const res = await fetch(`/api/invoices?endpoint=items&invoice_id=${id}`);
     const data = await res.json();
-    items.value = (data.items || []).map((i: { id?: number; shipment_id?: number|null; spb_number?: string; tracking_code?: string; unit_price?: number; description?: string; quantity?: number; tax_type?: string; item_discount?: number }) => ({ ...i, _unit_price_display: i.unit_price ? formatRupiah(i.unit_price) : '' }));
+    const fallbackSpbList = (fallbackSpb || '').split(',').map(s => s.trim()).filter(Boolean);
+    items.value = (data.items || []).map((i: { id?: number; shipment_id?: number|null; spb_number?: string; tracking_code?: string; unit_price?: number; description?: string; quantity?: number; tax_type?: string; item_discount?: number; sj_returned?: boolean }, idx: number) => {
+      const spbFromFallback = (!i.spb_number && fallbackSpbList.length > 0) ? fallbackSpbList[Math.min(idx, fallbackSpbList.length - 1)] : i.spb_number;
+      return {
+        ...i,
+        spb_number: spbFromFallback || i.tracking_code,
+        sj_returned: Boolean(i.sj_returned),
+        _unit_price_display: i.unit_price ? formatRupiah(i.unit_price) : ''
+      };
+    });
   } catch {
     items.value = [];
   }
@@ -290,11 +338,13 @@ async function saveItemsForInvoice(invoiceId: number, itemsToSave?: Item[]): Pro
       items: saveItems.map((it) => ({ 
         id: it.id, 
         shipment_id: it.shipment_id || null, 
+        spb_number: it.spb_number || null,
         description: it.description || 'Jasa pengiriman', 
         quantity: it.quantity || 1, 
         unit_price: it.unit_price || 0, 
         tax_type: it.tax_type || 'include', 
-        item_discount: it.item_discount || 0 
+        item_discount: it.item_discount || 0,
+        sj_returned: Boolean(it.sj_returned)
       })),
       tax_percent: taxPercent.value,
       discount_amount: discountAmount.value,
@@ -313,12 +363,16 @@ function calcSubtotal(): number {
   }, 0);
 }
 
+function calcDiscountedSubtotal(): number {
+  return Math.max(0, calcSubtotal() - (discountAmount.value || 0));
+}
+
 function calcPph(): number {
-  return calcSubtotal() * (pphPercent.value / 100);
+  return calcDiscountedSubtotal() * (pphPercent.value / 100);
 }
 
 function calcTotal(): number {
-  const subtotal = calcSubtotal();
+  const subtotal = calcDiscountedSubtotal();
   const pph = calcPph();
   return Math.max(0, subtotal - pph);
 }
@@ -331,7 +385,11 @@ async function loadInvoices() {
     invoices.value = (data.items || []).map((x: Partial<Invoice>) => ({
       ...x,
       tax_percent: Number(x.tax_percent || 0),
-      discount_amount: Number(x.discount_amount || 0)
+      discount_amount: Number(x.discount_amount || 0),
+      sj_all_returned: x.sj_all_returned ?? null,
+      sj_pending_count: Number(x.sj_pending_count || 0),
+      sj_returned_count: Number(x.sj_returned_count || 0),
+      shipment_count: Number(x.shipment_count || 0)
     }));
     // initialize filtered
     filterInvoices();
@@ -359,7 +417,7 @@ function filterInvoices() {
 
 function openCreateModal(): void {
   editingId.value = null;
-  form.value = { customer_name: '', customer_id: null, amount: '', status: 'partial' };
+  form.value = { customer_name: '', customer_id: null, amount: '', status: 'paid' };
   items.value = [];
   allUnpaidShipments.value = [];
   selectedShipmentIds.value = new Set();
@@ -367,10 +425,12 @@ function openCreateModal(): void {
   taxPercent.value = 0;
   discountAmount.value = 0;
   notes.value = '';
-  pphPercent.value = 0.5;
+  pphPercent.value = 0;
   manualAmountMode.value = false;
   existingPaidAmount.value = 0;
   editingCustomerName.value = '';
+  spbSearch.value = '';
+  showUnreturnedOnly.value = false;
   showModal.value = true;
   loadAllUnpaidShipments();
 }
@@ -380,6 +440,8 @@ async function openEditModal(invoice: Invoice) {
   manualAmountMode.value = true;
   existingPaidAmount.value = invoice.paid_amount || 0;
   editingCustomerName.value = invoice.customer_name || '';
+  spbSearch.value = '';
+  showUnreturnedOnly.value = false;
   form.value = {
     customer_name: invoice.customer_name,
     customer_id: invoice.customer_id,
@@ -388,9 +450,9 @@ async function openEditModal(invoice: Invoice) {
   };
   taxPercent.value = invoice.tax_percent || 0;
   discountAmount.value = invoice.discount_amount || 0;
-  pphPercent.value = invoice.pph_percent || 0.5;
+  pphPercent.value = invoice.pph_percent || 0;
   notes.value = invoice.notes || '';
-  await loadItemsForInvoice(invoice.id);
+  await loadItemsForInvoice(invoice.id, invoice.spb_number || '');
   if (items.value.length === 0) {
     items.value = [{ 
       description: 'Jasa pengiriman', 
@@ -399,7 +461,8 @@ async function openEditModal(invoice: Invoice) {
       tax_type: 'include', 
       item_discount: 0,
       spb_number: invoice.spb_number || '',
-      customer_name: invoice.customer_name
+      customer_name: invoice.customer_name,
+      sj_returned: Boolean(invoice.sj_all_returned)
     }];
   }
   showModal.value = true;
@@ -417,9 +480,20 @@ async function saveInvoice() {
     }
   }
 
+  if (items.value.length === 0) {
+    alert('Pilih minimal satu SPB sebelum menyimpan invoice');
+    return;
+  }
+
   const subtotal = calcSubtotal();
-  const pphAmount = calcPph();
-  const totalTagihan = calcTotal();
+  const subtotalAfterDiscount = calcDiscountedSubtotal();
+  const pphAmount = subtotalAfterDiscount * (pphPercent.value / 100);
+  const totalTagihan = Math.max(0, subtotalAfterDiscount - pphAmount);
+
+  if (totalTagihan <= 0) {
+    alert('Total tagihan harus lebih dari 0');
+    return;
+  }
   
   const itemsSnapshot = items.value.map(it => ({ ...it }));
 
@@ -452,6 +526,8 @@ async function saveInvoice() {
           pph_amount: pphAmount,
           remaining_amount: newRemaining,
           status: newStatus,
+          discount_amount: discountAmount.value || 0,
+          tax_percent: taxPercent.value || 0,
           notes: notes.value || undefined
         })
       });
@@ -495,14 +571,18 @@ async function saveInvoice() {
           paid_amount: paidAmount,
           remaining_amount: remainingAmount,
           status: finalStatus,
+          discount_amount: discountAmount.value || 0,
+          tax_percent: taxPercent.value || 0,
           notes: notes.value || undefined,
           items: itemsSnapshot.map(it => ({
             shipment_id: it.shipment_id || null,
+            spb_number: it.spb_number || null,
             description: it.description || 'Jasa pengiriman',
             quantity: it.quantity || 1,
             unit_price: it.unit_price || 0,
             tax_type: it.tax_type || 'include',
-            item_discount: it.item_discount || 0
+            item_discount: it.item_discount || 0,
+            sj_returned: Boolean(it.sj_returned)
           }))
         })
       });
@@ -658,6 +738,19 @@ function getPaymentStatus(inv: Invoice): { label: string; variant: 'default' | '
     return { label: 'Cicilan', variant: 'warning' };
   }
   return { label: 'Belum Bayar', variant: 'default' };
+}
+
+function getSjStatus(inv: Invoice): { label: string; variant: 'default' | 'warning' | 'success' } {
+  if (inv.sj_all_returned === null || inv.sj_all_returned === undefined) {
+    return { label: '-', variant: 'default' };
+  }
+  if (inv.shipment_count === 0) {
+    return { label: '-', variant: 'default' };
+  }
+  if (inv.sj_all_returned) {
+    return { label: 'SJ Balik', variant: 'success' };
+  }
+  return { label: 'SJ Belum', variant: 'warning' };
 }
 
 onMounted(async () => {
@@ -1180,14 +1273,14 @@ async function printInvoiceReceipt(inv: Invoice): Promise<void> {
   setTimeout(() => { win.print(); }, 250);
 }
 
-watch([items, pphPercent], () => {
+watch([items, pphPercent, discountAmount], () => {
   if (!manualAmountMode.value) {
     const total = calcTotal();
     if (!isNaN(total)) {
       form.value.amount = String(total);
     }
   }
-}, { deep: true });
+}, { deep: true, immediate: false });
 </script>
 
 <template>
@@ -1257,6 +1350,9 @@ watch([items, pphPercent], () => {
               Status
             </th>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">
+              SJ Balik
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">
               Tanggal
             </th>
             <th class="px-4 py-3 text-right text-xs font-medium text-gray-600">
@@ -1267,7 +1363,7 @@ watch([items, pphPercent], () => {
         <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
           <tr v-if="filteredInvoices.length === 0">
             <td
-              colspan="8"
+              colspan="10"
               class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"
             >
               Belum ada invoice
@@ -1304,27 +1400,33 @@ watch([items, pphPercent], () => {
                 {{ getPaymentStatus(inv).label }}
               </Badge>
             </td>
+            <td class="px-4 py-3">
+              <Badge :variant="getSjStatus(inv).variant">
+                {{ getSjStatus(inv).label }}
+              </Badge>
+              <div v-if="inv.sj_pending_count && inv.sj_pending_count > 0" class="text-[11px] text-gray-500">
+                {{ inv.sj_pending_count }} belum balik
+              </div>
+            </td>
             <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
               {{ formatDate(inv.issued_at) }}
             </td>
             <td class="px-4 py-3 text-right">
               <div class="flex items-center justify-end gap-1 flex-wrap">
                 <button
-                  v-if="inv.status !== 'paid' && (inv.remaining_amount ?? inv.amount) > 0"
+                  v-if="(inv.remaining_amount ?? inv.amount) > 0"
                   class="px-2 py-1 text-xs font-medium text-white bg-blue-500 hover:bg-blue-600 rounded transition-colors"
                   @click="openPaymentModal(inv)"
                 >
                   Bayar
                 </button>
                 <button
-                  v-if="inv.status !== 'paid'"
                   class="px-2 py-1 text-xs font-medium text-white bg-purple-500 hover:bg-purple-600 rounded transition-colors"
                   @click="openPphModal(inv)"
                 >
                   PPh
                 </button>
                 <button
-                  v-if="inv.status !== 'paid'"
                   class="px-2 py-1 text-xs font-medium text-white bg-indigo-500 hover:bg-indigo-600 rounded transition-colors"
                   @click="openEditModal(inv)"
                 >
@@ -1383,9 +1485,17 @@ watch([items, pphPercent], () => {
               {{ inv.customer_name }}
             </div>
           </div>
-          <Badge :variant="inv.status === 'paid' ? 'success' : 'warning'">
-            {{ inv.status === 'paid' ? 'Paid' : 'Pending' }}
-          </Badge>
+          <div class="flex flex-col items-end gap-1">
+            <Badge :variant="getPaymentStatus(inv).variant">
+              {{ getPaymentStatus(inv).label }}
+            </Badge>
+            <Badge :variant="getSjStatus(inv).variant">
+              {{ getSjStatus(inv).label }}
+            </Badge>
+            <div v-if="inv.sj_pending_count && inv.sj_pending_count > 0" class="text-[11px] text-orange-600">
+              {{ inv.sj_pending_count }} SJ belum balik
+            </div>
+          </div>
         </div>
         <div class="text-sm dark:text-gray-300">
           <div class="flex items-center gap-2">
@@ -1407,7 +1517,6 @@ watch([items, pphPercent], () => {
         </div>
         <div class="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-700 min-w-0">
           <Button
-            v-if="inv.status !== 'paid'"
             block
             variant="primary"
             @click="openEditModal(inv)"
@@ -1479,19 +1588,12 @@ watch([items, pphPercent], () => {
                   <option value="">Semua DBL</option>
                   <option v-if="hasUnassignedDbl" value="__no_dbl">Belum ada DBL</option>
                   <option v-for="dbl in uniqueDblNumbers" :key="dbl" :value="dbl">
-                    DBL {{ dbl }}
+                    {{ dbl.startsWith('DBL') ? dbl : `DBL ${dbl}` }}
                   </option>
                 </select>
               </div>
               <div v-if="loadingUnpaidShipments" class="text-xs text-gray-500 mt-1">
                 Memuat SPB yang belum dibayar...
-              </div>
-              <div v-if="!editingId && allUnpaidShipments.length > 0" class="text-xs text-gray-500 mt-1 space-x-1">
-                <span>Total {{ allUnpaidShipments.length }} SPB belum dibayar.</span>
-                <span v-if="form.customer_name">Filter: {{ getFilteredUnpaidShipments().length }} SPB untuk "{{ form.customer_name }}"</span>
-                <span v-if="selectedDblNumber">
-                  | DBL: {{ selectedDblNumber === '__no_dbl' ? 'Belum ada DBL' : selectedDblNumber }}
-                </span>
               </div>
             </div>
             <div class="flex flex-col gap-3">
@@ -1537,8 +1639,34 @@ watch([items, pphPercent], () => {
             </div>
           </div>
           <div v-if="!editingId">
-            <div class="flex items-center justify-between mb-2">
-              <label class="block text-sm font-medium">Daftar SPB yang belum dibayar</label>
+            <div class="flex flex-wrap items-start justify-between gap-3 mb-2">
+              <div class="space-y-1">
+                <label class="block text-sm font-medium">Daftar SPB yang belum dibayar</label>
+                <div v-if="!editingId && allUnpaidShipments.length > 0" class="text-xs text-gray-500 mt-1 space-x-1">
+                  <span>Total {{ allUnpaidShipments.length }} SPB belum dibayar.</span>
+                  <span v-if="form.customer_name">Filter: {{ getFilteredUnpaidShipments().length }} SPB untuk "{{ form.customer_name }}"</span>
+                <span v-if="selectedDblNumber">
+                  | DBL: {{ selectedDblNumber === '__no_dbl' ? 'Belum ada DBL' : (selectedDblNumber.startsWith('DBL') ? selectedDblNumber : `DBL ${selectedDblNumber}`) }}
+                </span>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 w-full sm:w-auto">
+                <input
+                  v-model="spbSearch"
+                  type="text"
+                  class="w-full sm:w-64 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  placeholder="Pencarian SPB / AWB / Kota / Penerima"
+                  :disabled="loadingUnpaidShipments"
+                >
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+              <div class="flex items-center gap-3 text-xs text-gray-600">
+                <label class="flex items-center gap-2">
+                  <input type="checkbox" v-model="showUnreturnedOnly" class="h-3 w-3" />
+                  Hanya tampilkan SJ belum balik
+                </label>
+              </div>
               <div class="flex gap-2">
                 <button
                   type="button"
@@ -1580,6 +1708,7 @@ watch([items, pphPercent], () => {
                     <th class="px-2 py-2 text-left text-xs font-medium">Nama Barang</th>
                     <th class="px-2 py-2 text-right text-xs font-medium">QTY</th>
                     <th class="px-2 py-2 text-left text-xs font-medium">Penerima</th>
+                    <th class="px-2 py-2 text-center text-xs font-medium">SJ Balik</th>
                     <th class="px-2 py-2 text-right text-xs font-medium">Tagihan</th>
                   </tr>
                 </thead>
@@ -1603,8 +1732,8 @@ watch([items, pphPercent], () => {
                       <div class="text-xs font-mono">
                         <div>{{ it.spb_number || '-' }}</div>
                         <div class="text-gray-500">{{ it.tracking_code || '-' }}</div>
-                        <div v-if="it.dbl_number" class="text-gray-500">
-                          DBL: {{ it.dbl_number }}
+                    <div v-if="it.dbl_number" class="text-gray-500">
+                          DBL: {{ it.dbl_number.startsWith('DBL') ? it.dbl_number : `DBL ${it.dbl_number}` }}
                           <span v-if="it.driver_name" class="font-normal">| {{ it.driver_name }}</span>
                         </div>
                       </div>
@@ -1619,6 +1748,15 @@ watch([items, pphPercent], () => {
                         <div>{{ it.recipient_name || '-' }}</div>
                         <div class="text-gray-500">{{ it.destination_city || '-' }}</div>
                       </div>
+                    </td>
+                    <td class="px-2 py-2 text-center">
+                      <input
+                        type="checkbox"
+                        :checked="!!it.sj_returned"
+                        @click.stop="toggleSjReturned(it.shipment_id)"
+                        class="h-4 w-4"
+                        :title="it.sj_returned ? 'Dokumen SJ sudah balik' : 'Tandai SJ sudah balik'"
+                      />
                     </td>
                     <td class="px-2 py-2 text-right text-xs font-semibold">
                       {{ formatRupiah(it.unit_price || 0) }}
@@ -1640,6 +1778,7 @@ watch([items, pphPercent], () => {
                     <th class="px-2 py-2 text-right text-xs font-medium">Berat</th>
                     <th class="px-2 py-2 text-right text-xs font-medium">QTY</th>
                     <th class="px-2 py-2 text-left text-xs font-medium">Penerima</th>
+                    <th class="px-2 py-2 text-center text-xs font-medium">SJ Balik</th>
                     <th class="px-2 py-2 text-right text-xs font-medium">Tagihan</th>
                     <th class="px-2 py-2 text-right text-xs font-medium">PPh ({{ pphPercent }}%)</th>
                     <th class="px-2 py-2 text-right text-xs font-medium">Total</th>
@@ -1655,8 +1794,8 @@ watch([items, pphPercent], () => {
                       <div class="text-xs font-mono">
                         <div>{{ it.spb_number || '-' }}</div>
                         <div class="text-gray-500">{{ it.tracking_code || '-' }}</div>
-                        <div v-if="it.dbl_number" class="text-gray-500">
-                          DBL: {{ it.dbl_number }}
+                    <div v-if="it.dbl_number" class="text-gray-500">
+                          DBL: {{ it.dbl_number.startsWith('DBL') ? it.dbl_number : `DBL ${it.dbl_number}` }}
                           <span v-if="it.driver_name" class="font-normal">| {{ it.driver_name }}</span>
                         </div>
                       </div>
@@ -1670,6 +1809,14 @@ watch([items, pphPercent], () => {
                         <div>{{ it.recipient_name || '-' }}</div>
                         <div class="text-gray-500">{{ it.destination_city || '-' }}</div>
                       </div>
+                    </td>
+                    <td class="px-2 py-2 text-center">
+                      <input
+                        type="checkbox"
+                        :checked="!!it.sj_returned"
+                        class="h-4 w-4"
+                        @change="toggleSjReturned(it.shipment_id)"
+                      />
                     </td>
                     <td class="px-2 py-2 text-right text-xs font-semibold">
                       {{ formatRupiah(it.unit_price || 0) }}
@@ -1697,6 +1844,7 @@ watch([items, pphPercent], () => {
                     <th class="px-2 py-2 text-right text-xs font-medium">Berat</th>
                     <th class="px-2 py-2 text-right text-xs font-medium">QTY</th>
                     <th class="px-2 py-2 text-left text-xs font-medium">Penerima</th>
+                    <th class="px-2 py-2 text-center text-xs font-medium">SJ Balik</th>
                     <th class="px-2 py-2 text-right text-xs font-medium">Tagihan</th>
                     <th class="px-2 py-2 text-right text-xs font-medium">PPh ({{ pphPercent }}%)</th>
                     <th class="px-2 py-2 text-right text-xs font-medium">Total</th>
@@ -1712,8 +1860,8 @@ watch([items, pphPercent], () => {
                       <div class="text-xs font-mono">
                         <div>{{ it.spb_number || '-' }}</div>
                         <div class="text-gray-500">{{ it.tracking_code || '-' }}</div>
-                        <div v-if="it.dbl_number" class="text-gray-500">
-                          DBL: {{ it.dbl_number }}
+                    <div v-if="it.dbl_number" class="text-gray-500">
+                          DBL: {{ it.dbl_number.startsWith('DBL') ? it.dbl_number : `DBL ${it.dbl_number}` }}
                           <span v-if="it.driver_name" class="font-normal">| {{ it.driver_name }}</span>
                         </div>
                       </div>
@@ -1727,6 +1875,14 @@ watch([items, pphPercent], () => {
                         <div>{{ it.recipient_name || '-' }}</div>
                         <div class="text-gray-500">{{ it.destination_city || '-' }}</div>
                       </div>
+                    </td>
+                    <td class="px-2 py-2 text-center">
+                      <input
+                        type="checkbox"
+                        :checked="!!it.sj_returned"
+                        class="h-4 w-4"
+                        @change="toggleSjReturned(it.shipment_id)"
+                      />
                     </td>
                     <td class="px-2 py-2 text-right text-xs font-semibold">
                       {{ formatRupiah(it.unit_price || 0) }}
@@ -1743,7 +1899,7 @@ watch([items, pphPercent], () => {
             </div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
             <div>
               <label class="block text-sm font-medium mb-1">PPh Rate (%)</label>
               <input
@@ -1756,6 +1912,17 @@ watch([items, pphPercent], () => {
               />
             </div>
             <div>
+              <label class="block text-sm font-medium mb-1">Diskon (Rp)</label>
+              <input
+                v-model.number="discountAmount"
+                type="number"
+                min="0"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="0"
+              />
+              <p class="text-xs text-gray-500 mt-1">Potongan tambahan di luar diskon per item</p>
+            </div>
+            <div class="sm:col-span-3">
               <label class="block text-sm font-medium mb-1">Catatan</label>
               <textarea
                 v-model="notes"
@@ -1770,6 +1937,10 @@ watch([items, pphPercent], () => {
             <div class="flex justify-between text-sm">
               <span>Subtotal:</span>
               <span class="font-semibold">{{ formatRupiah(calcSubtotal()) }}</span>
+            </div>
+            <div class="flex justify-between text-sm text-orange-600">
+              <span>Diskon:</span>
+              <span class="font-semibold">-{{ formatRupiah(discountAmount || 0) }}</span>
             </div>
             <div class="flex justify-between text-sm text-red-600">
               <span>PPh ({{ pphPercent }}%):</span>

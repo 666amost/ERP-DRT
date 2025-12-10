@@ -29,6 +29,10 @@ type Invoice = {
   tax_percent?: number;
   discount_amount?: number;
   notes?: string | null;
+  shipment_count?: number;
+  sj_returned_count?: number;
+  sj_pending_count?: number;
+  sj_all_returned?: boolean | null;
 };
 
 type InvoicePayment = {
@@ -61,11 +65,13 @@ type InvoiceItem = {
   id?: number;
   invoice_id?: number;
   shipment_id?: number | null;
+  spb_number?: string | null;
   description: string;
   quantity: number;
   unit_price: number;
   tax_type?: string;
   item_discount?: number;
+  sj_returned?: boolean;
 };
 
 type CreateInvoiceBody = {
@@ -89,11 +95,13 @@ type CreateInvoiceBody = {
   notes?: string;
   items?: {
     shipment_id?: number | null;
+    spb_number?: string | null;
     description: string;
     quantity: number;
     unit_price: number;
     tax_type?: string;
     item_discount?: number;
+    sj_returned?: boolean;
   }[];
 };
 
@@ -155,19 +163,37 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     if (status && ['partial', 'paid'].includes(status)) {
       invoices = await sql`
         select 
-          id, shipment_id, dbl_id, invoice_number, spb_number, customer_name, customer_id,
-          coalesce(amount, 0)::float as amount, 
-          coalesce(subtotal, 0)::float as subtotal,
-          coalesce(pph_percent, 0)::float as pph_percent,
-          coalesce(pph_amount, 0)::float as pph_amount,
-          coalesce(total_tagihan, amount, 0)::float as total_tagihan,
-          coalesce(paid_amount, 0)::float as paid_amount,
-          coalesce(remaining_amount, amount, 0)::float as remaining_amount,
-          status, issued_at, invoice_date, due_date, paid_at, 
-          bank_account, transfer_date, tax_percent, discount_amount, notes
-        from invoices
-        where status = ${status}
-        order by issued_at desc
+          i.id, i.shipment_id, i.dbl_id, i.invoice_number, i.spb_number, i.customer_name, i.customer_id,
+          coalesce(i.amount, 0)::float as amount, 
+          coalesce(i.subtotal, 0)::float as subtotal,
+          coalesce(i.pph_percent, 0)::float as pph_percent,
+          coalesce(i.pph_amount, 0)::float as pph_amount,
+          coalesce(i.total_tagihan, i.amount, 0)::float as total_tagihan,
+          coalesce(i.paid_amount, 0)::float as paid_amount,
+          coalesce(i.remaining_amount, i.amount, 0)::float as remaining_amount,
+          i.status, i.issued_at, i.invoice_date, i.due_date, i.paid_at, 
+          i.bank_account, i.transfer_date, i.tax_percent, i.discount_amount, i.notes,
+          coalesce(stats.shipment_count, 0)::int as shipment_count,
+          coalesce(stats.returned_count, 0)::int as sj_returned_count,
+          coalesce(stats.pending_count, 0)::int as sj_pending_count,
+          case 
+            when stats.shipment_count is null or stats.shipment_count = 0 then null
+            when coalesce(stats.pending_count, 0) = 0 then true
+            else false
+          end as sj_all_returned
+        from invoices i
+        left join lateral (
+          select 
+            count(s.id)::int as shipment_count,
+            count(*) filter (where coalesce(s.sj_returned, false))::int as returned_count,
+            count(*) filter (where coalesce(s.sj_returned, false) = false)::int as pending_count
+          from invoice_items ii
+          left join shipments s on s.id = ii.shipment_id
+          where ii.invoice_id = i.id
+            and ii.shipment_id is not null
+        ) as stats on true
+        where i.status = ${status}
+        order by i.issued_at desc
         limit ${limit} offset ${offset}
       ` as Invoice[];
       
@@ -180,18 +206,36 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     } else {
       invoices = await sql`
         select 
-          id, shipment_id, dbl_id, invoice_number, spb_number, customer_name, customer_id,
-          coalesce(amount, 0)::float as amount, 
-          coalesce(subtotal, 0)::float as subtotal,
-          coalesce(pph_percent, 0)::float as pph_percent,
-          coalesce(pph_amount, 0)::float as pph_amount,
-          coalesce(total_tagihan, amount, 0)::float as total_tagihan,
-          coalesce(paid_amount, 0)::float as paid_amount,
-          coalesce(remaining_amount, amount, 0)::float as remaining_amount,
-          status, issued_at, invoice_date, due_date, paid_at, 
-          bank_account, transfer_date, tax_percent, discount_amount, notes
-        from invoices
-        order by issued_at desc
+          i.id, i.shipment_id, i.dbl_id, i.invoice_number, i.spb_number, i.customer_name, i.customer_id,
+          coalesce(i.amount, 0)::float as amount, 
+          coalesce(i.subtotal, 0)::float as subtotal,
+          coalesce(i.pph_percent, 0)::float as pph_percent,
+          coalesce(i.pph_amount, 0)::float as pph_amount,
+          coalesce(i.total_tagihan, i.amount, 0)::float as total_tagihan,
+          coalesce(i.paid_amount, 0)::float as paid_amount,
+          coalesce(i.remaining_amount, i.amount, 0)::float as remaining_amount,
+          i.status, i.issued_at, i.invoice_date, i.due_date, i.paid_at, 
+          i.bank_account, i.transfer_date, i.tax_percent, i.discount_amount, i.notes,
+          coalesce(stats.shipment_count, 0)::int as shipment_count,
+          coalesce(stats.returned_count, 0)::int as sj_returned_count,
+          coalesce(stats.pending_count, 0)::int as sj_pending_count,
+          case 
+            when stats.shipment_count is null or stats.shipment_count = 0 then null
+            when coalesce(stats.pending_count, 0) = 0 then true
+            else false
+          end as sj_all_returned
+        from invoices i
+        left join lateral (
+          select 
+            count(s.id)::int as shipment_count,
+            count(*) filter (where coalesce(s.sj_returned, false))::int as returned_count,
+            count(*) filter (where coalesce(s.sj_returned, false) = false)::int as pending_count
+          from invoice_items ii
+          left join shipments s on s.id = ii.shipment_id
+          where ii.invoice_id = i.id
+            and ii.shipment_id is not null
+        ) as stats on true
+        order by i.issued_at desc
         limit ${limit} offset ${offset}
       ` as Invoice[];
       
@@ -263,6 +307,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       insert into invoices (
         shipment_id, invoice_number, spb_number, customer_name, customer_id, 
         amount, subtotal, pph_percent, pph_amount, total_tagihan,
+        tax_percent, discount_amount,
         paid_amount, remaining_amount, status, issued_at, notes
       ) values (
         ${body.shipment_id || null},
@@ -275,6 +320,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         ${pphPercent},
         ${pphAmount},
         ${amount},
+        ${body.tax_percent || 0},
+        ${body.discount_amount || 0},
         ${paidAmount},
         ${remainingAmount},
         ${body.status || 'partial'},
@@ -287,11 +334,32 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const invoiceId = result[0].id;
     
     if (body.items && body.items.length > 0) {
+      const spbLookup: Record<string, number> = {};
       for (const it of body.items) {
         if (!it) continue;
         const desc = it.description || 'Jasa pengiriman';
+        let shipmentId = it.shipment_id || null;
+        if (!shipmentId && it.spb_number) {
+          const spbKey = it.spb_number.trim();
+          if (spbLookup[spbKey] !== undefined) {
+            shipmentId = spbLookup[spbKey] || null;
+          } else {
+            const found = await sql`select id from shipments where spb_number = ${spbKey} limit 1` as { id: number }[];
+            shipmentId = found[0]?.id || null;
+            spbLookup[spbKey] = shipmentId || 0;
+          }
+        }
         await sql`insert into invoice_items (invoice_id, shipment_id, description, quantity, unit_price, tax_type, item_discount) 
-          values (${invoiceId}, ${it.shipment_id || null}, ${desc}, ${it.quantity || 1}, ${it.unit_price || 0}, ${it.tax_type || 'include'}, ${it.item_discount || 0})`;
+          values (${invoiceId}, ${shipmentId}, ${desc}, ${it.quantity || 1}, ${it.unit_price || 0}, ${it.tax_type || 'include'}, ${it.item_discount || 0})`;
+        if (shipmentId) {
+          const sjReturned = Boolean(it.sj_returned);
+          await sql`
+            update shipments 
+            set sj_returned = ${sjReturned},
+                sj_returned_at = case when ${sjReturned} then coalesce(sj_returned_at, now()) else null end
+            where id = ${shipmentId}
+          `;
+        }
       }
     }
     
@@ -395,7 +463,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         ii.tax_type,
         ii.item_discount::float as item_discount,
         s.spb_number,
-        s.public_code as tracking_code
+        s.public_code as tracking_code,
+        s.sj_returned
       from invoice_items ii
       left join shipments s on ii.shipment_id = s.id
       where ii.invoice_id = ${invoiceId}
@@ -411,11 +480,32 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     await sql`delete from invoice_items where invoice_id = ${body.invoice_id}`;
     const itemsToInsert = body.items || [];
     let insertedCount = 0;
+    const spbLookup: Record<string, number> = {};
     for (const it of itemsToInsert) {
       if (!it) continue;
       const desc = it.description || 'Jasa pengiriman';
-      await sql`insert into invoice_items (invoice_id, shipment_id, description, quantity, unit_price, tax_type, item_discount) values (${body.invoice_id}, ${it.shipment_id || null}, ${desc}, ${it.quantity || 1}, ${it.unit_price || 0}, ${it.tax_type || 'include'}, ${it.item_discount || 0})`;
+      let shipmentId = it.shipment_id || null;
+      if (!shipmentId && it.spb_number) {
+        const spbKey = it.spb_number.trim();
+        if (spbLookup[spbKey] !== undefined) {
+          shipmentId = spbLookup[spbKey] || null;
+        } else {
+          const found = await sql`select id from shipments where spb_number = ${spbKey} limit 1` as { id: number }[];
+          shipmentId = found[0]?.id || null;
+          spbLookup[spbKey] = shipmentId || 0;
+        }
+      }
+      await sql`insert into invoice_items (invoice_id, shipment_id, description, quantity, unit_price, tax_type, item_discount) values (${body.invoice_id}, ${shipmentId}, ${desc}, ${it.quantity || 1}, ${it.unit_price || 0}, ${it.tax_type || 'include'}, ${it.item_discount || 0})`;
       insertedCount++;
+      if (shipmentId) {
+        const sjReturned = Boolean(it.sj_returned);
+        await sql`
+          update shipments 
+          set sj_returned = ${sjReturned},
+              sj_returned_at = case when ${sjReturned} then coalesce(sj_returned_at, now()) else null end
+          where id = ${shipmentId}
+        `;
+      }
     }
     console.log(`[set-items] invoice_id=${body.invoice_id}, received=${itemsToInsert.length}, inserted=${insertedCount}`);
     const rows = await sql`select coalesce(sum((quantity*unit_price) - coalesce(item_discount,0)),0)::float as subtotal from invoice_items where invoice_id = ${body.invoice_id}` as [{ subtotal: number }];
@@ -424,8 +514,10 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const inv = await sql`select paid_amount, pph_percent, pph_amount from invoices where id = ${body.invoice_id}` as [{ paid_amount: number; pph_percent: number; pph_amount: number }];
     const paidAmount = Number(inv[0]?.paid_amount || 0);
     const pphPercent = Number(inv[0]?.pph_percent || 0);
-    const pphAmount = pphPercent > 0 ? (subtotal * pphPercent / 100) : 0;
-    const totalTagihan = subtotal - pphAmount;
+    const discountAmount = Number(body.discount_amount || 0);
+    const subtotalAfterDiscount = Math.max(0, subtotal - discountAmount);
+    const pphAmount = pphPercent > 0 ? (subtotalAfterDiscount * pphPercent / 100) : 0;
+    const totalTagihan = subtotalAfterDiscount - pphAmount;
     const remainingAmount = Math.max(0, totalTagihan - paidAmount);
     
     let status = 'pending';
@@ -440,7 +532,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       remaining_amount = ${remainingAmount},
       status = ${status},
       tax_percent = ${body.tax_percent || 0}, 
-      discount_amount = ${body.discount_amount || 0}, 
+      discount_amount = ${discountAmount}, 
       notes = ${body.notes || null} 
     where id = ${body.invoice_id}`;
     writeJson(res, { success: true, subtotal, total: totalTagihan, remaining_amount: remainingAmount });
@@ -579,7 +671,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       if (customerName) {
         shipments = await sql`
           select s.id, s.spb_number, s.pengirim_name, s.penerima_name, s.macam_barang,
-                 s.qty, s.satuan, coalesce(s.nominal, 0)::float as nominal, s.destination
+                 s.qty, s.satuan, coalesce(s.nominal, 0)::float as nominal, s.destination,
+                 coalesce(s.sj_returned, false) as sj_returned
           from dbl_items di
           join shipments s on s.id = di.shipment_id
           where di.dbl_id = ${dblId} and s.customer_name = ${customerName}
@@ -593,7 +686,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       if (inv[0]?.dbl_id) {
         shipments = await sql`
           select s.id, s.spb_number, s.pengirim_name, s.penerima_name, s.macam_barang,
-                 s.qty, s.satuan, coalesce(s.nominal, 0)::float as nominal, s.destination
+                 s.qty, s.satuan, coalesce(s.nominal, 0)::float as nominal, s.destination,
+                 coalesce(s.sj_returned, false) as sj_returned
           from dbl_items di
           join shipments s on s.id = di.shipment_id
           where di.dbl_id = ${inv[0].dbl_id} and s.customer_name = ${inv[0].customer_name}
@@ -616,6 +710,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         s.created_at,
         s.dbl_id, d.dbl_number, d.driver_name, d.driver_phone,
         d.vehicle_plate, d.dbl_date,
+        coalesce(s.sj_returned, false) as sj_returned,
         coalesce(ii_inv.id, spb_inv.id) as invoice_id, 
         coalesce(ii_inv.invoice_number, spb_inv.invoice_number) as invoice_number,
         case 
@@ -634,18 +729,19 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         ) as invoice_status
       from shipments s
       left join dbl d on d.id = s.dbl_id
-      left join invoice_items ii on ii.shipment_id = s.id
-      left join invoices ii_inv on ii_inv.id = ii.invoice_id
-      left join invoices spb_inv on spb_inv.spb_number = s.spb_number and ii.id is null
-      where s.nominal > 0
-        and (
-          (ii_inv.id is null and spb_inv.id is null)
+        left join invoice_items ii on ii.shipment_id = s.id
+        left join invoices ii_inv on ii_inv.id = ii.invoice_id
+        left join invoices spb_inv on spb_inv.spb_number = s.spb_number and ii.id is null
+        where s.nominal > 0
+          and (
+          coalesce(s.sj_returned, false) = false
+          or (ii_inv.id is null and spb_inv.id is null)
           or (ii_inv.id is not null and ii_inv.status in ('pending', 'partial'))
           or (ii_inv.id is null and spb_inv.id is not null and spb_inv.status in ('pending', 'partial'))
         )
       group by s.id, s.spb_number, s.public_code, s.customer_id, s.customer_name,
                s.origin, s.destination, s.total_colli, s.berat, s.nominal, s.created_at,
-               s.dbl_id, d.dbl_number, d.driver_name, d.driver_phone, d.vehicle_plate, d.dbl_date,
+               s.dbl_id, d.dbl_number, d.driver_name, d.driver_phone, d.vehicle_plate, d.dbl_date, s.sj_returned,
                ii_inv.id, ii_inv.invoice_number, ii_inv.remaining_amount, ii_inv.amount, ii_inv.subtotal, ii_inv.status,
                spb_inv.id, spb_inv.invoice_number, spb_inv.remaining_amount, spb_inv.status
       order by s.created_at desc

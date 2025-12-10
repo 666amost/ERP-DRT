@@ -34,6 +34,8 @@ type Shipment = {
   invoice_generated: boolean;
   keterangan: string | null;
   created_at: string;
+  sj_returned: boolean;
+  sj_returned_at?: string | null;
   driver_name?: string | null;
   driver_phone?: string | null;
   vehicle_plate?: string | null;
@@ -67,6 +69,7 @@ type CreateShipmentBody = {
   service_type?: string;
   jenis?: string;
   keterangan?: string;
+  sj_returned?: boolean;
 };
 
 type UpdateShipmentBody = {
@@ -96,6 +99,8 @@ type UpdateShipmentBody = {
   service_type?: string;
   jenis?: string;
   keterangan?: string;
+  sj_returned?: boolean;
+  sj_returned_at?: string | null;
 };
 
 const corsHeaders = {
@@ -172,6 +177,7 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
           coalesce(s.berat, 0)::float as berat, s.macam_barang, 
           coalesce(s.nominal, 0)::float as nominal, s.public_code, s.vehicle_plate_region, 
           s.shipping_address, s.service_type, s.jenis, s.dbl_id, coalesce(s.invoice_generated, false) as invoice_generated, 
+          coalesce(s.sj_returned, false) as sj_returned, s.sj_returned_at,
           s.keterangan, s.created_at,
           d.dbl_number, d.driver_name, d.driver_phone, 
           d.vehicle_plate, d.status as dbl_status
@@ -373,6 +379,15 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
         const jenis = body.jenis !== undefined ? body.jenis : existing.jenis;
         const keterangan = body.keterangan !== undefined ? body.keterangan : existing.keterangan;
         const publicCode = newPublicCode !== null ? newPublicCode : existing.public_code;
+        const sjReturned = body.sj_returned !== undefined ? body.sj_returned : existing.sj_returned;
+        let sjReturnedAt = existing.sj_returned_at;
+        if (body.sj_returned === true && !existing.sj_returned) {
+          sjReturnedAt = new Date().toISOString();
+        } else if (body.sj_returned === false) {
+          sjReturnedAt = null;
+        } else if (body.sj_returned_at !== undefined) {
+          sjReturnedAt = body.sj_returned_at;
+        }
 
         await sql`
           update shipments set
@@ -401,6 +416,8 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
             jenis = ${jenis},
             keterangan = ${keterangan},
             public_code = ${publicCode},
+            sj_returned = ${sjReturned},
+            sj_returned_at = ${sjReturned ? sjReturnedAt || new Date().toISOString() : null},
             updated_at = now()
           where id = ${body.id}
         `;
@@ -432,6 +449,8 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
           s.shipping_address as recipient_address,
           s.destination as destination_city,
           coalesce(s.nominal, 0)::float as amount,
+          coalesce(s.sj_returned, false) as sj_returned,
+          s.sj_returned_at,
           s.created_at,
           s.status
         from shipments s

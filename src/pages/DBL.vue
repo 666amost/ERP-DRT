@@ -92,6 +92,7 @@ const availableShipmentsPage = ref(1);
 const availableShipmentsTotal = ref(0);
 const availableShipmentsLimit = 100;
 const shipmentSearchQuery = ref('');
+const shipmentSearchDelay = 600;
 
 const pphPercent = ref<string>('0');
 
@@ -142,28 +143,36 @@ function getStatusVariant(status: string): 'default' | 'info' | 'warning' | 'suc
 }
 
 let shipmentSearchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let shipmentSearchRequestId = 0;
 
 watch(shipmentSearchQuery, () => {
   if (shipmentSearchDebounceTimer) clearTimeout(shipmentSearchDebounceTimer);
   shipmentSearchDebounceTimer = setTimeout(() => {
+    availableShipmentsPage.value = 1;
     loadAvailableShipments();
-  }, 300);
+  }, shipmentSearchDelay);
 });
 
-async function loadAvailableShipments() {
+async function loadAvailableShipments(page = 1, append = false) {
   loadingShipments.value = true;
+  const requestId = ++shipmentSearchRequestId;
   try {
-    const searchParam = shipmentSearchQuery.value.trim() ? `&search=${encodeURIComponent(shipmentSearchQuery.value)}` : '';
-    const res = await fetch(`/api/dbl?endpoint=available-shipments&page=1${searchParam}`);
-    if (res.ok) {
-      const data = await res.json();
-      availableShipments.value = data.items || [];
-      availableShipmentsTotal.value = data.pagination?.total || 0;
-    }
+    const searchTerm = shipmentSearchQuery.value.trim();
+    const searchParam = searchTerm ? `&search=${encodeURIComponent(searchTerm)}` : '';
+    const res = await fetch(`/api/dbl?endpoint=available-shipments&page=${page}&limit=${availableShipmentsLimit}${searchParam}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (requestId !== shipmentSearchRequestId) return;
+    const items = data.items || [];
+    availableShipments.value = append ? [...availableShipments.value, ...items] : items;
+    availableShipmentsTotal.value = data.pagination?.total || 0;
+    availableShipmentsPage.value = page;
   } catch (e) {
     console.error('Failed to load available shipments:', e);
   } finally {
-    loadingShipments.value = false;
+    if (requestId === shipmentSearchRequestId) {
+      loadingShipments.value = false;
+    }
   }
 }
 
@@ -332,23 +341,9 @@ async function openShipmentModal(dbl: DBL) {
 
 async function loadMoreShipments() {
   if (loadingShipments.value) return;
-  availableShipmentsPage.value++;
-  loadingShipments.value = true;
-
-  try {
-    const res = await fetch(`/api/dbl?endpoint=available-shipments&page=${availableShipmentsPage.value}&limit=${availableShipmentsLimit}`);
-    
-    if (res.ok) {
-      const data = await res.json();
-      availableShipments.value = [...availableShipments.value, ...(data.items || [])];
-      availableShipmentsTotal.value = data.pagination?.total || 0;
-    }
-  } catch (e) {
-    console.error('Failed to load more shipments:', e);
-    availableShipmentsPage.value--;
-  } finally {
-    loadingShipments.value = false;
-  }
+  if (availableShipments.value.length >= availableShipmentsTotal.value) return;
+  const nextPage = availableShipmentsPage.value + 1;
+  await loadAvailableShipments(nextPage, true);
 }
 
 async function addSelectedShipments() {

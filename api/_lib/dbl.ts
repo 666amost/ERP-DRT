@@ -254,6 +254,7 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
       };
 
       const updates: string[] = [];
+      if (body.dbl_number !== undefined) updates.push(`dbl_number = ${body.dbl_number ? `'${String(body.dbl_number).replace(/'/g, "''")}'` : 'NULL'}`);
       if (body.dbl_date !== undefined) updates.push(`dbl_date = ${body.dbl_date ? `'${body.dbl_date}'` : 'NULL'}`);
       if (body.vehicle_plate !== undefined) updates.push(`vehicle_plate = ${escapeStr(body.vehicle_plate)}`);
       if (body.driver_name !== undefined) updates.push(`driver_name = ${escapeStr(body.driver_name)}`);

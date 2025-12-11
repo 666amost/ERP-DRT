@@ -156,6 +156,14 @@ const corsHeaders = {
   'Access-Control-Allow-Credentials': 'true'
 };
 
+function parseSpbList(value?: string | null): string[] {
+  if (!value) return [];
+  return value
+    .split(/[,;\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 async function generateInvoiceNumber(sql: Sql): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `INV-${year}-`;
@@ -324,29 +332,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       item_discount: Number(it?.item_discount || 0),
       sj_returned: Boolean(it?.sj_returned)
     }));
-    
-    const discountAmount = Number(body.discount_amount || 0);
-    const subtotalFromItems = itemsForCalc.reduce((sum, it) => sum + ((it.quantity || 1) * (it.unit_price || 0) - (it.item_discount || 0)), 0);
-    const subtotalAfterDiscount = Math.max(0, subtotalFromItems - discountAmount);
-    const pphPercentVal = Number(body.pph_percent || 0);
-    const pphAmountCalc = pphPercentVal > 0 ? (subtotalAfterDiscount * pphPercentVal / 100) : 0;
-    const calculatedTotal = Math.max(0, subtotalAfterDiscount - pphAmountCalc);
-    const amountFromBody = body.amount !== undefined ? Number(body.amount) : 0;
-    const totalTagihan = calculatedTotal > 0 ? calculatedTotal : amountFromBody;
-    const subtotalToUse = subtotalFromItems > 0 ? subtotalFromItems : (body.subtotal !== undefined ? Number(body.subtotal) : totalTagihan);
-    const pphAmountToUse = subtotalFromItems > 0 ? pphAmountCalc : Number(body.pph_amount || 0);
-    
-    if (!totalTagihan || totalTagihan <= 0) { writeJson(res, { error: 'Nominal/Amount harus diisi dan lebih dari 0' }, 400); return; }
-    
-    let status = body.status || 'pending';
-    let paidAmount = Math.max(0, Number(body.paid_amount || 0));
-    if (status === 'paid' && paidAmount === 0) {
-      paidAmount = totalTagihan;
-    }
-    const remainingAmount = body.remaining_amount !== undefined ? Math.max(0, Number(body.remaining_amount)) : Math.max(0, totalTagihan - paidAmount);
-    if (remainingAmount <= 0 && paidAmount > 0) status = 'paid';
-    else if (paidAmount > 0) status = 'partial';
-    else if (!status) status = 'pending';
+    const spbFromHeader = parseSpbList(body.spb_number);
     
     const runInTxn = sql.begin
       ? sql.begin.bind(sql)
@@ -406,6 +392,61 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           shipment_id: it.shipment_id || (it.spb_number ? (spbLookup[it.spb_number] || null) : null)
         }));
         
+        const existingSpbSet = new Set(
+          normalizedItems
+            .map((it) => (it.spb_number || '').toLowerCase())
+            .filter(Boolean)
+        );
+        const extraSpb = spbFromHeader
+          .map((s) => s.toLowerCase())
+          .filter((s) => !!s && !existingSpbSet.has(s));
+        if (extraSpb.length > 0) {
+          const extraRows = await trx`
+            select id, spb_number, coalesce(nominal, 0)::float as nominal, coalesce(customer_name, '') as customer_name
+            from shipments
+            where lower(spb_number) = any(${extraSpb})
+          ` as { id: number; spb_number: string | null; nominal: number; customer_name: string | null }[];
+          for (const row of extraRows) {
+            if (!row.spb_number) continue;
+            normalizedItems.push({
+              shipment_id: row.id || null,
+              spb_number: row.spb_number,
+              description: 'Jasa pengiriman',
+              quantity: 1,
+              unit_price: row.nominal || 0,
+              tax_type: 'include',
+              item_discount: 0,
+              sj_returned: false
+            });
+            existingSpbSet.add(row.spb_number.toLowerCase());
+          }
+        }
+        
+        if (normalizedItems.length === 0) {
+          throw new Error('INVALID_ITEMS');
+        }
+        
+        const discountAmount = Number(body.discount_amount || 0);
+        const subtotalFromItems = normalizedItems.reduce((sum, it) => sum + ((it.quantity || 1) * (it.unit_price || 0) - (it.item_discount || 0)), 0);
+        const subtotalAfterDiscount = Math.max(0, subtotalFromItems - discountAmount);
+        const pphPercentVal = Number(body.pph_percent || 0);
+        const pphAmountCalc = pphPercentVal > 0 ? (subtotalAfterDiscount * pphPercentVal / 100) : 0;
+        const calculatedTotal = Math.max(0, subtotalAfterDiscount - pphAmountCalc);
+        const totalTagihan = calculatedTotal > 0 ? calculatedTotal : Math.max(0, Number(body.amount || 0));
+        if (!totalTagihan || totalTagihan <= 0) {
+          throw new Error('INVALID_TOTAL');
+        }
+        
+        let status = body.status || 'pending';
+        let paidAmount = Math.max(0, Number(body.paid_amount || 0));
+        if (status === 'paid' && paidAmount === 0) {
+          paidAmount = totalTagihan;
+        }
+        const remainingAmount = body.remaining_amount !== undefined ? Math.max(0, Number(body.remaining_amount)) : Math.max(0, totalTagihan - paidAmount);
+        if (remainingAmount <= 0 && paidAmount > 0) status = 'paid';
+        else if (paidAmount > 0) status = 'partial';
+        else if (!status) status = 'pending';
+        
         const result = await trx`
           insert into invoices (
             shipment_id, invoice_number, spb_number, customer_name, customer_id, 
@@ -419,9 +460,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             ${customerName},
             ${customerId},
             ${totalTagihan},
-            ${subtotalToUse},
+            ${subtotalFromItems > 0 ? subtotalFromItems : totalTagihan},
             ${pphPercentVal},
-            ${pphAmountToUse},
+            ${pphAmountCalc},
             ${totalTagihan},
             ${body.tax_percent || 0},
             ${discountAmount},
@@ -489,6 +530,14 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       const msg = err instanceof Error ? err.message : '';
       if (msg === 'CUSTOMER_NOT_FOUND') {
         writeJson(res, { error: 'Invalid customer_id' }, 400);
+        return;
+      }
+      if (msg === 'INVALID_TOTAL') {
+        writeJson(res, { error: 'Nominal/Amount harus diisi dan lebih dari 0' }, 400);
+        return;
+      }
+      if (msg === 'INVALID_ITEMS') {
+        writeJson(res, { error: 'Minimal 1 SPB harus dipilih' }, 400);
         return;
       }
       console.error('Invoices API error (create):', err);

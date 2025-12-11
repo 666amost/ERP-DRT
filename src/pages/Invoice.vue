@@ -73,6 +73,7 @@ type Item = {
   item_discount?: number;
   _unit_price_display?: string;
   customer_name?: string;
+  pengirim_name?: string | null;
   customer_id?: number | null;
   dbl_number?: string | null;
   driver_name?: string | null;
@@ -88,6 +89,7 @@ type UnpaidShipment = {
   tracking_code: string;
   customer_id: number | null;
   customer_name: string | null;
+  pengirim_name?: string | null;
   description: string;
   weight: number;
   qty: number;
@@ -153,6 +155,7 @@ const loadingUnpaidShipments = ref(false);
 const manualAmountMode = ref(false);
 const existingPaidAmount = ref<number>(0);
 const editingCustomerName = ref<string>('');
+const invoiceFilterType = ref<'pengirim' | 'penerima'>('penerima');
 
 const uniqueCustomerNames = computed(() => {
   const names = new Set<string>();
@@ -160,7 +163,7 @@ const uniqueCustomerNames = computed(() => {
     names.add(editingCustomerName.value);
   }
   allUnpaidShipments.value.forEach(s => {
-    if (s.customer_name) {
+    if (s.customer_name && s.customer_name !== '-') {
       names.add(s.customer_name);
     }
   });
@@ -182,7 +185,7 @@ const hasUnassignedDbl = computed(() => allUnpaidShipments.value.some(s => !s.db
 async function loadAllUnpaidShipments(): Promise<void> {
   loadingUnpaidShipments.value = true;
   try {
-    const res = await fetch('/api/shipments?endpoint=all-unpaid');
+    const res = await fetch(`/api/shipments?endpoint=all-unpaid&filter_type=${invoiceFilterType.value}`);
     const data = await res.json();
     
     if (data.shipments && data.shipments.length > 0) {
@@ -192,6 +195,7 @@ async function loadAllUnpaidShipments(): Promise<void> {
         spb_number: s.spb_number,
         tracking_code: s.tracking_code,
         customer_name: s.customer_name || '-',
+        pengirim_name: s.pengirim_name || null,
         customer_id: s.customer_id,
         description: s.description || '-',
         weight: s.weight || 0,
@@ -224,27 +228,36 @@ async function loadAllUnpaidShipments(): Promise<void> {
 
 function getFilteredUnpaidShipments(): Item[] {
   let result = allUnpaidShipments.value;
+  
   if (form.value.customer_name) {
     const customerName = form.value.customer_name.toLowerCase();
-    result = result.filter(s => s.customer_name?.toLowerCase() === customerName);
+    result = result.filter(s => {
+      const shipmentCustomerName = (s.customer_name || '').toLowerCase();
+      return shipmentCustomerName === customerName;
+    });
   }
+  
   if (selectedDblNumber.value === '__no_dbl') {
     result = result.filter(s => !s.dbl_number);
   } else if (selectedDblNumber.value) {
     result = result.filter(s => s.dbl_number === selectedDblNumber.value);
   }
+  
   if (spbSearch.value.trim()) {
     const q = spbSearch.value.trim().toLowerCase();
     result = result.filter(s =>
       (s.spb_number || '').toLowerCase().includes(q) ||
       (s.tracking_code || '').toLowerCase().includes(q) ||
       (s.destination_city || '').toLowerCase().includes(q) ||
-      (s.recipient_name || '').toLowerCase().includes(q)
+      (s.recipient_name || '').toLowerCase().includes(q) ||
+      (s.pengirim_name || '').toLowerCase().includes(q)
     );
   }
+  
   if (showUnreturnedOnly.value) {
     result = result.filter(s => !s.sj_returned);
   }
+  
   return result;
 }
 
@@ -284,7 +297,7 @@ function setShipmentReturnStatus(shipmentId: number, value: boolean): void {
   });
 }
 
-function toggleSjReturned(shipmentId?: number): void {
+function toggleSjReturned(shipmentId?: number | null): void {
   if (!shipmentId) return;
   const target = allUnpaidShipments.value.find(s => s.shipment_id === shipmentId) || items.value.find(i => i.shipment_id === shipmentId);
   const current = target?.sj_returned || false;
@@ -431,6 +444,7 @@ function openCreateModal(): void {
   editingCustomerName.value = '';
   spbSearch.value = '';
   showUnreturnedOnly.value = false;
+  invoiceFilterType.value = 'penerima';
   showModal.value = true;
   loadAllUnpaidShipments();
 }
@@ -534,61 +548,86 @@ async function saveInvoice() {
       if (!res.ok) throw new Error('Update failed');
       await saveItemsForInvoice(editingId.value, itemsSnapshot);
     } else {
-      let paidAmount = 0;
-      let remainingAmount = totalTagihan;
-      let finalStatus = form.value.status || 'pending';
-      
-      if (manualAmountMode.value && inputAmount > 0) {
-        paidAmount = inputAmount;
-        remainingAmount = Math.max(0, totalTagihan - paidAmount);
-        if (remainingAmount <= 0) {
-          finalStatus = 'paid';
-        } else if (paidAmount > 0) {
-          finalStatus = 'partial';
+      const createdInvoices: string[] = [];
+      const failedInvoices: { spb: string; error: string }[] = [];
+
+      for (const item of itemsSnapshot) {
+        try {
+          const itemSubtotal = (item.quantity || 1) * (item.unit_price || 0);
+          const itemDiscountAmount = item.item_discount || 0;
+          const itemSubtotalAfterDiscount = itemSubtotal - itemDiscountAmount;
+          const itemPphAmount = itemSubtotalAfterDiscount * (pphPercent.value / 100);
+          const itemTotalTagihan = Math.max(0, itemSubtotalAfterDiscount - itemPphAmount);
+
+          let paidAmount = 0;
+          let remainingAmount = itemTotalTagihan;
+          let finalStatus = form.value.status || 'pending';
+          
+          if (manualAmountMode.value && inputAmount > 0) {
+            paidAmount = inputAmount;
+            remainingAmount = Math.max(0, itemTotalTagihan - paidAmount);
+            if (remainingAmount <= 0) {
+              finalStatus = 'paid';
+            } else if (paidAmount > 0) {
+              finalStatus = 'partial';
+            }
+          } else if (form.value.status === 'paid') {
+            paidAmount = itemTotalTagihan;
+            remainingAmount = 0;
+          }
+
+          const res = await fetch('/api/invoices?endpoint=create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              shipment_id: item.shipment_id || null,
+              spb_number: item.spb_number || null,
+              customer_name: form.value.customer_name,
+              customer_id: form.value.customer_id || undefined,
+              amount: itemTotalTagihan,
+              subtotal: itemSubtotal,
+              pph_percent: pphPercent.value,
+              pph_amount: itemPphAmount,
+              paid_amount: paidAmount,
+              remaining_amount: remainingAmount,
+              status: finalStatus,
+              discount_amount: itemDiscountAmount || 0,
+              tax_percent: taxPercent.value || 0,
+              notes: notes.value || undefined,
+              items: [{
+                shipment_id: item.shipment_id || null,
+                spb_number: item.spb_number || null,
+                description: item.description || 'Jasa pengiriman',
+                quantity: item.quantity || 1,
+                unit_price: item.unit_price || 0,
+                tax_type: item.tax_type || 'include',
+                item_discount: item.item_discount || 0,
+                sj_returned: Boolean(item.sj_returned)
+              }]
+            })
+          });
+          
+          const created = await res.json();
+          if (!res.ok) {
+            throw new Error(created.error || 'Create failed');
+          }
+          
+          createdInvoices.push(item.spb_number || item.tracking_code || 'N/A');
+        } catch (error) {
+          failedInvoices.push({
+            spb: item.spb_number || item.tracking_code || 'N/A',
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
         }
-      } else if (form.value.status === 'paid') {
-        paidAmount = totalTagihan;
-        remainingAmount = 0;
+      }
+
+      if (createdInvoices.length > 0) {
+        alert(`Berhasil membuat ${createdInvoices.length} invoice dari ${itemsSnapshot.length} SPB`);
       }
       
-      const allSpbNumbers = itemsSnapshot
-        .map(it => it.spb_number || it.tracking_code)
-        .filter(Boolean)
-        .join(', ');
-      
-      const res = await fetch('/api/invoices?endpoint=create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shipment_id: itemsSnapshot[0]?.shipment_id || null,
-          spb_number: allSpbNumbers || null,
-          customer_name: form.value.customer_name,
-          customer_id: form.value.customer_id || undefined,
-          amount: totalTagihan,
-          subtotal: subtotal,
-          pph_percent: pphPercent.value,
-          pph_amount: pphAmount,
-          paid_amount: paidAmount,
-          remaining_amount: remainingAmount,
-          status: finalStatus,
-          discount_amount: discountAmount.value || 0,
-          tax_percent: taxPercent.value || 0,
-          notes: notes.value || undefined,
-          items: itemsSnapshot.map(it => ({
-            shipment_id: it.shipment_id || null,
-            spb_number: it.spb_number || null,
-            description: it.description || 'Jasa pengiriman',
-            quantity: it.quantity || 1,
-            unit_price: it.unit_price || 0,
-            tax_type: it.tax_type || 'include',
-            item_discount: it.item_discount || 0,
-            sj_returned: Boolean(it.sj_returned)
-          }))
-        })
-      });
-      const created = await res.json();
-      if (!res.ok) {
-        throw new Error(created.error || 'Create failed');
+      if (failedInvoices.length > 0) {
+        console.error('Failed invoices:', failedInvoices);
+        alert(`${failedInvoices.length} invoice gagal dibuat. Silakan cek console untuk detail.`);
       }
     }
     showModal.value = false;
@@ -1281,6 +1320,16 @@ watch([items, pphPercent, discountAmount], () => {
     }
   }
 }, { deep: true, immediate: false });
+
+watch(() => invoiceFilterType.value, () => {
+  selectedShipmentIds.value.clear();
+  items.value = [];
+  form.value.customer_name = '';
+  form.value.customer_id = null;
+  selectedDblNumber.value = '';
+  spbSearch.value = '';
+  showUnreturnedOnly.value = false;
+});
 </script>
 
 <template>
@@ -1561,6 +1610,42 @@ watch([items, pphPercent, discountAmount], () => {
           {{ editingId ? 'Edit Invoice' : 'Tambah Invoice' }}
         </div>
         <div class="space-y-3">
+          <div v-if="!editingId" class="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-700">
+            <label class="block text-sm font-semibold mb-3 text-gray-700 dark:text-gray-200">Tagihan untuk:</label>
+            <div class="flex gap-3">
+              <button
+                type="button"
+                @click="() => { invoiceFilterType = 'penerima'; loadAllUnpaidShipments(); }"
+                :class="[
+                  'flex-1 px-4 py-3 rounded-lg font-medium transition-all duration-200',
+                  invoiceFilterType === 'penerima'
+                    ? 'bg-blue-600 text-white shadow-md transform scale-105'
+                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600'
+                ]"
+              >
+                <Icon icon="mdi:package-variant-closed" class="inline-block mr-2 text-lg" />
+                Penerima (Customer)
+              </button>
+              <button
+                type="button"
+                @click="() => { invoiceFilterType = 'pengirim'; loadAllUnpaidShipments(); }"
+                :class="[
+                  'flex-1 px-4 py-3 rounded-lg font-medium transition-all duration-200',
+                  invoiceFilterType === 'pengirim'
+                    ? 'bg-green-600 text-white shadow-md transform scale-105'
+                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-green-50 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600'
+                ]"
+              >
+                <Icon icon="mdi:truck-delivery" class="inline-block mr-2 text-lg" />
+                Pengirim
+              </button>
+            </div>
+            <div class="mt-2 text-xs text-gray-600 dark:text-gray-400">
+              <span v-if="invoiceFilterType === 'penerima'">Menampilkan tagihan untuk penerima barang (customer biasa)</span>
+              <span v-else>Menampilkan tagihan untuk pengirim barang</span>
+            </div>
+          </div>
+          
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
             <div class="sm:col-span-2 space-y-2">
               <div>
@@ -1655,7 +1740,7 @@ watch([items, pphPercent, discountAmount], () => {
                   v-model="spbSearch"
                   type="text"
                   class="w-full sm:w-64 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  placeholder="Pencarian SPB / AWB / Kota / Penerima"
+                  placeholder="Cari: SPB, AWB, Kota, Penerima, Pengirim"
                   :disabled="loadingUnpaidShipments"
                 >
               </div>

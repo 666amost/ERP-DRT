@@ -434,36 +434,54 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
         return
       }
     } else if (endpoint === 'all-unpaid' && req.method === 'GET') {
-      const shipments = await sql`
-        select 
-          s.id, s.spb_number, s.public_code as tracking_code, 
-          s.customer_id, coalesce(s.customer_name, c.name, 'Tanpa Customer') as customer_name,
-          s.dbl_id, d.dbl_number, d.driver_name, d.driver_phone,
-          d.vehicle_plate, d.dbl_date,
-          s.macam_barang as description,
-          coalesce(s.berat, 0)::float as weight,
-          coalesce(s.qty, 1)::int as qty,
-          s.satuan as unit,
-          s.total_colli,
-          s.penerima_name as recipient_name,
-          s.shipping_address as recipient_address,
-          s.destination as destination_city,
-          coalesce(s.nominal, 0)::float as amount,
-          coalesce(s.sj_returned, false) as sj_returned,
-          s.sj_returned_at,
-          s.created_at,
-          s.status
-        from shipments s
-        left join customers c on c.id = s.customer_id
-        left join dbl d on d.id = s.dbl_id
-        left join invoice_items ii on ii.shipment_id = s.id
-        left join invoices i on i.id = ii.invoice_id
-        where s.nominal > 0
-          and (i.id is null or i.status = 'cancelled')
-        order by s.created_at desc
-      `;
-      writeJson(res, { shipments });
-      return;;
+      const filterType = url.searchParams.get('filter_type') || 'penerima';
+      
+      try {
+        const query = `
+          select 
+            s.id, s.spb_number, s.public_code as tracking_code, 
+            s.customer_id, 
+            ${filterType === 'pengirim'
+              ? "coalesce(s.pengirim_name, s.customer_name, c.name, 'Tanpa Customer') as customer_name"
+              : "coalesce(s.customer_name, c.name, 'Tanpa Customer') as customer_name"
+            },
+            s.pengirim_name,
+            s.dbl_id, d.dbl_number, d.driver_name, d.driver_phone,
+            d.vehicle_plate, d.dbl_date::date as dbl_date,
+            s.macam_barang as description,
+            coalesce(s.berat, 0)::float as weight,
+            coalesce(s.qty, 1)::int as qty,
+            s.satuan as unit,
+            s.total_colli,
+            s.penerima_name as recipient_name,
+            s.shipping_address as recipient_address,
+            s.destination as destination_city,
+            coalesce(s.nominal, 0)::float as amount,
+            coalesce(s.sj_returned, false) as sj_returned,
+            s.sj_returned_at,
+            s.created_at,
+            s.status
+          from shipments s
+          left join customers c on c.id = s.customer_id
+          left join dbl d on d.id = s.dbl_id
+          left join invoice_items ii on ii.shipment_id = s.id
+          left join invoices i on i.id = ii.invoice_id
+          where s.nominal > 0
+            and (i.id is null or i.status = 'cancelled')
+          order by s.created_at desc
+        `;
+
+        const shipments = await sql(query as never) as unknown[];
+        writeJson(res, { shipments });
+        return;
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const errStack = err instanceof Error ? err.stack : '';
+        console.error('[shipments/all-unpaid] Error:', errMsg);
+        console.error('[shipments/all-unpaid] Stack:', errStack);
+        writeJson(res, { error: 'Failed to load unpaid shipments', details: errMsg }, 500);
+        return;
+      }
 
     } else if (endpoint === 'delete' && req.method === 'DELETE') {
       const id = url.searchParams.get('id');

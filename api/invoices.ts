@@ -1,6 +1,7 @@
 export const config = { runtime: 'nodejs' };
 
 import { getSql } from './_lib/db.js';
+import type { Sql } from './_lib/db.js';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { readJsonNode, writeJson } from './_lib/http.js';
 
@@ -74,6 +75,17 @@ type InvoiceItem = {
   sj_returned?: boolean;
 };
 
+type NormalizedItem = {
+  shipment_id: number | null;
+  spb_number: string | null;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  tax_type: string;
+  item_discount: number;
+  sj_returned: boolean;
+};
+
 type CreateInvoiceBody = {
   shipment_id?: number;
   spb_number?: string;
@@ -102,6 +114,8 @@ type CreateInvoiceBody = {
     tax_type?: string;
     item_discount?: number;
     sj_returned?: boolean;
+    customer_name?: string;
+    customer_id?: number;
   }[];
 };
 
@@ -142,6 +156,36 @@ const corsHeaders = {
   'Access-Control-Allow-Credentials': 'true'
 };
 
+async function generateInvoiceNumber(sql: Sql): Promise<string> {
+  const year = new Date().getFullYear();
+  const prefix = `INV-${year}-`;
+  try {
+    const res = await sql`select generate_invoice_number() as num` as [{ num: string }];
+    if (res?.[0]?.num) return res[0].num;
+  } catch (err) {
+    console.warn('[invoices] generate_invoice_number() missing, fallback to local generator');
+  }
+
+  const maxResult = await sql`
+    select invoice_number from invoices
+    where invoice_number like ${prefix + '%'}
+    order by invoice_number desc
+    limit 1
+    for update
+  ` as [{ invoice_number: string }];
+
+  let nextNum = 1;
+  const lastNumber = maxResult[0]?.invoice_number;
+  if (lastNumber) {
+    const match = lastNumber.match(/INV-\d{4}-(\d+)/);
+    if (match?.[1]) {
+      nextNum = parseInt(match[1], 10) + 1;
+    }
+  }
+
+  return `INV-${year}-${String(nextNum).padStart(4, '0')}`;
+}
+
 export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method === 'OPTIONS') { res.writeHead(204, corsHeaders); res.end(); return; }
 
@@ -149,7 +193,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   const endpoint = url.searchParams.get('endpoint');
 
   try {
-    const sql = getSql();
+    const sql = getSql() as Sql & { begin?: <T>(fn: (sql: Sql) => Promise<T>) => Promise<T> };
 
   if (endpoint === 'list' && req.method === 'GET') {
     const page = parseInt(url.searchParams.get('page') || '1');
@@ -261,117 +305,196 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     try { body = await readJsonNode(req) as CreateInvoiceBody; } catch { body = null as any; }
     if (!body) { writeJson(res, { error: 'Invalid JSON' }, 400); return; }
     
+    if (!body.customer_name && !body.customer_id) {
+      const itemCustomer = body.items?.find((it) => it?.customer_name || it?.customer_id);
+      if (itemCustomer?.customer_name) body.customer_name = itemCustomer.customer_name;
+      if (!body.customer_id && itemCustomer?.customer_id) body.customer_id = itemCustomer.customer_id;
+    }
+    
     if (!body.customer_name && !body.customer_id) { writeJson(res, { error: 'Customer harus diisi' }, 400); return; }
     
-    const amount = body.amount !== undefined ? Number(body.amount) : 0;
-    if (!amount || amount <= 0) { writeJson(res, { error: 'Nominal/Amount harus diisi dan lebih dari 0' }, 400); return; }
+    const rawItems = Array.isArray(body.items) ? body.items.filter(Boolean) : [];
+    const itemsForCalc: NormalizedItem[] = rawItems.map((it) => ({
+      shipment_id: it?.shipment_id ?? null,
+      spb_number: it?.spb_number?.trim() || null,
+      description: it?.description || 'Jasa pengiriman',
+      quantity: Number(it?.quantity || 1),
+      unit_price: Number(it?.unit_price || 0),
+      tax_type: it?.tax_type || 'include',
+      item_discount: Number(it?.item_discount || 0),
+      sj_returned: Boolean(it?.sj_returned)
+    }));
     
-    const year = new Date().getFullYear();
-    const prefix = `INV-${year}-`;
-    const maxResult = await sql`
-      select invoice_number from invoices
-      where invoice_number like ${prefix + '%'}
-      order by invoice_number desc
-      limit 1
-    ` as [{ invoice_number: string }] | [];
+    const discountAmount = Number(body.discount_amount || 0);
+    const subtotalFromItems = itemsForCalc.reduce((sum, it) => sum + ((it.quantity || 1) * (it.unit_price || 0) - (it.item_discount || 0)), 0);
+    const subtotalAfterDiscount = Math.max(0, subtotalFromItems - discountAmount);
+    const pphPercentVal = Number(body.pph_percent || 0);
+    const pphAmountCalc = pphPercentVal > 0 ? (subtotalAfterDiscount * pphPercentVal / 100) : 0;
+    const calculatedTotal = Math.max(0, subtotalAfterDiscount - pphAmountCalc);
+    const amountFromBody = body.amount !== undefined ? Number(body.amount) : 0;
+    const totalTagihan = calculatedTotal > 0 ? calculatedTotal : amountFromBody;
+    const subtotalToUse = subtotalFromItems > 0 ? subtotalFromItems : (body.subtotal !== undefined ? Number(body.subtotal) : totalTagihan);
+    const pphAmountToUse = subtotalFromItems > 0 ? pphAmountCalc : Number(body.pph_amount || 0);
     
-    let nextNum = 1;
-    if (maxResult.length > 0 && maxResult[0]?.invoice_number) {
-      const match = maxResult[0]?.invoice_number.match(/INV-\d{4}-(\d+)/);
-      if (match?.[1]) {
-        nextNum = parseInt(match[1], 10) + 1;
-      }
+    if (!totalTagihan || totalTagihan <= 0) { writeJson(res, { error: 'Nominal/Amount harus diisi dan lebih dari 0' }, 400); return; }
+    
+    let status = body.status || 'pending';
+    let paidAmount = Math.max(0, Number(body.paid_amount || 0));
+    if (status === 'paid' && paidAmount === 0) {
+      paidAmount = totalTagihan;
     }
-    const invoiceNumber = `INV-${year}-${String(nextNum).padStart(4, '0')}`;
+    const remainingAmount = body.remaining_amount !== undefined ? Math.max(0, Number(body.remaining_amount)) : Math.max(0, totalTagihan - paidAmount);
+    if (remainingAmount <= 0 && paidAmount > 0) status = 'paid';
+    else if (paidAmount > 0) status = 'partial';
+    else if (!status) status = 'pending';
     
-    let customerName = body.customer_name;
-    let customerId = body.customer_id || null;
-    if (!customerName && customerId) {
-      const c = await sql`select name from customers where id = ${customerId}` as [{ name: string }];
-      if (!c.length) { writeJson(res, { error: 'Invalid customer_id' }, 400); return; }
-      customerName = c[0].name;
-    }
-    let spb: string | null = body.spb_number || null;
-    if (!spb && body.shipment_id) {
-      const s = await sql`select spb_number from shipments where id = ${body.shipment_id}` as [{ spb_number: string | null }];
-      spb = s[0]?.spb_number || null;
-    }
+    const runInTxn = sql.begin
+      ? sql.begin.bind(sql)
+      : async <T>(fn: (client: Sql) => Promise<T>) => {
+          const client = getSql();
+          try {
+            await client`begin`;
+            const result = await fn(client);
+            await client`commit`;
+            return result;
+          } catch (e) {
+            try { await client`rollback`; } catch { /* ignore rollback errors */ }
+            throw e;
+          }
+        };
     
-    const subtotal = body.subtotal || amount;
-    const pphPercent = body.pph_percent || 0;
-    const pphAmount = body.pph_amount || 0;
-    const paidAmount = body.paid_amount || 0;
-    const remainingAmount = body.remaining_amount !== undefined ? body.remaining_amount : (amount - paidAmount);
-    
-    const result = await sql`
-      insert into invoices (
-        shipment_id, invoice_number, spb_number, customer_name, customer_id, 
-        amount, subtotal, pph_percent, pph_amount, total_tagihan,
-        tax_percent, discount_amount,
-        paid_amount, remaining_amount, status, issued_at, notes
-      ) values (
-        ${body.shipment_id || null},
-        ${invoiceNumber},
-        ${spb},
-        ${customerName},
-        ${customerId},
-        ${amount},
-        ${subtotal},
-        ${pphPercent},
-        ${pphAmount},
-        ${amount},
-        ${body.tax_percent || 0},
-        ${body.discount_amount || 0},
-        ${paidAmount},
-        ${remainingAmount},
-        ${body.status || 'partial'},
-        now(),
-        ${body.notes || null}
-      )
-      returning id
-    ` as [{ id: number }];
-    
-    const invoiceId = result[0].id;
-    
-    if (body.items && body.items.length > 0) {
-      const spbLookup: Record<string, number> = {};
-      for (const it of body.items) {
-        if (!it) continue;
-        const desc = it.description || 'Jasa pengiriman';
-        let shipmentId = it.shipment_id || null;
-        if (!shipmentId && it.spb_number) {
-          const spbKey = it.spb_number.trim();
-          if (spbLookup[spbKey] !== undefined) {
-            shipmentId = spbLookup[spbKey] || null;
-          } else {
-            const found = await sql`select id from shipments where spb_number = ${spbKey} limit 1` as { id: number }[];
-            shipmentId = found[0]?.id || null;
-            spbLookup[spbKey] = shipmentId || 0;
+    try {
+      const { id: invoiceId, invoiceNumber } = await runInTxn(async (trx: Sql) => {
+        const invoiceNumber = await generateInvoiceNumber(trx);
+        
+        let customerName = body.customer_name;
+        let customerId = body.customer_id || null;
+        if (!customerName && customerId) {
+          const c = await trx`select name from customers where id = ${customerId}` as [{ name: string }];
+          if (!c.length) { throw new Error('CUSTOMER_NOT_FOUND'); }
+          customerName = c[0].name;
+        }
+        if (!customerName) {
+          const fallbackName = rawItems.find((it) => it?.customer_name)?.customer_name;
+          if (fallbackName) customerName = fallbackName;
+        }
+        if (!customerId) {
+          const fallbackId = rawItems.find((it) => it?.customer_id)?.customer_id;
+          if (fallbackId) customerId = fallbackId;
+        }
+        
+        let spb: string | null = body.spb_number || null;
+        if (!spb && body.shipment_id) {
+          const s = await trx`select spb_number from shipments where id = ${body.shipment_id}` as [{ spb_number: string | null }];
+          spb = s[0]?.spb_number || null;
+        }
+        
+        const spbNumbersToLookup = Array.from(new Set(itemsForCalc.filter((it) => !it.shipment_id && it.spb_number).map((it) => it.spb_number as string)));
+        const spbLookup: Record<string, number> = {};
+        if (spbNumbersToLookup.length > 0) {
+          const found = await trx`
+            select spb_number, id from shipments
+            where spb_number = any(${spbNumbersToLookup})
+          ` as { spb_number: string; id: number }[];
+          for (const row of found) {
+            if (row.spb_number) spbLookup[row.spb_number] = row.id;
           }
         }
-        await sql`insert into invoice_items (invoice_id, shipment_id, description, quantity, unit_price, tax_type, item_discount) 
-          values (${invoiceId}, ${shipmentId}, ${desc}, ${it.quantity || 1}, ${it.unit_price || 0}, ${it.tax_type || 'include'}, ${it.item_discount || 0})`;
-        if (shipmentId) {
-          const sjReturned = Boolean(it.sj_returned);
-          await sql`
-            update shipments 
-            set sj_returned = ${sjReturned},
-                sj_returned_at = case when ${sjReturned} then coalesce(sj_returned_at, now()) else null end
-            where id = ${shipmentId}
+        
+        const normalizedItems: NormalizedItem[] = itemsForCalc.map((it) => ({
+          ...it,
+          shipment_id: it.shipment_id || (it.spb_number ? (spbLookup[it.spb_number] || null) : null)
+        }));
+        
+        const result = await trx`
+          insert into invoices (
+            shipment_id, invoice_number, spb_number, customer_name, customer_id, 
+            amount, subtotal, pph_percent, pph_amount, total_tagihan,
+            tax_percent, discount_amount,
+            paid_amount, remaining_amount, status, issued_at, notes
+          ) values (
+            ${normalizedItems[0]?.shipment_id || body.shipment_id || null},
+            ${invoiceNumber},
+            ${spb},
+            ${customerName},
+            ${customerId},
+            ${totalTagihan},
+            ${subtotalToUse},
+            ${pphPercentVal},
+            ${pphAmountToUse},
+            ${totalTagihan},
+            ${body.tax_percent || 0},
+            ${discountAmount},
+            ${paidAmount},
+            ${remainingAmount},
+            ${status},
+            now(),
+            ${body.notes || null}
+          )
+          returning id
+        ` as [{ id: number }];
+        
+        const newInvoiceId = result[0].id;
+        
+        if (normalizedItems.length > 0) {
+          const shipmentIds = normalizedItems.map((it) => it.shipment_id);
+          const descriptions = normalizedItems.map((it) => it.description);
+          const quantities = normalizedItems.map((it) => it.quantity || 1);
+          const unitPrices = normalizedItems.map((it) => it.unit_price || 0);
+          const taxTypes = normalizedItems.map((it) => it.tax_type || 'include');
+          const discounts = normalizedItems.map((it) => it.item_discount || 0);
+          
+          await trx`
+            insert into invoice_items (invoice_id, shipment_id, description, quantity, unit_price, tax_type, item_discount)
+            select ${newInvoiceId}, * from unnest(
+              ${shipmentIds}::bigint[],
+              ${descriptions}::text[],
+              ${quantities}::numeric[],
+              ${unitPrices}::numeric[],
+              ${taxTypes}::text[],
+              ${discounts}::numeric[]
+            ) as t(shipment_id, description, quantity, unit_price, tax_type, item_discount)
+          `;
+          
+          const shipmentsToUpdate = normalizedItems.filter((it) => it.shipment_id);
+          if (shipmentsToUpdate.length > 0) {
+            const updateIds = shipmentsToUpdate.map((it) => it.shipment_id as number);
+            const updateSjReturned = shipmentsToUpdate.map((it) => Boolean(it.sj_returned));
+            await trx`
+              with data as (
+                select * from unnest(${updateIds}::bigint[], ${updateSjReturned}::boolean[]) as t(id, sj_returned)
+              )
+              update shipments s
+              set sj_returned = d.sj_returned,
+                  sj_returned_at = case when d.sj_returned then coalesce(sj_returned_at, now()) else null end
+              from data d
+              where s.id = d.id
+            `;
+          }
+        }
+        
+        if (paidAmount > 0) {
+          await trx`
+            insert into invoice_payments (invoice_id, amount, payment_date, payment_method, notes)
+            values (${newInvoiceId}, ${paidAmount}, now(), 'TRANSFER', 'Pembayaran awal saat buat invoice')
           `;
         }
+        
+        return { id: newInvoiceId, invoiceNumber };
+      });
+      
+      writeJson(res, { id: invoiceId, invoice_number: invoiceNumber }, 201);
+      return;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg === 'CUSTOMER_NOT_FOUND') {
+        writeJson(res, { error: 'Invalid customer_id' }, 400);
+        return;
       }
+      console.error('Invoices API error (create):', err);
+      writeJson(res, { error: 'Internal server error' }, 500);
+      return;
     }
-    
-    if (paidAmount > 0) {
-      await sql`
-        insert into invoice_payments (invoice_id, amount, payment_date, payment_method, notes)
-        values (${invoiceId}, ${paidAmount}, now(), 'TRANSFER', 'Pembayaran awal saat buat invoice')
-      `;
-    }
-    
-    writeJson(res, { id: invoiceId, invoice_number: invoiceNumber }, 201);
-    return;
   } else if (endpoint === 'update' && req.method === 'PUT') {
     let body: UpdateInvoiceBody;
     

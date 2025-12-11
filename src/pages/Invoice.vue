@@ -1211,7 +1211,7 @@ async function printInvoice(inv: Invoice): Promise<void> {
         <thead>
           <tr>
             <th style="width: 12%;">No. SPB</th>
-            <th style="width: 24%;">No. SPB / Deskripsi</th>
+            <th style="width: 24%;">Deskripsi Barang</th>
             <th style="width: 8%;">Qty</th>
             <th style="width: 13%;">Harga Satuan</th>
             <th style="width: 13%;">PPh</th>

@@ -553,6 +553,8 @@ async function saveInvoice() {
 
       for (const item of itemsSnapshot) {
         try {
+          const customerName = item.customer_name || form.value.customer_name;
+          const customerId = item.customer_id ?? form.value.customer_id ?? null;
           const itemSubtotal = (item.quantity || 1) * (item.unit_price || 0);
           const itemDiscountAmount = item.item_discount || 0;
           const itemSubtotalAfterDiscount = itemSubtotal - itemDiscountAmount;
@@ -582,8 +584,8 @@ async function saveInvoice() {
             body: JSON.stringify({
               shipment_id: item.shipment_id || null,
               spb_number: item.spb_number || null,
-              customer_name: form.value.customer_name,
-              customer_id: form.value.customer_id || undefined,
+              customer_name: customerName,
+              customer_id: customerId ?? undefined,
               amount: itemTotalTagihan,
               subtotal: itemSubtotal,
               pph_percent: pphPercent.value,
@@ -602,7 +604,9 @@ async function saveInvoice() {
                 unit_price: item.unit_price || 0,
                 tax_type: item.tax_type || 'include',
                 item_discount: item.item_discount || 0,
-                sj_returned: Boolean(item.sj_returned)
+                sj_returned: Boolean(item.sj_returned),
+                customer_name: customerName || undefined,
+                customer_id: customerId ?? undefined
               }]
             })
           });
@@ -2179,7 +2183,6 @@ watch(() => invoiceFilterType.value, () => {
     </div>
   </div>
 </template>
-
 
 
 

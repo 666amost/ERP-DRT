@@ -53,21 +53,31 @@ const customers = computed(() => {
   return [...new Set(names)].sort();
 });
 
+function normalizeDbl(n?: string | null): string | null {
+  if (!n) return null;
+  // remove common 'DBL' prefix variations and trim
+  return n.toString().trim().replace(/^(DBL[:\-\s]+)/i, '').trim() || null;
+}
+
 const dblNumbers = computed(() => {
-  const numbers = items.value.map(i => i.dbl_number).filter((n): n is string => Boolean(n));
-  return [...new Set(numbers)].sort();
+  const numbers = items.value
+    .map(i => normalizeDbl(i.dbl_number))
+    .filter((n): n is string => Boolean(n));
+  return [...new Set(numbers)].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 });
 
 const hasUnassignedDbl = computed(() => items.value.some(i => !i.dbl_number));
 
 const filteredItems = computed(() => {
   let result = items.value;
+  // Ensure only shipments with outstanding remaining amounts are shown
+  result = result.filter(i => ((i.remaining_amount ?? i.nominal) ?? 0) > 0);
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase();
     result = result.filter(i =>
       (i.public_code || '').toLowerCase().includes(q) ||
       (i.spb_number || '').toLowerCase().includes(q) ||
-      (i.dbl_number || '').toLowerCase().includes(q) ||
+      ((i.dbl_number || '').toLowerCase().includes(q) || (normalizeDbl(i.dbl_number) || '').toLowerCase().includes(q)) ||
       (i.customer_name || '').toLowerCase().includes(q) ||
       (i.invoice_number || '').toLowerCase().includes(q) ||
       (i.origin || '').toLowerCase().includes(q) ||
@@ -80,7 +90,7 @@ const filteredItems = computed(() => {
   if (selectedDbl.value === '__no_dbl') {
     result = result.filter(i => !i.dbl_number);
   } else if (selectedDbl.value) {
-    result = result.filter(i => i.dbl_number === selectedDbl.value);
+    result = result.filter(i => normalizeDbl(i.dbl_number) === selectedDbl.value);
   }
   if (sjFilter.value === 'returned') {
     result = result.filter(i => i.sj_returned === true);

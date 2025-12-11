@@ -35,10 +35,7 @@ const props = defineProps<{
   shipment: Shipment | null;
 }>();
 
-const emit = defineEmits<{
-  (e: 'close'): void;
-  (e: 'saved'): void;
-}>();
+const emit = defineEmits(['close', 'saved']);
 
 function toInputDate(val: string | null | undefined): string {
   if (!val) return '';

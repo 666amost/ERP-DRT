@@ -62,6 +62,9 @@ type PaymentHistory = {
   notes: string | null;
 };
 
+// eslint-disable-next-line no-unused-vars
+type TxRunner = <T>(_fn: (_sql: Sql) => Promise<T>) => Promise<T>;
+
 type InvoiceItem = {
   id?: number;
   invoice_id?: number;
@@ -171,7 +174,7 @@ async function generateInvoiceNumber(sql: Sql): Promise<string> {
     const res = await sql`select generate_invoice_number() as num` as [{ num: string }];
     if (res?.[0]?.num) return res[0].num;
   } catch (err) {
-    console.warn('[invoices] generate_invoice_number() missing, fallback to local generator');
+    console.warn('[invoices] generate_invoice_number() missing, fallback to local generator', err);
   }
 
   const maxResult = await sql`
@@ -201,7 +204,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   const endpoint = url.searchParams.get('endpoint');
 
   try {
-    const sql = getSql() as Sql & { begin?: <T>(fn: (sql: Sql) => Promise<T>) => Promise<T> };
+    const sql = getSql() as Sql & { begin?: TxRunner };
 
   if (endpoint === 'list' && req.method === 'GET') {
     const page = parseInt(url.searchParams.get('page') || '1');
@@ -336,7 +339,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     
     const runInTxn = sql.begin
       ? sql.begin.bind(sql)
-      : async <T>(fn: (client: Sql) => Promise<T>) => {
+      // eslint-disable-next-line no-unused-vars
+      : async <T>(fn: (_client: Sql) => Promise<T>) => {
           const client = getSql();
           try {
             await client`begin`;
@@ -427,7 +431,11 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         }
         
         const discountAmount = Number(body.discount_amount || 0);
-        const subtotalFromItems = normalizedItems.reduce((sum, it) => sum + ((it.quantity || 1) * (it.unit_price || 0) - (it.item_discount || 0)), 0);
+        // unit_price already represents the line total, so avoid multiplying by quantity again
+        const subtotalFromItems = normalizedItems.reduce((sum, it) => {
+          const lineTotal = (it.unit_price || 0) - (it.item_discount || 0);
+          return sum + lineTotal;
+        }, 0);
         const subtotalAfterDiscount = Math.max(0, subtotalFromItems - discountAmount);
         const pphPercentVal = Number(body.pph_percent || 0);
         const pphAmountCalc = pphPercentVal > 0 ? (subtotalAfterDiscount * pphPercentVal / 100) : 0;
@@ -681,7 +689,12 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       }
     }
     console.log(`[set-items] invoice_id=${body.invoice_id}, received=${itemsToInsert.length}, inserted=${insertedCount}`);
-    const rows = await sql`select coalesce(sum((quantity*unit_price) - coalesce(item_discount,0)),0)::float as subtotal from invoice_items where invoice_id = ${body.invoice_id}` as [{ subtotal: number }];
+    // unit_price is stored as the total per line, so ignore quantity when recalculating subtotal
+    const rows = await sql`
+      select coalesce(sum((unit_price) - coalesce(item_discount,0)),0)::float as subtotal 
+      from invoice_items 
+      where invoice_id = ${body.invoice_id}
+    ` as [{ subtotal: number }];
     const subtotal = rows[0]?.subtotal || 0;
     
     const inv = await sql`select paid_amount, pph_percent, pph_amount from invoices where id = ${body.invoice_id}` as [{ paid_amount: number; pph_percent: number; pph_amount: number }];
@@ -907,11 +920,12 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         left join invoices spb_inv on spb_inv.spb_number = s.spb_number and ii.id is null
         where s.nominal > 0
           and (
-          coalesce(s.sj_returned, false) = false
-          or (ii_inv.id is null and spb_inv.id is null)
-          or (ii_inv.id is not null and ii_inv.status in ('pending', 'partial'))
-          or (ii_inv.id is null and spb_inv.id is not null and spb_inv.status in ('pending', 'partial'))
-        )
+            -- include if there is an invoice with remaining amount > 0
+            (ii_inv.id is not null and coalesce(ii_inv.remaining_amount, 0) > 0)
+            or (spb_inv.id is not null and coalesce(spb_inv.remaining_amount, 0) > 0)
+            -- or if there is no invoice at all (shipment not invoiced yet)
+            or (ii_inv.id is null and spb_inv.id is null)
+          )
       group by s.id, s.spb_number, s.public_code, s.customer_id, s.customer_name,
                s.origin, s.destination, s.total_colli, s.berat, s.nominal, s.created_at,
                s.dbl_id, d.dbl_number, d.driver_name, d.driver_phone, d.vehicle_plate, d.dbl_date, s.sj_returned,

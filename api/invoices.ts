@@ -457,6 +457,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       select 
         ii.id, 
         ii.invoice_id, 
+        ii.shipment_id,
         ii.description, 
         ii.quantity::float as quantity, 
         ii.unit_price::float as unit_price, 

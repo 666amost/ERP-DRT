@@ -555,7 +555,7 @@ async function saveInvoice() {
         try {
           const customerName = item.customer_name || form.value.customer_name;
           const customerId = item.customer_id ?? form.value.customer_id ?? null;
-          const itemSubtotal = (item.quantity || 1) * (item.unit_price || 0);
+          const itemSubtotal = item.unit_price || 0;
           const itemDiscountAmount = item.item_discount || 0;
           const itemSubtotalAfterDiscount = itemSubtotal - itemDiscountAmount;
           const itemPphAmount = itemSubtotalAfterDiscount * (pphPercent.value / 100);

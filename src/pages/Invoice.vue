@@ -482,7 +482,7 @@ async function openEditModal(invoice: Invoice) {
   showModal.value = true;
 }
 
-async function saveInvoice() {
+async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
   const inputAmount = parseFloat(form.value.amount) || 0;
   if (!form.value.customer_name && !form.value.customer_id) {
     const firstItem = items.value[0];
@@ -510,6 +510,25 @@ async function saveInvoice() {
   }
   
   const itemsSnapshot = items.value.map(it => ({ ...it }));
+  const resolvedCustomerName = form.value.customer_name || itemsSnapshot.find((it) => it.customer_name)?.customer_name || '';
+  const resolvedCustomerId = form.value.customer_id ?? itemsSnapshot.find((it) => typeof it.customer_id === 'number')?.customer_id ?? null;
+
+  if (mode === 'bulk') {
+    const customerIds = new Set<number>();
+    if (typeof resolvedCustomerId === 'number') customerIds.add(resolvedCustomerId);
+    itemsSnapshot.forEach((it) => {
+      if (typeof it.customer_id === 'number') customerIds.add(it.customer_id);
+    });
+    const customerNames = new Set<string>();
+    if (resolvedCustomerName) customerNames.add(resolvedCustomerName.toLowerCase());
+    itemsSnapshot.forEach((it) => {
+      if (it.customer_name) customerNames.add(it.customer_name.toLowerCase());
+    });
+    if (customerIds.size > 1 || customerNames.size > 1) {
+      alert('Bulk invoice hanya untuk SPB dengan penagih/customer yang sama');
+      return;
+    }
+  }
 
   try {
     if (editingId.value) {
@@ -547,6 +566,75 @@ async function saveInvoice() {
       });
       if (!res.ok) throw new Error('Update failed');
       await saveItemsForInvoice(editingId.value, itemsSnapshot);
+    } else if (mode === 'bulk') {
+      let paidAmount = 0;
+      let remainingAmount = totalTagihan;
+      let finalStatus = form.value.status || 'pending';
+      
+      if (manualAmountMode.value && inputAmount > 0) {
+        paidAmount = inputAmount;
+        remainingAmount = Math.max(0, totalTagihan - paidAmount);
+      } else if (form.value.status === 'paid') {
+        paidAmount = totalTagihan;
+        remainingAmount = 0;
+      }
+
+      if (remainingAmount <= 0 && paidAmount > 0) {
+        finalStatus = 'paid';
+      } else if (paidAmount > 0) {
+        finalStatus = 'partial';
+      }
+
+      const spbSet = new Map<string, string>();
+      itemsSnapshot
+        .map((it) => it.spb_number || it.tracking_code || '')
+        .map((spb) => spb.trim())
+        .filter(Boolean)
+        .forEach((spb) => {
+          const key = spb.toLowerCase();
+          if (!spbSet.has(key)) spbSet.set(key, spb);
+        });
+      const combinedSpb = Array.from(spbSet.values()).join(', ');
+
+      const res = await fetch('/api/invoices?endpoint=create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shipment_id: itemsSnapshot[0]?.shipment_id || null,
+          spb_number: combinedSpb || undefined,
+          customer_name: resolvedCustomerName,
+          customer_id: resolvedCustomerId ?? undefined,
+          amount: totalTagihan,
+          subtotal: subtotal,
+          pph_percent: pphPercent.value,
+          pph_amount: pphAmount,
+          paid_amount: paidAmount,
+          remaining_amount: remainingAmount,
+          status: finalStatus,
+          discount_amount: discountAmount.value || 0,
+          tax_percent: taxPercent.value || 0,
+          notes: notes.value || undefined,
+          items: itemsSnapshot.map((item) => ({
+            shipment_id: item.shipment_id || null,
+            spb_number: item.spb_number || null,
+            description: item.description || 'Jasa pengiriman',
+            quantity: item.quantity || 1,
+            unit_price: item.unit_price || 0,
+            tax_type: item.tax_type || 'include',
+            item_discount: item.item_discount || 0,
+            sj_returned: Boolean(item.sj_returned),
+            customer_name: item.customer_name || resolvedCustomerName || undefined,
+            customer_id: item.customer_id ?? resolvedCustomerId ?? undefined
+          }))
+        })
+      });
+
+      const created: { invoice_number?: string; error?: string } = await res.json();
+      if (!res.ok) {
+        throw new Error(created.error || 'Create failed');
+      }
+
+      alert(created.invoice_number ? `Invoice ${created.invoice_number} berhasil dibuat` : 'Berhasil membuat invoice bulk');
     } else {
       const createdInvoices: string[] = [];
       const failedInvoices: { spb: string; error: string }[] = [];
@@ -2068,6 +2156,14 @@ watch(() => invoiceFilterType.value, () => {
             <Button variant="secondary" @click="showModal = false">
               Batal
             </Button>
+            <Button
+              v-if="!editingId"
+              variant="success"
+              :disabled="items.length === 0"
+              @click="saveInvoice('bulk')"
+            >
+              Simpan Bulk
+            </Button>
             <Button variant="primary" @click="saveInvoice">
               {{ editingId ? 'Update' : 'Simpan' }} Invoice
             </Button>
@@ -2183,8 +2279,5 @@ watch(() => invoiceFilterType.value, () => {
     </div>
   </div>
 </template>
-
-
-
 
 

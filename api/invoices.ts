@@ -373,12 +373,6 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           if (fallbackId) customerId = fallbackId;
         }
         
-        let spb: string | null = body.spb_number || null;
-        if (!spb && body.shipment_id) {
-          const s = await trx`select spb_number from shipments where id = ${body.shipment_id}` as [{ spb_number: string | null }];
-          spb = s[0]?.spb_number || null;
-        }
-        
         const spbNumbersToLookup = Array.from(new Set(itemsForCalc.filter((it) => !it.shipment_id && it.spb_number).map((it) => it.spb_number as string)));
         const spbLookup: Record<string, number> = {};
         if (spbNumbersToLookup.length > 0) {
@@ -424,6 +418,24 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             });
             existingSpbSet.add(row.spb_number.toLowerCase());
           }
+        }
+        
+        let spb: string | null = body.spb_number || null;
+        if (!spb && body.shipment_id) {
+          const s = await trx`select spb_number from shipments where id = ${body.shipment_id}` as [{ spb_number: string | null }];
+          spb = s[0]?.spb_number || null;
+        }
+        const spbSet = new Map<string, string>();
+        const addSpbNumber = (value?: string | null): void => {
+          const clean = (value || '').trim();
+          if (!clean) return;
+          const key = clean.toLowerCase();
+          if (!spbSet.has(key)) spbSet.set(key, clean);
+        };
+        normalizedItems.forEach((it) => addSpbNumber(it.spb_number));
+        spbFromHeader.forEach((val) => addSpbNumber(val));
+        if (!spb && spbSet.size > 0) {
+          spb = Array.from(spbSet.values()).join(', ');
         }
         
         if (normalizedItems.length === 0) {

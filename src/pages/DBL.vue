@@ -797,40 +797,50 @@ onMounted(async () => {
               <div class="text-right mt-2 font-medium dark:text-gray-200">Total: {{ formatRupiah(totalNominal) }}</div>
             </div>
             
-            <div>
-              <h4 class="font-medium mb-2 dark:text-gray-200">Tambah Resi ({{ availableShipments.length }}/{{ availableShipmentsTotal }} tersedia)</h4>
+            <div class="flex flex-col gap-3">
+              <h4 class="font-medium dark:text-gray-200">Tambah Resi ({{ availableShipments.length }}/{{ availableShipmentsTotal }} tersedia)</h4>
               <input 
                 v-model="shipmentSearchQuery" 
                 type="text" 
                 placeholder="Cari no SPB, kota, pengirim, penerima, barang..." 
-                class="w-full px-3 py-2 mb-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100 text-sm"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100 text-sm"
               />
-              <div v-if="availableShipments.length === 0" class="text-sm text-gray-500 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                Tidak ada resi yang tersedia. Pastikan sudah membuat resi di menu "Barang Keluar" terlebih dahulu.
-              </div>
-              <div v-else class="space-y-2 max-h-64 overflow-auto border border-gray-200 dark:border-gray-600 rounded-lg p-2">
-                <div v-if="availableShipments.length === 0" class="text-sm text-gray-500 p-2 text-center">
-                  Tidak ada resi yang cocok dengan pencarian
-                </div>
-                <label v-for="s in availableShipments" :key="s.id" class="flex items-center gap-2 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer">
-                  <input type="checkbox" :value="s.id" v-model="selectedShipmentIds" class="rounded" />
-                  <div class="text-sm flex-1">
-                    <div class="font-medium dark:text-gray-200">{{ s.spb_number || s.public_code || 'RESI-' + s.id }}</div>
-                    <div class="text-gray-500 text-xs">
-                      {{ s.customer_name || '-' }} | {{ s.origin }} → {{ s.destination }} | {{ s.total_colli || 1 }} colli
-                    </div>
-                    <div class="text-gray-400 text-xs">{{ formatRupiah(s.nominal || 0) }}</div>
+              <div class="flex flex-col min-h-[320px] max-h-[60vh] border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden bg-white dark:bg-gray-800">
+                <div v-if="availableShipments.length === 0" class="flex-1 min-h-0 flex items-center justify-center px-4 py-6 text-sm text-center text-gray-500 dark:text-gray-300">
+                  <div v-if="availableShipmentsTotal === 0">
+                    Tidak ada resi yang tersedia. Pastikan sudah membuat resi di menu "Barang Keluar" terlebih dahulu.
                   </div>
-                </label>
+                  <div v-else>
+                    Tidak ada resi yang cocok dengan pencarian
+                  </div>
+                </div>
+                <div v-else class="flex-1 min-h-0 overflow-auto p-2 space-y-2">
+                  <label v-for="s in availableShipments" :key="s.id" class="flex items-center gap-2 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer">
+                    <input type="checkbox" :value="s.id" v-model="selectedShipmentIds" class="rounded" />
+                    <div class="text-sm flex-1">
+                      <div class="font-medium dark:text-gray-200">{{ s.spb_number || s.public_code || 'RESI-' + s.id }}</div>
+                      <div class="text-gray-500 text-xs">
+                        {{ s.customer_name || '-' }} | {{ s.origin }} → {{ s.destination }} | {{ s.total_colli || 1 }} colli
+                      </div>
+                      <div class="text-gray-400 text-xs">{{ formatRupiah(s.nominal || 0) }}</div>
+                    </div>
+                  </label>
+                </div>
+                <div class="p-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 space-y-2">
+                  <Button 
+                    v-if="availableShipments.length > 0 && availableShipments.length < availableShipmentsTotal" 
+                    variant="default" 
+                    class="w-full" 
+                    @click="loadMoreShipments" 
+                    :disabled="loadingShipments"
+                  >
+                    {{ loadingShipments ? 'Loading...' : `Muat lebih banyak (${availableShipments.length}/${availableShipmentsTotal})` }}
+                  </Button>
+                  <Button v-if="selectedShipmentIds.length > 0" variant="primary" class="w-full" @click="addSelectedShipments">
+                    Tambahkan {{ selectedShipmentIds.length }} Resi
+                  </Button>
+                </div>
               </div>
-              <div v-if="availableShipments.length < availableShipmentsTotal" class="flex gap-2 mt-2">
-                <Button variant="default" class="flex-1" @click="loadMoreShipments" :disabled="loadingShipments">
-                  {{ loadingShipments ? 'Loading...' : `Muat lebih banyak (${availableShipments.length}/${availableShipmentsTotal})` }}
-                </Button>
-              </div>
-              <Button v-if="selectedShipmentIds.length > 0" variant="primary" class="w-full mt-2" @click="addSelectedShipments">
-                Tambahkan {{ selectedShipmentIds.length }} Resi
-              </Button>
             </div>
           </div>
         </div>

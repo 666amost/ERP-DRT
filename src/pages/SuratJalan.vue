@@ -13,6 +13,9 @@ interface Shipment {
   tracking_code: string
   spb_number: string
   sender_name: string
+  dbl_number?: string
+  driver_name?: string
+  vehicle_plate?: string
   recipient_name: string
   recipient_address: string
   recipient_phone: string
@@ -69,6 +72,9 @@ const loadShipments = async (): Promise<void> => {
           tracking_code: s.public_code as string || '',
           spb_number: s.spb_number as string || '',
           sender_name: s.pengirim_name as string || s.customer_name as string || '',
+          dbl_number: (s as Record<string, string>).dbl_number || (s as Record<string, string>).dbl,
+          driver_name: (s as Record<string, string>).driver_name || (s as Record<string, string>).driver || (s as Record<string, string>).supir,
+          vehicle_plate: (s as Record<string, string>).vehicle_plate || (s as Record<string, string>).plat || (s as Record<string, string>).license_plate,
           recipient_name: s.penerima_name as string || '',
           recipient_address: s.shipping_address as string || '',
           recipient_phone: s.penerima_phone as string || '',
@@ -145,6 +151,26 @@ const filteredDBL = computed(() => {
   )
 })
 
+const getDBLInfo = (dblId: string | null): DBLItem | null => {
+  if (!dblId) return null
+  return dblList.value.find(d => d.id === dblId) || null
+}
+
+const getShipmentDblMeta = (shipment: Shipment): { dblNumber: string; driverName: string } => {
+  const dblInfo = getDBLInfo(shipment.dbl_id)
+  if (dblInfo) {
+    return {
+      dblNumber: dblInfo.dbl_number || '-',
+      driverName: dblInfo.driver_name || '-'
+    }
+  }
+
+  return {
+    dblNumber: shipment.dbl_number || '-',
+    driverName: shipment.driver_name || '-'
+  }
+}
+
 const getStatusVariant = (status: string): 'default' | 'success' | 'warning' | 'info' => {
   switch (status) {
     case 'DELIVERED': return 'success'
@@ -214,6 +240,7 @@ const toggleAllDBLs = (): void => {
 const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
   const company = await getCompany()
   const publicCode = shipment.tracking_code || ''
+  const { dblNumber, driverName } = getShipmentDblMeta(shipment)
   
   await new Promise<void>((resolve) => {
     const img = new Image()
@@ -256,7 +283,13 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
         .right-box .spb { font-size: 16px; font-weight: bold; }
 
-        .barcode-section { text-align: right; margin: 2px 0 4px 0; padding-right: 2px; }
+        .meta-row { display: grid; grid-template-columns: 1fr auto; align-items: stretch; gap: 6px; margin: 2px 0 4px 0; }
+        .meta-fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+        .meta-box { border: 1px solid #000; padding: 3px 6px; min-height: 28px; }
+        .meta-label { font-size: 10px; margin-bottom: 2px; text-transform: uppercase; }
+        .meta-value { font-size: 14px; font-weight: bold; min-height: 16px; }
+
+        .barcode-section { text-align: right; padding-right: 2px; display: flex; align-items: center; justify-content: flex-end; }
         .barcode-section img { width: 150px; height: 32px; border: 1px solid #000; padding: 1px; }
 
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 6px 0; }
@@ -316,8 +349,20 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
           </div>
         </div>
 
-        <div class="barcode-section">
-          <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode&hideText=1" alt="Barcode" />
+        <div class="meta-row">
+          <div class="meta-fields">
+            <div class="meta-box">
+              <div class="meta-label">No. DBL</div>
+              <div class="meta-value">${dblNumber}</div>
+            </div>
+            <div class="meta-box">
+              <div class="meta-label">Supir</div>
+              <div class="meta-value">${driverName}</div>
+            </div>
+          </div>
+          <div class="barcode-section">
+            <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode&hideText=1" alt="Barcode" />
+          </div>
         </div>
 
         <div class="info-grid">
@@ -422,6 +467,8 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
     data.items.forEach((s: Record<string, unknown>, index: number) => {
       const spbNumber = s.spb_number as string || '-'
       const publicCode = s.tracking_code as string || s.public_code as string || ''
+      const dblNumber = dbl.dbl_number || '-'
+      const driverName = dbl.driver_name || '-'
       const shipment = {
         spb_number: spbNumber,
         tracking_code: publicCode,
@@ -458,13 +505,25 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
               </div>
               <div class="addr">${company?.address ?? ''}</div>
             </div>
-            <div class="right-box">
-              <div class="spb">${spbNumber}</div>
-            </div>
+          <div class="right-box">
+            <div class="spb">${spbNumber}</div>
           </div>
+        </div>
 
-          <div class="barcode-section">
-            <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode&hideText=1" alt="Barcode" />
+          <div class="meta-row">
+            <div class="meta-fields">
+              <div class="meta-box">
+                <div class="meta-label">No. DBL</div>
+                <div class="meta-value">${dblNumber}</div>
+              </div>
+              <div class="meta-box">
+                <div class="meta-label">Supir</div>
+                <div class="meta-value">${driverName}</div>
+              </div>
+            </div>
+            <div class="barcode-section">
+              <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode&hideText=1" alt="Barcode" />
+            </div>
           </div>
 
           <div class="info-grid">
@@ -539,8 +598,8 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           @page { size: 11in 9.5in landscape; margin: 0; }
           * { box-sizing: border-box; margin: 0; padding: 0; }
           html, body { font-family: Arial, sans-serif; color: #000; }
-          body { margin: 0; padding: 0; background: #fff; }
-          .sheet { width: 100%; background: #fff; position: relative; padding: 8mm 10mm; }
+          body { margin: 0; padding: 8mm 10mm; background: #fff; }
+          .sheet { width: 100%; background: #fff; position: relative; }
           .page-break { page-break-before: always; }
           .dbl-banner { background: #000; color: #fff; text-align: center; padding: 3px 6px; font-size: 9px; font-weight: bold; margin-bottom: 4px; }
           
@@ -553,7 +612,13 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
           .right-box .spb { font-size: 16px; font-weight: bold; }
 
-          .barcode-section { text-align: right; margin: 2px 0 4px 0; padding-right: 2px; }
+          .meta-row { display: grid; grid-template-columns: 1fr auto; align-items: stretch; gap: 6px; margin: 2px 0 4px 0; }
+          .meta-fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+          .meta-box { border: 1px solid #000; padding: 3px 6px; min-height: 28px; }
+          .meta-label { font-size: 10px; margin-bottom: 2px; text-transform: uppercase; }
+          .meta-value { font-size: 14px; font-weight: bold; min-height: 16px; }
+
+          .barcode-section { text-align: right; padding-right: 2px; display: flex; align-items: center; justify-content: flex-end; }
           .barcode-section img { width: 150px; height: 32px; border: 1px solid #000; padding: 1px; }
 
           .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 6px 0; }
@@ -641,6 +706,7 @@ const printSelectedShipments = async (): Promise<void> => {
     const spbNumber = shipment.spb_number || '-'
     const publicCode = shipment.tracking_code || ''
     const deliveredStamp = shipment.status === 'DELIVERED' ? `<div class="delivered-stamp">DELIVERED</div>` : ''
+    const { dblNumber, driverName } = getShipmentDblMeta(shipment)
     
     pagesHtml += `
       <div class="sheet ${index > 0 ? 'page-break' : ''}">
@@ -662,8 +728,20 @@ const printSelectedShipments = async (): Promise<void> => {
           </div>
         </div>
 
-        <div class="barcode-section">
-          <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode&hideText=1" alt="Barcode" />
+        <div class="meta-row">
+          <div class="meta-fields">
+            <div class="meta-box">
+              <div class="meta-label">No. DBL</div>
+              <div class="meta-value">${dblNumber}</div>
+            </div>
+            <div class="meta-box">
+              <div class="meta-label">Supir</div>
+              <div class="meta-value">${driverName}</div>
+            </div>
+          </div>
+          <div class="barcode-section">
+            <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode&hideText=1" alt="Barcode" />
+          </div>
         </div>
 
         <div class="info-grid">
@@ -738,8 +816,8 @@ const printSelectedShipments = async (): Promise<void> => {
         @page { size: 11in 9.5in landscape; margin: 0; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { font-family: Arial, sans-serif; color: #000; }
-        body { margin: 0; padding: 0; background: #fff; }
-        .sheet { width: 100%; background: #fff; position: relative; padding: 8mm 10mm; }
+        body { margin: 0; padding: 8mm 10mm; background: #fff; }
+        .sheet { width: 100%; background: #fff; position: relative; }
         .page-break { page-break-before: always; }
         
         .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid #000; }
@@ -751,7 +829,13 @@ const printSelectedShipments = async (): Promise<void> => {
         .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
         .right-box .spb { font-size: 16px; font-weight: bold; }
 
-        .barcode-section { text-align: right; margin: 2px 0 4px 0; padding-right: 2px; }
+        .meta-row { display: grid; grid-template-columns: 1fr auto; align-items: stretch; gap: 6px; margin: 2px 0 4px 0; }
+        .meta-fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+        .meta-box { border: 1px solid #000; padding: 3px 6px; min-height: 28px; }
+        .meta-label { font-size: 10px; margin-bottom: 2px; text-transform: uppercase; }
+        .meta-value { font-size: 14px; font-weight: bold; min-height: 16px; }
+
+        .barcode-section { text-align: right; padding-right: 2px; display: flex; align-items: center; justify-content: flex-end; }
         .barcode-section img { width: 150px; height: 32px; border: 1px solid #000; padding: 1px; }
 
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 6px 0; }
@@ -856,6 +940,8 @@ const printSelectedDBLs = async (): Promise<void> => {
     const dbl = dblMap.get(s.dbl_id as string)
     const spbNumber = s.spb_number as string || '-'
     const publicCode = s.tracking_code as string || s.public_code as string || ''
+    const dblNumber = dbl?.dbl_number || (s.dbl_number as string) || '-'
+    const driverName = dbl?.driver_name || (s.driver_name as string) || '-'
     const shipment = {
       spb_number: spbNumber,
       tracking_code: publicCode,
@@ -892,13 +978,25 @@ const printSelectedDBLs = async (): Promise<void> => {
             </div>
             <div class="addr">${company?.address ?? ''}</div>
           </div>
-          <div class="right-box">
-            <div class="spb">${spbNumber}</div>
-          </div>
+        <div class="right-box">
+          <div class="spb">${spbNumber}</div>
         </div>
+      </div>
 
-        <div class="barcode-section">
-          <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode&hideText=1" alt="Barcode" />
+        <div class="meta-row">
+          <div class="meta-fields">
+            <div class="meta-box">
+              <div class="meta-label">No. DBL</div>
+              <div class="meta-value">${dblNumber}</div>
+            </div>
+            <div class="meta-box">
+              <div class="meta-label">Supir</div>
+              <div class="meta-value">${driverName}</div>
+            </div>
+          </div>
+          <div class="barcode-section">
+            <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode&hideText=1" alt="Barcode" />
+          </div>
         </div>
 
         <div class="info-grid">
@@ -973,22 +1071,28 @@ const printSelectedDBLs = async (): Promise<void> => {
         @page { size: 11in 9.5in landscape; margin: 0; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { font-family: Arial, sans-serif; color: #000; }
-        body { margin: 0; padding: 0; background: #fff; }
-        .sheet { width: 100%; background: #fff; position: relative; padding: 8mm 10mm; }
-        .page-break { page-break-before: always; }
-        .dbl-banner { background: #000; color: #fff; text-align: center; padding: 3px 6px; font-size: 9px; font-weight: bold; margin-bottom: 4px; }
-        
-        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid #000; }
-        .brand { display: flex; gap: 6px; align-items: center; }
-        .brand img { width: 40px; height: 40px; object-fit: contain; }
-        .brand-title { font-weight: bold; font-size: 16px; line-height: 1.2; }
-        .brand-sub { font-size: 9px; margin-top: 1px; }
-        .addr { font-size: 10px; margin-top: 3px; line-height: 1.3; font-weight: 500; }
-        .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
-        .right-box .spb { font-size: 16px; font-weight: bold; }
+          body { margin: 0; padding: 8mm 10mm; background: #fff; }
+          .sheet { width: 100%; background: #fff; position: relative; }
+          .page-break { page-break-before: always; }
+          .dbl-banner { background: #000; color: #fff; text-align: center; padding: 3px 6px; font-size: 9px; font-weight: bold; margin-bottom: 4px; }
+          
+          .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid #000; }
+          .brand { display: flex; gap: 6px; align-items: center; }
+          .brand img { width: 40px; height: 40px; object-fit: contain; }
+          .brand-title { font-weight: bold; font-size: 16px; line-height: 1.2; }
+          .brand-sub { font-size: 9px; margin-top: 1px; }
+          .addr { font-size: 10px; margin-top: 3px; line-height: 1.3; font-weight: 500; }
+          .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
+          .right-box .spb { font-size: 16px; font-weight: bold; }
 
-        .barcode-section { text-align: right; margin: 2px 0 4px 0; padding-right: 2px; }
-        .barcode-section img { width: 150px; height: 32px; border: 1px solid #000; padding: 1px; }
+          .meta-row { display: grid; grid-template-columns: 1fr auto; align-items: stretch; gap: 6px; margin: 2px 0 4px 0; }
+          .meta-fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+          .meta-box { border: 1px solid #000; padding: 3px 6px; min-height: 28px; }
+          .meta-label { font-size: 10px; margin-bottom: 2px; text-transform: uppercase; }
+          .meta-value { font-size: 14px; font-weight: bold; min-height: 16px; }
+
+          .barcode-section { text-align: right; padding-right: 2px; display: flex; align-items: center; justify-content: flex-end; }
+          .barcode-section img { width: 150px; height: 32px; border: 1px solid #000; padding: 1px; }
 
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 6px 0; }
         .info-box { border: 1px solid #000; padding: 5px; min-height: 45px; }

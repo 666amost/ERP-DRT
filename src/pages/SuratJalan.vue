@@ -16,6 +16,7 @@ interface Shipment {
   dbl_number?: string
   driver_name?: string
   vehicle_plate?: string
+  dbl_date?: string | null
   recipient_name: string
   recipient_address: string
   recipient_phone: string
@@ -75,6 +76,7 @@ const loadShipments = async (): Promise<void> => {
           dbl_number: (s as Record<string, string>).dbl_number || (s as Record<string, string>).dbl,
           driver_name: (s as Record<string, string>).driver_name || (s as Record<string, string>).driver || (s as Record<string, string>).supir,
           vehicle_plate: (s as Record<string, string>).vehicle_plate || (s as Record<string, string>).plat || (s as Record<string, string>).license_plate,
+          dbl_date: (s as Record<string, string>).dbl_date || null,
           recipient_name: s.penerima_name as string || '',
           recipient_address: s.shipping_address as string || '',
           recipient_phone: s.penerima_phone as string || '',
@@ -106,20 +108,18 @@ const loadDBLList = async (): Promise<void> => {
     const res = await fetch('/api/dbl?endpoint=list&limit=100')
     const data = await res.json()
     if (data.items) {
-      dblList.value = data.items
-        .filter((d: DBLItem) => d.status === 'IN_TRANSIT' || d.status === 'READY' || (d.shipment_count && d.shipment_count > 0))
-        .map((d: Record<string, unknown>) => ({
-          id: String(d.id),
-          dbl_number: d.dbl_number as string || '',
-          dbl_date: d.dbl_date as string || '',
-          vehicle_plate: d.vehicle_plate as string || '',
-          driver_name: d.driver_name as string || '',
-          destination_city: d.destination as string || '',
-          status: d.status as string || '',
-          shipment_count: Number(d.shipment_count) || 0,
-          total_colli: 0,
-          total_weight: 0
-        }))
+      dblList.value = data.items.map((d: Record<string, unknown>) => ({
+        id: String(d.id),
+        dbl_number: d.dbl_number as string || '',
+        dbl_date: d.dbl_date as string || '',
+        vehicle_plate: d.vehicle_plate as string || '',
+        driver_name: d.driver_name as string || '',
+        destination_city: d.destination as string || '',
+        status: d.status as string || '',
+        shipment_count: Number(d.shipment_count) || 0,
+        total_colli: 0,
+        total_weight: 0
+      }))
     }
   } catch {
     console.error('Failed to load DBL list')
@@ -141,9 +141,12 @@ const filteredShipments = computed(() => {
 })
 
 const filteredDBL = computed(() => {
-  if (!dblSearchQuery.value) return dblList.value
+  const activeList = dblList.value.filter(d =>
+    d.status === 'IN_TRANSIT' || d.status === 'READY' || (d.shipment_count && d.shipment_count > 0)
+  )
+  if (!dblSearchQuery.value) return activeList
   const q = dblSearchQuery.value.toLowerCase()
-  return dblList.value.filter(d =>
+  return activeList.filter(d =>
     d.dbl_number?.toLowerCase().includes(q) ||
     d.vehicle_plate?.toLowerCase().includes(q) ||
     d.driver_name?.toLowerCase().includes(q) ||
@@ -154,21 +157,6 @@ const filteredDBL = computed(() => {
 const getDBLInfo = (dblId: string | null): DBLItem | null => {
   if (!dblId) return null
   return dblList.value.find(d => d.id === dblId) || null
-}
-
-const getShipmentDblMeta = (shipment: Shipment): { dblNumber: string; driverName: string } => {
-  const dblInfo = getDBLInfo(shipment.dbl_id)
-  if (dblInfo) {
-    return {
-      dblNumber: dblInfo.dbl_number || '-',
-      driverName: dblInfo.driver_name || '-'
-    }
-  }
-
-  return {
-    dblNumber: shipment.dbl_number || '-',
-    driverName: shipment.driver_name || '-'
-  }
 }
 
 const getStatusVariant = (status: string): 'default' | 'success' | 'warning' | 'info' => {
@@ -195,6 +183,52 @@ const formatDestination = (city: string, province: string | null): string => {
     return `${cityStr}, ${provinceStr}`
   }
   return cityStr || '-'
+}
+
+const fetchDblById = async (dblId: string | null): Promise<DBLItem | null> => {
+  if (!dblId) return null
+  try {
+    const res = await fetch(`/api/dbl?endpoint=get&id=${dblId}`)
+    if (!res.ok) return null
+    const data = await res.json()
+    if (!data || !data.id) return null
+    return {
+      id: String(data.id),
+      dbl_number: data.dbl_number as string || '',
+      dbl_date: data.dbl_date as string || '',
+      vehicle_plate: data.vehicle_plate as string || '',
+      driver_name: data.driver_name as string || '',
+      destination_city: data.destination as string || '',
+      status: data.status as string || '',
+      shipment_count: Number(data.shipment_count) || 0,
+      total_colli: 0,
+      total_weight: 0
+    }
+  } catch {
+    return null
+  }
+}
+
+const resolveShipmentDblMeta = async (shipment: Shipment): Promise<{ dblNumber: string; driverName: string; dblDate: string }> => {
+  let dblNumber = shipment.dbl_number || '-'
+  let driverName = shipment.driver_name || '-'
+  let dblDate = formatDate(shipment.dbl_date || '')
+
+  const localDbl = shipment.dbl_id ? getDBLInfo(shipment.dbl_id) : null
+  if (localDbl) {
+    dblNumber = localDbl.dbl_number || dblNumber
+    driverName = localDbl.driver_name || driverName
+    dblDate = formatDate(localDbl.dbl_date)
+  } else if (shipment.dbl_id) {
+    const fetched = await fetchDblById(shipment.dbl_id)
+    if (fetched) {
+      dblNumber = fetched.dbl_number || dblNumber
+      driverName = fetched.driver_name || driverName
+      dblDate = formatDate(fetched.dbl_date)
+    }
+  }
+
+  return { dblNumber, driverName, dblDate }
 }
 
 const toggleShipmentSelection = (id: string): void => {
@@ -240,7 +274,7 @@ const toggleAllDBLs = (): void => {
 const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
   const company = await getCompany()
   const publicCode = shipment.tracking_code || ''
-  const { dblNumber, driverName } = getShipmentDblMeta(shipment)
+  const { dblNumber, driverName, dblDate } = await resolveShipmentDblMeta(shipment)
   
   await new Promise<void>((resolve) => {
     const img = new Image()
@@ -287,7 +321,9 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         .meta-fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
         .meta-box { border: 1px solid #000; padding: 3px 6px; min-height: 28px; }
         .meta-label { font-size: 10px; margin-bottom: 2px; text-transform: uppercase; }
-        .meta-value { font-size: 14px; font-weight: bold; min-height: 16px; }
+        .meta-value { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: bold; min-height: 16px; }
+        .meta-main { display: inline-block; }
+        .meta-date { font-size: 14px; font-weight: bold; line-height: 1.1; }
 
         .barcode-section { text-align: right; padding-right: 2px; display: flex; align-items: center; justify-content: flex-end; }
         .barcode-section img { width: 150px; height: 32px; border: 1px solid #000; padding: 1px; }
@@ -350,15 +386,18 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         </div>
 
         <div class="meta-row">
-          <div class="meta-fields">
-            <div class="meta-box">
-              <div class="meta-label">No. DBL</div>
-              <div class="meta-value">${dblNumber}</div>
-            </div>
-            <div class="meta-box">
-              <div class="meta-label">Supir</div>
-              <div class="meta-value">${driverName}</div>
-            </div>
+            <div class="meta-fields">
+              <div class="meta-box">
+                <div class="meta-label">No. DBL</div>
+                <div class="meta-value">
+                  <span class="meta-main">${dblNumber}</span>
+                  ${dblDate && dblDate !== '-' ? `<span class="meta-date">${dblDate}</span>` : ''}
+                </div>
+              </div>
+              <div class="meta-box">
+                <div class="meta-label">Supir</div>
+                <div class="meta-value">${driverName}</div>
+              </div>
           </div>
           <div class="barcode-section">
             <img src="/api/blob?endpoint=generate&code=${publicCode}&type=barcode&hideText=1" alt="Barcode" />
@@ -468,6 +507,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
       const spbNumber = s.spb_number as string || '-'
       const publicCode = s.tracking_code as string || s.public_code as string || ''
       const dblNumber = dbl.dbl_number || '-'
+      const dblDate = formatDate(dbl.dbl_date)
       const driverName = dbl.driver_name || '-'
       const shipment = {
         spb_number: spbNumber,
@@ -514,7 +554,10 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
             <div class="meta-fields">
               <div class="meta-box">
                 <div class="meta-label">No. DBL</div>
-                <div class="meta-value">${dblNumber}</div>
+                <div class="meta-value">
+                  <span class="meta-main">${dblNumber}</span>
+                  ${dblDate && dblDate !== '-' ? `<span class="meta-date">${dblDate}</span>` : ''}
+                </div>
               </div>
               <div class="meta-box">
                 <div class="meta-label">Supir</div>
@@ -616,7 +659,9 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           .meta-fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
           .meta-box { border: 1px solid #000; padding: 3px 6px; min-height: 28px; }
           .meta-label { font-size: 10px; margin-bottom: 2px; text-transform: uppercase; }
-          .meta-value { font-size: 14px; font-weight: bold; min-height: 16px; }
+          .meta-value { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: bold; min-height: 16px; }
+          .meta-main { display: inline-block; }
+          .meta-date { font-size: 14px; font-weight: bold; line-height: 1.1; }
 
           .barcode-section { text-align: right; padding-right: 2px; display: flex; align-items: center; justify-content: flex-end; }
           .barcode-section img { width: 150px; height: 32px; border: 1px solid #000; padding: 1px; }
@@ -702,11 +747,12 @@ const printSelectedShipments = async (): Promise<void> => {
   }
 
   let pagesHtml = ''
-  selected.forEach((shipment, index) => {
+  let index = 0
+  for (const shipment of selected) {
     const spbNumber = shipment.spb_number || '-'
     const publicCode = shipment.tracking_code || ''
     const deliveredStamp = shipment.status === 'DELIVERED' ? `<div class="delivered-stamp">DELIVERED</div>` : ''
-    const { dblNumber, driverName } = getShipmentDblMeta(shipment)
+    const { dblNumber, driverName, dblDate } = await resolveShipmentDblMeta(shipment)
     
     pagesHtml += `
       <div class="sheet ${index > 0 ? 'page-break' : ''}">
@@ -732,7 +778,10 @@ const printSelectedShipments = async (): Promise<void> => {
           <div class="meta-fields">
             <div class="meta-box">
               <div class="meta-label">No. DBL</div>
-              <div class="meta-value">${dblNumber}</div>
+              <div class="meta-value">
+                <span class="meta-main">${dblNumber}</span>
+                ${dblDate && dblDate !== '-' ? `<span class="meta-date">${dblDate}</span>` : ''}
+              </div>
             </div>
             <div class="meta-box">
               <div class="meta-label">Supir</div>
@@ -804,7 +853,8 @@ const printSelectedShipments = async (): Promise<void> => {
         </div>
       </div>
     `
-  })
+    index += 1
+  }
 
   const html = `
     <!DOCTYPE html>
@@ -833,7 +883,9 @@ const printSelectedShipments = async (): Promise<void> => {
         .meta-fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
         .meta-box { border: 1px solid #000; padding: 3px 6px; min-height: 28px; }
         .meta-label { font-size: 10px; margin-bottom: 2px; text-transform: uppercase; }
-        .meta-value { font-size: 14px; font-weight: bold; min-height: 16px; }
+        .meta-value { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: bold; min-height: 16px; }
+        .meta-main { display: inline-block; }
+        .meta-date { font-size: 14px; font-weight: bold; line-height: 1.1; }
 
         .barcode-section { text-align: right; padding-right: 2px; display: flex; align-items: center; justify-content: flex-end; }
         .barcode-section img { width: 150px; height: 32px; border: 1px solid #000; padding: 1px; }
@@ -941,6 +993,7 @@ const printSelectedDBLs = async (): Promise<void> => {
     const spbNumber = s.spb_number as string || '-'
     const publicCode = s.tracking_code as string || s.public_code as string || ''
     const dblNumber = dbl?.dbl_number || (s.dbl_number as string) || '-'
+    const dblDate = dbl?.dbl_date ? formatDate(dbl.dbl_date) : formatDate((s.dbl_date as string) || '')
     const driverName = dbl?.driver_name || (s.driver_name as string) || '-'
     const shipment = {
       spb_number: spbNumber,
@@ -987,7 +1040,10 @@ const printSelectedDBLs = async (): Promise<void> => {
           <div class="meta-fields">
             <div class="meta-box">
               <div class="meta-label">No. DBL</div>
-              <div class="meta-value">${dblNumber}</div>
+              <div class="meta-value">
+                <span class="meta-main">${dblNumber}</span>
+                ${dblDate && dblDate !== '-' ? `<span class="meta-date">${dblDate}</span>` : ''}
+              </div>
             </div>
             <div class="meta-box">
               <div class="meta-label">Supir</div>
@@ -1089,7 +1145,9 @@ const printSelectedDBLs = async (): Promise<void> => {
           .meta-fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
           .meta-box { border: 1px solid #000; padding: 3px 6px; min-height: 28px; }
           .meta-label { font-size: 10px; margin-bottom: 2px; text-transform: uppercase; }
-          .meta-value { font-size: 14px; font-weight: bold; min-height: 16px; }
+          .meta-value { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: bold; min-height: 16px; }
+          .meta-main { display: inline-block; }
+          .meta-date { font-size: 14px; font-weight: bold; line-height: 1.1; }
 
           .barcode-section { text-align: right; padding-right: 2px; display: flex; align-items: center; justify-content: flex-end; }
           .barcode-section img { width: 150px; height: 32px; border: 1px solid #000; padding: 1px; }

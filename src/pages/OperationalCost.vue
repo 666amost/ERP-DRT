@@ -371,7 +371,7 @@ onMounted(() => {
                 <div class="text-xs text-gray-500">{{ dbl.vehicle_plate || '-' }}</div>
               </td>
               <td class="px-4 py-3 text-gray-600 dark:text-gray-300">{{ dbl.dbl_date ? formatDate(dbl.dbl_date) : '-' }}</td>
-              <td class="px-4 py-3 text-gray-600 dark:text-gray-300">{{ dbl.origin || '-' }} → {{ dbl.destination || '-' }}</td>
+              <td class="px-4 py-3 text-gray-600 dark:text-gray-300">{{ dbl.origin || '-' }} - {{ dbl.destination || '-' }}</td>
               <td class="px-4 py-3 text-gray-600 dark:text-gray-300">{{ dbl.driver_name || '-' }}</td>
               <td class="px-4 py-3 text-right font-medium text-gray-900 dark:text-gray-100">{{ formatRupiah(dbl.total_nominal || 0) }}</td>
               <td class="px-4 py-3 text-right text-red-600 dark:text-red-400">{{ formatRupiah(dbl.total_operational || 0) }}</td>
@@ -425,7 +425,7 @@ onMounted(() => {
           </div>
           <div class="p-3">
             <div class="text-sm text-gray-600 dark:text-gray-300 mb-3">
-              {{ dbl.origin || '-' }} → {{ dbl.destination || '-' }}
+              {{ dbl.origin || '-' }} - {{ dbl.destination || '-' }}
             </div>
             <div class="grid grid-cols-3 gap-2 mb-3 text-center">
               <div class="p-2 bg-gray-50 dark:bg-gray-700/50 rounded">
@@ -459,58 +459,60 @@ onMounted(() => {
     </template>
 
     <template v-else>
-      <div class="hidden lg:block bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <table class="w-full text-sm table-fixed">
-          <thead class="bg-gray-50 dark:bg-gray-700/50">
-            <tr>
-              <th class="w-[90px] px-2 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">DBL</th>
-              <th class="w-[70px] px-2 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tgl</th>
-              <th class="w-[120px] px-2 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Rute</th>
-              <th class="w-[90px] px-2 py-3 text-right text-xs font-medium text-blue-600 dark:text-blue-400 uppercase">Nominal</th>
-              <th class="w-[80px] px-2 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Supir</th>
-              <th class="w-[70px] px-2 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Solar</th>
-              <th class="w-[70px] px-2 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Sewa</th>
-              <th class="w-[70px] px-2 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Kuli</th>
-              <th class="w-[70px] px-2 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Lain</th>
-              <th class="w-[90px] px-2 py-3 text-right text-xs font-medium text-red-600 dark:text-red-400 uppercase">Total</th>
-              <th class="w-[90px] px-2 py-3 text-right text-xs font-medium text-green-600 dark:text-green-400 uppercase">Margin</th>
-              <th class="w-[50px] px-2 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">%</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-            <tr v-if="reportItems.length === 0">
-              <td colspan="12" class="px-4 py-8 text-center text-gray-500">Tidak ada data laporan</td>
-            </tr>
-            <tr
-              v-for="item in reportItems"
-              :key="item.id"
-              class="hover:bg-gray-50 dark:hover:bg-gray-700/50"
-            >
-              <td class="px-2 py-2 font-medium text-gray-900 dark:text-gray-100 truncate">{{ item.dbl_number }}</td>
-              <td class="px-2 py-2 text-gray-600 dark:text-gray-300 text-xs">{{ item.dbl_date ? formatDate(item.dbl_date) : '-' }}</td>
-              <td class="px-2 py-2 text-gray-600 dark:text-gray-300 text-xs truncate">{{ item.origin || '-' }} → {{ item.destination || '-' }}</td>
-              <td class="px-2 py-2 text-right font-medium text-blue-600 dark:text-blue-400 text-xs">{{ formatRupiah(item.total_nominal) }}</td>
-              <td class="px-2 py-2 text-right text-gray-600 dark:text-gray-400 text-xs">{{ formatRupiah(item.bayar_supir) }}</td>
-              <td class="px-2 py-2 text-right text-gray-600 dark:text-gray-400 text-xs">{{ formatRupiah(item.solar) }}</td>
-              <td class="px-2 py-2 text-right text-gray-600 dark:text-gray-400 text-xs">{{ formatRupiah(item.sewa_mobil) }}</td>
-              <td class="px-2 py-2 text-right text-gray-600 dark:text-gray-400 text-xs">{{ formatRupiah(item.kuli_muat + item.kuli_bongkar) }}</td>
-              <td class="px-2 py-2 text-right text-gray-600 dark:text-gray-400 text-xs">{{ formatRupiah(item.biaya_lain) }}</td>
-              <td class="px-2 py-2 text-right font-medium text-red-600 dark:text-red-400 text-xs">{{ formatRupiah(item.total_operational) }}</td>
-              <td
-                class="px-2 py-2 text-right font-medium text-xs"
-                :class="item.margin >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
+      <div class="hidden lg:block bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+        <div class="overflow-x-auto">
+          <table class="min-w-[1100px] w-full text-sm table-auto">
+            <thead class="bg-gray-50 dark:bg-gray-700/50">
+              <tr>
+                <th class="w-[90px] px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">DBL</th>
+                <th class="w-[80px] px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Tgl</th>
+                <th class="w-[150px] px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Rute</th>
+                <th class="w-[110px] px-3 py-3 text-right text-xs font-medium text-blue-600 dark:text-blue-400 uppercase whitespace-nowrap">Nominal</th>
+                <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Supir</th>
+                <th class="w-[80px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Solar</th>
+                <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Sewa</th>
+                <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Kuli</th>
+                <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Lain</th>
+                <th class="w-[110px] px-3 py-3 text-right text-xs font-medium text-red-600 dark:text-red-400 uppercase whitespace-nowrap">Total</th>
+                <th class="w-[110px] px-3 py-3 text-right text-xs font-medium text-green-600 dark:text-green-400 uppercase whitespace-nowrap">Margin</th>
+                <th class="w-[60px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">%</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+              <tr v-if="reportItems.length === 0">
+                <td colspan="12" class="px-4 py-8 text-center text-gray-500">Tidak ada data laporan</td>
+              </tr>
+              <tr
+                v-for="item in reportItems"
+                :key="item.id"
+                class="hover:bg-gray-50 dark:hover:bg-gray-700/50"
               >
-                {{ formatRupiah(item.margin) }}
-              </td>
-              <td
-                class="px-2 py-2 text-right font-medium text-xs"
-                :class="Number(item.margin_percent) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
-              >
-                {{ item.margin_percent }}%
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                <td class="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 truncate">{{ item.dbl_number }}</td>
+                <td class="px-3 py-2 text-gray-600 dark:text-gray-300 text-xs whitespace-nowrap">{{ item.dbl_date ? formatDate(item.dbl_date) : '-' }}</td>
+                <td class="px-3 py-2 text-gray-600 dark:text-gray-300 text-xs truncate">{{ item.origin || '-' }} - {{ item.destination || '-' }}</td>
+                <td class="px-3 py-2 text-right font-medium text-blue-600 dark:text-blue-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.total_nominal) }}</td>
+                <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.bayar_supir) }}</td>
+                <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.solar) }}</td>
+                <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.sewa_mobil) }}</td>
+                <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.kuli_muat + item.kuli_bongkar) }}</td>
+                <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.biaya_lain) }}</td>
+                <td class="px-3 py-2 text-right font-medium text-red-600 dark:text-red-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.total_operational) }}</td>
+                <td
+                  class="px-3 py-2 text-right font-medium text-xs whitespace-nowrap tabular-nums"
+                  :class="item.margin >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
+                >
+                  {{ formatRupiah(item.margin) }}
+                </td>
+                <td
+                  class="px-3 py-2 text-right font-medium text-xs whitespace-nowrap tabular-nums"
+                  :class="Number(item.margin_percent) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
+                >
+                  {{ item.margin_percent }}%
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div class="lg:hidden space-y-3">
@@ -538,7 +540,7 @@ onMounted(() => {
           </div>
           <div class="p-3">
             <div class="text-sm text-gray-600 dark:text-gray-300 mb-3">
-              {{ item.origin || '-' }} → {{ item.destination || '-' }}
+              {{ item.origin || '-' }} - {{ item.destination || '-' }}
             </div>
 
             <div class="space-y-1 text-xs mb-3">
@@ -603,14 +605,14 @@ onMounted(() => {
               v-if="selectedDbl"
               class="text-sm text-gray-500 dark:text-gray-400 mt-0.5"
             >
-              {{ selectedDbl.dbl_number }} - {{ selectedDbl.origin }} → {{ selectedDbl.destination }}
+              {{ selectedDbl.dbl_number }} - {{ selectedDbl.origin }} - {{ selectedDbl.destination }}
             </div>
           </div>
           <button
             class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"
             @click="showModal = false"
           >
-            <span class="text-xl text-gray-400">×</span>
+            <span class="text-xl text-gray-400">&times;</span>
           </button>
         </div>
         

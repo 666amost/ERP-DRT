@@ -72,10 +72,17 @@ type InvoiceItem = {
   spb_number?: string | null;
   description: string;
   quantity: number;
+  colli?: number | null;
+  qty?: number | null;
   unit_price: number;
+  other_fee?: number;
   tax_type?: string;
   item_discount?: number;
   sj_returned?: boolean;
+  unit?: string | null;
+  pengirim_name?: string | null;
+  recipient_name?: string | null;
+  weight?: number | null;
 };
 
 type NormalizedItem = {
@@ -84,6 +91,7 @@ type NormalizedItem = {
   description: string;
   quantity: number;
   unit_price: number;
+  other_fee: number;
   tax_type: string;
   item_discount: number;
   sj_returned: boolean;
@@ -114,6 +122,7 @@ type CreateInvoiceBody = {
     description: string;
     quantity: number;
     unit_price: number;
+    other_fee?: number;
     tax_type?: string;
     item_discount?: number;
     sj_returned?: boolean;
@@ -331,6 +340,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       description: it?.description || 'Jasa pengiriman',
       quantity: Number(it?.quantity || 1),
       unit_price: Number(it?.unit_price || 0),
+      other_fee: Number(it?.other_fee || 0),
       tax_type: it?.tax_type || 'include',
       item_discount: Number(it?.item_discount || 0),
       sj_returned: Boolean(it?.sj_returned)
@@ -412,6 +422,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
               description: 'Jasa pengiriman',
               quantity: 1,
               unit_price: row.nominal || 0,
+              other_fee: 0,
               tax_type: 'include',
               item_discount: 0,
               sj_returned: false
@@ -445,7 +456,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         const discountAmount = Number(body.discount_amount || 0);
         // unit_price already represents the line total, so avoid multiplying by quantity again
         const subtotalFromItems = normalizedItems.reduce((sum, it) => {
-          const lineTotal = (it.unit_price || 0) - (it.item_discount || 0);
+          const lineTotal = (it.unit_price || 0) + (it.other_fee || 0) - (it.item_discount || 0);
           return sum + lineTotal;
         }, 0);
         const subtotalAfterDiscount = Math.max(0, subtotalFromItems - discountAmount);
@@ -502,19 +513,21 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           const descriptions = normalizedItems.map((it) => it.description);
           const quantities = normalizedItems.map((it) => it.quantity || 1);
           const unitPrices = normalizedItems.map((it) => it.unit_price || 0);
+          const otherFees = normalizedItems.map((it) => it.other_fee || 0);
           const taxTypes = normalizedItems.map((it) => it.tax_type || 'include');
           const discounts = normalizedItems.map((it) => it.item_discount || 0);
           
           await trx`
-            insert into invoice_items (invoice_id, shipment_id, description, quantity, unit_price, tax_type, item_discount)
+            insert into invoice_items (invoice_id, shipment_id, description, quantity, unit_price, other_fee, tax_type, item_discount)
             select ${newInvoiceId}, * from unnest(
               ${shipmentIds}::bigint[],
               ${descriptions}::text[],
               ${quantities}::numeric[],
               ${unitPrices}::numeric[],
+              ${otherFees}::numeric[],
               ${taxTypes}::text[],
               ${discounts}::numeric[]
-            ) as t(shipment_id, description, quantity, unit_price, tax_type, item_discount)
+            ) as t(shipment_id, description, quantity, unit_price, other_fee, tax_type, item_discount)
           `;
           
           const shipmentsToUpdate = normalizedItems.filter((it) => it.shipment_id);
@@ -652,11 +665,18 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         ii.shipment_id,
         ii.description, 
         ii.quantity::float as quantity, 
+        coalesce(s.total_colli, ii.quantity)::float as colli,
+        coalesce(s.qty, ii.quantity)::float as qty,
         ii.unit_price::float as unit_price, 
+        coalesce(ii.other_fee, 0)::float as other_fee,
         ii.tax_type,
         ii.item_discount::float as item_discount,
         s.spb_number,
         s.public_code as tracking_code,
+        s.satuan as unit,
+        s.pengirim_name,
+        s.penerima_name as recipient_name,
+        s.berat::float as weight,
         s.sj_returned
       from invoice_items ii
       left join shipments s on ii.shipment_id = s.id
@@ -688,7 +708,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           spbLookup[spbKey] = shipmentId || 0;
         }
       }
-      await sql`insert into invoice_items (invoice_id, shipment_id, description, quantity, unit_price, tax_type, item_discount) values (${body.invoice_id}, ${shipmentId}, ${desc}, ${it.quantity || 1}, ${it.unit_price || 0}, ${it.tax_type || 'include'}, ${it.item_discount || 0})`;
+      await sql`insert into invoice_items (invoice_id, shipment_id, description, quantity, unit_price, other_fee, tax_type, item_discount) values (${body.invoice_id}, ${shipmentId}, ${desc}, ${it.quantity || 1}, ${it.unit_price || 0}, ${it.other_fee || 0}, ${it.tax_type || 'include'}, ${it.item_discount || 0})`;
       insertedCount++;
       if (shipmentId) {
         const sjReturned = Boolean(it.sj_returned);
@@ -703,7 +723,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     console.log(`[set-items] invoice_id=${body.invoice_id}, received=${itemsToInsert.length}, inserted=${insertedCount}`);
     // unit_price is stored as the total per line, so ignore quantity when recalculating subtotal
     const rows = await sql`
-      select coalesce(sum((unit_price) - coalesce(item_discount,0)),0)::float as subtotal 
+      select coalesce(sum((unit_price + coalesce(other_fee,0)) - coalesce(item_discount,0)),0)::float as subtotal 
       from invoice_items 
       where invoice_id = ${body.invoice_id}
     ` as [{ subtotal: number }];

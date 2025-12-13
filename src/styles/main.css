@@ -57,6 +57,7 @@ table th, table td {
 /* Clamp text to up to 2 lines in places like address fields */
 .line-clamp-2 {
   display: -webkit-box;
+  line-clamp: 2;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;

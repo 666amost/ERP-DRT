@@ -68,6 +68,9 @@ type Item = {
   recipient_name?: string;
   destination_city?: string;
   unit_price: number;
+  colli?: number | null;
+  qty?: number | null;
+  other_fee?: number;
   pph_rate?: number;
   tax_type?: string;
   item_discount?: number;
@@ -81,6 +84,25 @@ type Item = {
   vehicle_plate?: string | null;
   dbl_date?: string | null;
   sj_returned?: boolean;
+};
+
+type LoadedInvoiceItem = {
+  id?: number;
+  shipment_id?: number | null;
+  spb_number?: string;
+  tracking_code?: string;
+  unit_price?: number;
+  description?: string;
+  quantity?: number;
+  tax_type?: string;
+  item_discount?: number;
+  sj_returned?: boolean;
+  other_fee?: number | null;
+  colli?: number | null;
+  qty?: number | null;
+  recipient_name?: string | null;
+  penerima_name?: string | null;
+  recipient?: string | null;
 };
 
 type UnpaidShipment = {
@@ -204,6 +226,7 @@ async function loadAllUnpaidShipments(): Promise<void> {
         recipient_name: s.recipient_name || '-',
         destination_city: s.destination_city || '-',
         unit_price: s.amount || 0,
+        other_fee: 0,
         dbl_number: s.dbl_number || null,
         driver_name: s.driver_name || null,
         driver_phone: s.driver_phone || null,
@@ -307,7 +330,7 @@ function toggleSjReturned(shipmentId?: number | null): void {
 function updateItemsFromSelection(): void {
   items.value = allUnpaidShipments.value.filter(s => s.shipment_id && selectedShipmentIds.value.has(s.shipment_id));
   if (!manualAmountMode.value) {
-    const subtotal = items.value.reduce((sum, it) => sum + (it.unit_price || 0), 0);
+    const subtotal = items.value.reduce((sum, it) => sum + lineSubtotal(it), 0);
     form.value.amount = String(subtotal);
   }
 }
@@ -327,13 +350,20 @@ async function loadItemsForInvoice(id: number | null, fallbackSpb?: string | nul
     const res = await fetch(`/api/invoices?endpoint=items&invoice_id=${id}`);
     const data = await res.json();
     const fallbackSpbList = (fallbackSpb || '').split(',').map(s => s.trim()).filter(Boolean);
-    items.value = (data.items || []).map((i: { id?: number; shipment_id?: number|null; spb_number?: string; tracking_code?: string; unit_price?: number; description?: string; quantity?: number; tax_type?: string; item_discount?: number; sj_returned?: boolean }, idx: number) => {
+    const rawItems: LoadedInvoiceItem[] = Array.isArray(data.items) ? data.items : [];
+    items.value = rawItems.map((i, idx: number) => {
       const spbFromFallback = (!i.spb_number && fallbackSpbList.length > 0) ? fallbackSpbList[Math.min(idx, fallbackSpbList.length - 1)] : i.spb_number;
+      const otherFee = Number(i.other_fee || 0);
+      const lineTotal = (Number(i.unit_price) || 0) + otherFee - (Number(i.item_discount) || 0);
       return {
         ...i,
+        other_fee: otherFee,
+        colli: i.colli ?? i.quantity ?? null,
+        qty: i.qty ?? i.quantity ?? null,
+        recipient_name: i.recipient_name ?? i.penerima_name ?? i.recipient ?? '',
         spb_number: spbFromFallback || i.tracking_code,
         sj_returned: Boolean(i.sj_returned),
-        _unit_price_display: i.unit_price ? formatRupiah(i.unit_price) : ''
+        _unit_price_display: lineTotal ? formatRupiah(lineTotal) : ''
       };
     });
   } catch {
@@ -355,6 +385,7 @@ async function saveItemsForInvoice(invoiceId: number, itemsToSave?: Item[]): Pro
         description: it.description || 'Jasa pengiriman', 
         quantity: it.quantity || 1, 
         unit_price: it.unit_price || 0, 
+        other_fee: it.other_fee || 0,
         tax_type: it.tax_type || 'include', 
         item_discount: it.item_discount || 0,
         sj_returned: Boolean(it.sj_returned)
@@ -372,12 +403,16 @@ async function saveItemsForInvoice(invoiceId: number, itemsToSave?: Item[]): Pro
 
 function calcSubtotal(): number {
   return items.value.reduce((acc: number, it: Item) => {
-    return acc + (it.unit_price || 0);
+    return acc + lineSubtotal(it);
   }, 0);
 }
 
 function calcDiscountedSubtotal(): number {
   return Math.max(0, calcSubtotal() - (discountAmount.value || 0));
+}
+
+function lineSubtotal(it: Item): number {
+  return Number(it.unit_price || 0) + Number(it.other_fee || 0) - Number(it.item_discount || 0);
 }
 
 function calcPph(): number {
@@ -472,6 +507,7 @@ async function openEditModal(invoice: Invoice) {
       description: 'Jasa pengiriman', 
       quantity: 1, 
       unit_price: invoice.subtotal || invoice.amount, 
+      other_fee: 0,
       tax_type: 'include', 
       item_discount: 0,
       spb_number: invoice.spb_number || '',
@@ -620,6 +656,7 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
             description: item.description || 'Jasa pengiriman',
             quantity: item.quantity || 1,
             unit_price: item.unit_price || 0,
+            other_fee: item.other_fee || 0,
             tax_type: item.tax_type || 'include',
             item_discount: item.item_discount || 0,
             sj_returned: Boolean(item.sj_returned),
@@ -643,7 +680,7 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
         try {
           const customerName = item.customer_name || form.value.customer_name;
           const customerId = item.customer_id ?? form.value.customer_id ?? null;
-          const itemSubtotal = item.unit_price || 0;
+          const itemSubtotal = (item.unit_price || 0) + (item.other_fee || 0);
           const itemDiscountAmount = item.item_discount || 0;
           const itemSubtotalAfterDiscount = itemSubtotal - itemDiscountAmount;
           const itemPphAmount = itemSubtotalAfterDiscount * (pphPercent.value / 100);
@@ -686,15 +723,16 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
               notes: notes.value || undefined,
               items: [{
                 shipment_id: item.shipment_id || null,
-                spb_number: item.spb_number || null,
-                description: item.description || 'Jasa pengiriman',
-                quantity: item.quantity || 1,
-                unit_price: item.unit_price || 0,
-                tax_type: item.tax_type || 'include',
-                item_discount: item.item_discount || 0,
-                sj_returned: Boolean(item.sj_returned),
-                customer_name: customerName || undefined,
-                customer_id: customerId ?? undefined
+              spb_number: item.spb_number || null,
+              description: item.description || 'Jasa pengiriman',
+              quantity: item.quantity || 1,
+              unit_price: item.unit_price || 0,
+              other_fee: item.other_fee || 0,
+              tax_type: item.tax_type || 'include',
+              item_discount: item.item_discount || 0,
+              sj_returned: Boolean(item.sj_returned),
+              customer_name: customerName || undefined,
+              customer_id: customerId ?? undefined
               }]
             })
           });
@@ -936,6 +974,7 @@ async function printInvoice(inv: Invoice): Promise<void> {
       description: 'Jasa pengiriman', 
       quantity: 1, 
       unit_price: inv.amount, 
+      other_fee: 0,
       tax_type: 'include', 
       item_discount: 0,
       spb_number: inv.spb_number || ''
@@ -943,7 +982,7 @@ async function printInvoice(inv: Invoice): Promise<void> {
   }
   
   const subtotal = invItems.reduce((acc: number, it: Item) => {
-    return acc + (it.unit_price || 0);
+    return acc + lineSubtotal(it);
   }, 0);
   const pphAmount = (inv.pph_percent || 0) * subtotal / 100;
   const grand = subtotal - pphAmount;
@@ -953,15 +992,31 @@ async function printInvoice(inv: Invoice): Promise<void> {
     const spbDisplay = it.spb_number || inv.spb_number || '';
     const trackingDisplay = it.tracking_code || '';
     const displaySpb = spbDisplay || trackingDisplay || '-';
-    const itemPph = (inv.pph_percent || 0) * (it.unit_price || 0) / 100;
-    const itemTotal = (it.unit_price || 0) - itemPph;
+    const baseLine = lineSubtotal(it);
+    const baseTagihan = Number(it.unit_price || 0);
+    const otherFee = Number(it.other_fee || 0);
+    const itemPph = (inv.pph_percent || 0) * baseLine / 100;
+    const itemTotal = baseLine - itemPph;
+    const colliLabel = it.colli ?? it.quantity ?? 0;
+    const qtyLabel = (() => {
+      if (it.weight !== undefined && it.weight !== null && !Number.isNaN(it.weight)) {
+        return `${it.weight} ${it.unit || ''}`.trim();
+      }
+      return `${it.quantity || 0}${it.unit ? ' ' + it.unit : ''}`;
+    })();
+    const penerimaLabel = it.recipient_name || '-';
     return `<tr>
       <td style="padding: 4px 3px; border: 1px solid #000; text-align: center; font-size: 10px; width: 12%;">${displaySpb.replace(/</g,'&lt;')}</td>
-      <td style="padding: 4px 3px; border: 1px solid #000; font-size: 9px; width: 24%;">${(it.description || '').replace(/</g,'&lt;')}</td>
-      <td style="padding: 4px 3px; border: 1px solid #000; text-align: center; font-size: 10px; width: 8%;">${it.quantity}</td>
-      <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-size: 10px; width: 13%;">${formatRupiah(it.unit_price)}</td>
-      <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-size: 10px; width: 13%;">${formatRupiah(itemPph)}</td>
-      <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-size: 10px; font-weight: 600; width: 15%;">${formatRupiah(itemTotal)}</td>
+    <td style="padding: 4px 3px; border: 1px solid #000; font-size: 9px; width: 18%; line-height: 1.2;">
+        <div>${(it.description || '').replace(/</g,'&lt;')}</div>
+        <div style="color:#444;">Penerima: ${(penerimaLabel || '-').replace(/</g,'&lt;')}</div>
+      </td>
+      <td style="padding: 4px 3px; border: 1px solid #000; text-align: center; font-size: 10px; width: 8%;">${colliLabel}</td>
+      <td style="padding: 4px 3px; border: 1px solid #000; text-align: center; font-size: 10px; width: 8%;">${qtyLabel}</td>
+      <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-size: 10px; width: 12%;">${formatRupiah(baseTagihan)}</td>
+      <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-size: 10px; width: 12%;">${formatRupiah(otherFee)}</td>
+      <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-size: 10px; width: 12%;">${formatRupiah(itemPph)}</td>
+      <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-size: 10px; font-weight: 600; width: 13%;">${formatRupiah(itemTotal)}</td>
     </tr>`;
   }).join('');
 
@@ -1303,11 +1358,13 @@ async function printInvoice(inv: Invoice): Promise<void> {
         <thead>
           <tr>
             <th style="width: 12%;">No. SPB</th>
-            <th style="width: 24%;">Deskripsi Barang</th>
-            <th style="width: 8%;">Qty</th>
-            <th style="width: 13%;">Harga Satuan</th>
-            <th style="width: 13%;">PPh</th>
-            <th style="width: 15%;">Total</th>
+            <th style="width: 18%;">Deskripsi / Penerima</th>
+            <th style="width: 8%;">Colli</th>
+            <th style="width: 8%;">Qty / Unit</th>
+            <th style="width: 12%;">Tagihan</th>
+            <th style="width: 12%;">Biaya Lain</th>
+            <th style="width: 12%;">PPh</th>
+            <th style="width: 13%;">Total</th>
           </tr>
         </thead>
         <tbody>
@@ -1957,6 +2014,7 @@ watch(() => invoiceFilterType.value, () => {
                     <th class="px-2 py-2 text-left text-xs font-medium">Penerima</th>
                     <th class="px-2 py-2 text-center text-xs font-medium">SJ Balik</th>
                     <th class="px-2 py-2 text-right text-xs font-medium">Tagihan</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">Biaya Lain</th>
                     <th class="px-2 py-2 text-right text-xs font-medium">PPh ({{ pphPercent }}%)</th>
                     <th class="px-2 py-2 text-right text-xs font-medium">Total</th>
                   </tr>
@@ -1998,11 +2056,19 @@ watch(() => invoiceFilterType.value, () => {
                     <td class="px-2 py-2 text-right text-xs font-semibold">
                       {{ formatRupiah(it.unit_price || 0) }}
                     </td>
+                    <td class="px-2 py-2 text-right text-xs">
+                      <input
+                        v-model.number="it.other_fee"
+                        type="number"
+                        min="0"
+                        class="w-24 px-2 py-1 border border-gray-300 rounded"
+                      />
+                    </td>
                     <td class="px-2 py-2 text-right text-xs text-red-600">
-                      -{{ formatRupiah((it.unit_price || 0) * (pphPercent / 100)) }}
+                      -{{ formatRupiah(lineSubtotal(it) * (pphPercent / 100)) }}
                     </td>
                     <td class="px-2 py-2 text-right text-xs font-semibold">
-                      {{ formatRupiah((it.unit_price || 0) * (1 - pphPercent / 100)) }}
+                      {{ formatRupiah(lineSubtotal(it) * (1 - pphPercent / 100)) }}
                     </td>
                   </tr>
                 </tbody>
@@ -2023,6 +2089,7 @@ watch(() => invoiceFilterType.value, () => {
                     <th class="px-2 py-2 text-left text-xs font-medium">Penerima</th>
                     <th class="px-2 py-2 text-center text-xs font-medium">SJ Balik</th>
                     <th class="px-2 py-2 text-right text-xs font-medium">Tagihan</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">Biaya Lain</th>
                     <th class="px-2 py-2 text-right text-xs font-medium">PPh ({{ pphPercent }}%)</th>
                     <th class="px-2 py-2 text-right text-xs font-medium">Total</th>
                   </tr>
@@ -2064,11 +2131,19 @@ watch(() => invoiceFilterType.value, () => {
                     <td class="px-2 py-2 text-right text-xs font-semibold">
                       {{ formatRupiah(it.unit_price || 0) }}
                     </td>
+                    <td class="px-2 py-2 text-right text-xs">
+                      <input
+                        v-model.number="it.other_fee"
+                        type="number"
+                        min="0"
+                        class="w-24 px-2 py-1 border border-gray-300 rounded"
+                      />
+                    </td>
                     <td class="px-2 py-2 text-right text-xs text-red-600">
-                      -{{ formatRupiah((it.unit_price || 0) * (pphPercent / 100)) }}
+                      -{{ formatRupiah(lineSubtotal(it) * (pphPercent / 100)) }}
                     </td>
                     <td class="px-2 py-2 text-right text-xs font-semibold">
-                      {{ formatRupiah((it.unit_price || 0) * (1 - pphPercent / 100)) }}
+                      {{ formatRupiah(lineSubtotal(it) * (1 - pphPercent / 100)) }}
                     </td>
                   </tr>
                 </tbody>
@@ -2279,5 +2354,3 @@ watch(() => invoiceFilterType.value, () => {
     </div>
   </div>
 </template>
-
-

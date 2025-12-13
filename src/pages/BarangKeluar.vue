@@ -337,8 +337,8 @@ onMounted(() => {
                   <div class="font-medium">{{ ship.penerima_name || ship.customer_name || '-' }}</div>
                   <div class="text-gray-500 dark:text-gray-400 text-[10px]">{{ ship.penerima_phone || '' }}</div>
                 </td>
-                <td class="px-3 py-3 text-xs dark:text-gray-300 whitespace-nowrap">
-                  <div class="font-medium">{{ ship.origin }} → {{ ship.destination }}</div>
+                <td class="px-3 py-3 text-xs dark:text-gray-300 whitespace-normal break-words max-w-[240px]">
+                  <div class="font-medium line-clamp-2 whitespace-normal break-words">{{ ship.origin }} → {{ ship.destination }}</div>
                 </td>
                 <td class="px-3 py-3 text-xs text-center dark:text-gray-300 font-medium whitespace-nowrap">
                   {{ ship.total_colli }}
@@ -402,7 +402,7 @@ onMounted(() => {
               <div class="border-t border-gray-100 dark:border-gray-700 pt-2 space-y-1.5 text-xs">
                 <div class="flex items-start gap-2">
                   <Icon icon="mdi:map-marker-outline" class="text-base text-gray-400 dark:text-gray-500 flex-shrink-0 mt-0.5" />
-                  <span class="dark:text-gray-300">{{ s.origin }} → {{ s.destination }}</span>
+                  <span class="dark:text-gray-300 line-clamp-2 whitespace-normal break-words">{{ s.origin }} → {{ s.destination }}</span>
                 </div>
                 <div class="flex items-center gap-2">
                   <Icon icon="mdi:archive-outline" class="text-base text-gray-400 dark:text-gray-500 flex-shrink-0" />
@@ -486,3 +486,13 @@ onMounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.line-clamp-2 {
+  display: -webkit-box;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+</style>

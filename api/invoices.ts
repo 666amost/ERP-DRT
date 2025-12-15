@@ -993,18 +993,70 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     writeJson(res, { items });
     return;
   } else if (endpoint === 'payment-history' && req.method === 'GET') {
-    const payments = await sql`
-      select 
-        ip.id, ip.invoice_id, i.invoice_number, i.customer_name,
-        coalesce(i.amount, 0)::float as original_amount,
-        coalesce(i.discount_amount, 0)::float as discount,
-        coalesce(ip.amount, 0)::float as final_amount,
-        ip.payment_date, ip.payment_method, ip.reference_no, ip.notes
-      from invoice_payments ip
-      join invoices i on i.id = ip.invoice_id
-      order by ip.payment_date desc
-      limit 500
-    ` as PaymentHistory[];
+    const isValidDate = (val?: string | null): val is string => Boolean(val && /^\d{4}-\d{2}-\d{2}$/.test(val));
+    const fromRaw = url.searchParams.get('from') || url.searchParams.get('start_date');
+    const toRaw = url.searchParams.get('to') || url.searchParams.get('end_date');
+    const fromDate = isValidDate(fromRaw) ? fromRaw : null;
+    const toDate = isValidDate(toRaw) ? toRaw : null;
+
+    let payments: PaymentHistory[];
+    if (fromDate && toDate) {
+      payments = await sql`
+        select 
+          ip.id, ip.invoice_id, i.invoice_number, i.customer_name,
+          coalesce(i.amount, 0)::float as original_amount,
+          coalesce(i.discount_amount, 0)::float as discount,
+          coalesce(ip.amount, 0)::float as final_amount,
+          ip.payment_date, ip.payment_method, ip.reference_no, ip.notes
+        from invoice_payments ip
+        join invoices i on i.id = ip.invoice_id
+        where ip.payment_date >= ${fromDate}::date
+          and ip.payment_date < (${toDate}::date + interval '1 day')
+        order by ip.payment_date desc
+        limit 500
+      ` as PaymentHistory[];
+    } else if (fromDate) {
+      payments = await sql`
+        select 
+          ip.id, ip.invoice_id, i.invoice_number, i.customer_name,
+          coalesce(i.amount, 0)::float as original_amount,
+          coalesce(i.discount_amount, 0)::float as discount,
+          coalesce(ip.amount, 0)::float as final_amount,
+          ip.payment_date, ip.payment_method, ip.reference_no, ip.notes
+        from invoice_payments ip
+        join invoices i on i.id = ip.invoice_id
+        where ip.payment_date >= ${fromDate}::date
+        order by ip.payment_date desc
+        limit 500
+      ` as PaymentHistory[];
+    } else if (toDate) {
+      payments = await sql`
+        select 
+          ip.id, ip.invoice_id, i.invoice_number, i.customer_name,
+          coalesce(i.amount, 0)::float as original_amount,
+          coalesce(i.discount_amount, 0)::float as discount,
+          coalesce(ip.amount, 0)::float as final_amount,
+          ip.payment_date, ip.payment_method, ip.reference_no, ip.notes
+        from invoice_payments ip
+        join invoices i on i.id = ip.invoice_id
+        where ip.payment_date < (${toDate}::date + interval '1 day')
+        order by ip.payment_date desc
+        limit 500
+      ` as PaymentHistory[];
+    } else {
+      payments = await sql`
+        select 
+          ip.id, ip.invoice_id, i.invoice_number, i.customer_name,
+          coalesce(i.amount, 0)::float as original_amount,
+          coalesce(i.discount_amount, 0)::float as discount,
+          coalesce(ip.amount, 0)::float as final_amount,
+          ip.payment_date, ip.payment_method, ip.reference_no, ip.notes
+        from invoice_payments ip
+        join invoices i on i.id = ip.invoice_id
+        order by ip.payment_date desc
+        limit 500
+      ` as PaymentHistory[];
+    }
     writeJson(res, { items: payments });
     return;
   } else if (endpoint === 'sales-report' && req.method === 'GET') {

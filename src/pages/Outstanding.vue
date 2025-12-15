@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import Button from '../components/ui/Button.vue';
 import { useFormatters } from '../composables/useFormatters';
 import { Icon } from '@iconify/vue';
@@ -8,7 +8,7 @@ import { getCompany, type CompanyProfile } from '../lib/company';
 
 const LOGO_URL = '/brand/logo.png';
 
-const { formatDate, formatRupiah } = useFormatters();
+const { formatDate, formatRupiah, toWIBDateString, toWIBMidnight } = useFormatters();
 
 type MeUser = { id: number; email: string; name: string | null; role: string };
 
@@ -110,9 +110,51 @@ const totalOutstanding = computed(() => filteredItems.value.reduce((sum, i) => s
 const totalColli = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_colli || 0), 0));
 const totalWeight = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_weight || 0), 0));
 
+function getDefaultRange(): { from: string; to: string } {
+  const todayStr = toWIBDateString();
+  const todayMid = toWIBMidnight(todayStr);
+  const start = new Date(todayMid);
+  start.setDate(start.getDate() - 1);
+  return { from: toWIBDateString(start), to: todayStr };
+}
+
+function setRangeToday(): void {
+  const todayStr = toWIBDateString();
+  dateFrom.value = todayStr;
+  dateTo.value = todayStr;
+}
+
+function setRangeDefault(): void {
+  const { from, to } = getDefaultRange();
+  dateFrom.value = from;
+  dateTo.value = to;
+}
+
+function setRangeLast7Days(): void {
+  const todayStr = toWIBDateString();
+  const todayMid = toWIBMidnight(todayStr);
+  const start = new Date(todayMid);
+  start.setDate(start.getDate() - 6);
+  dateFrom.value = toWIBDateString(start);
+  dateTo.value = todayStr;
+}
+
+function setRangeThisMonth(): void {
+  const todayStr = toWIBDateString();
+  const todayMid = toWIBMidnight(todayStr);
+  const start = new Date(todayMid.getFullYear(), todayMid.getMonth(), 1);
+  dateFrom.value = toWIBDateString(start);
+  dateTo.value = todayStr;
+}
+
 async function loadOutstanding() {
   loading.value = true;
   try {
+    // Guard: never load full-history by accident
+    if (!dateFrom.value && !dateTo.value) {
+      setRangeDefault();
+    }
+
     const params = new URLSearchParams({ endpoint: 'outstanding' });
     if (dateFrom.value) params.set('from', dateFrom.value);
     if (dateTo.value) params.set('to', dateTo.value);
@@ -131,13 +173,17 @@ async function loadOutstanding() {
   }
 }
 
+async function applyFilters(): Promise<void> {
+  await loadOutstanding();
+}
+
 function resetFilters() {
   searchQuery.value = '';
   selectedCustomer.value = '';
   selectedDbl.value = '';
-  dateFrom.value = '';
-  dateTo.value = '';
   sjFilter.value = '';
+  setRangeDefault();
+  applyFilters();
 }
 
 function exportExcel() {
@@ -199,6 +245,7 @@ function formatDateTime(): string {
 }
 
 onMounted(async () => {
+  setRangeDefault();
   loadOutstanding();
   company.value = await getCompany();
   try {
@@ -208,14 +255,6 @@ onMounted(async () => {
       currentUser.value = data.user || data;
     }
   } catch { /* ignore */ }
-});
-
-let reloadTimer: ReturnType<typeof setTimeout> | null = null;
-watch([dateFrom, dateTo], () => {
-  if (reloadTimer) clearTimeout(reloadTimer);
-  reloadTimer = setTimeout(() => {
-    loadOutstanding();
-  }, 250);
 });
 </script>
 
@@ -276,8 +315,13 @@ watch([dateFrom, dateTo], () => {
           <input v-model="dateTo" type="date" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg text-sm" />
         </div>
       </div>
-      <div class="flex gap-2">
-        <Button variant="default" size="sm" @click="resetFilters">Reset Filter</Button>
+      <div class="flex flex-wrap gap-2 items-center">
+        <Button variant="default" size="sm" :disabled="loading" @click="() => { setRangeToday(); applyFilters(); }">Hari Ini</Button>
+        <Button variant="default" size="sm" :disabled="loading" @click="() => { setRangeLast7Days(); applyFilters(); }">Minggu Ini (7 hari)</Button>
+        <Button variant="default" size="sm" :disabled="loading" @click="() => { setRangeThisMonth(); applyFilters(); }">Bulan Ini</Button>
+        <div class="flex-1"></div>
+        <Button variant="primary" size="sm" :disabled="loading" @click="applyFilters">Filter</Button>
+        <Button variant="default" size="sm" :disabled="loading" @click="resetFilters">Reset</Button>
       </div>
     </div>
 

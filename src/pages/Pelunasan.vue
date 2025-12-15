@@ -5,7 +5,7 @@ import Badge from '../components/ui/Badge.vue';
 import { useFormatters } from '../composables/useFormatters';
 import { Icon } from '@iconify/vue';
 
-const { formatDate, formatRupiah } = useFormatters();
+const { formatDate, formatRupiah, toWIBDateString, toWIBMidnight } = useFormatters();
 
 type PaymentHistory = {
   id: number;
@@ -85,7 +85,15 @@ const totalDiscount = computed(() => {
 async function loadPayments() {
   loading.value = true;
   try {
-    const res = await fetch('/api/invoices?endpoint=payment-history');
+    // Guard: never load full-history by accident
+    if (!dateFrom.value && !dateTo.value) {
+      setRangeDefault();
+    }
+
+    const params = new URLSearchParams({ endpoint: 'payment-history' });
+    if (dateFrom.value) params.set('from', dateFrom.value);
+    if (dateTo.value) params.set('to', dateTo.value);
+    const res = await fetch(`/api/invoices?${params.toString()}`);
     if (res.ok) {
       const data = await res.json();
       payments.value = data.items || [];
@@ -97,12 +105,53 @@ async function loadPayments() {
   }
 }
 
+function getDefaultRange(): { from: string; to: string } {
+  const todayStr = toWIBDateString();
+  const todayMid = toWIBMidnight(todayStr);
+  const start = new Date(todayMid);
+  start.setDate(start.getDate() - 1);
+  return { from: toWIBDateString(start), to: todayStr };
+}
+
+function setRangeToday(): void {
+  const todayStr = toWIBDateString();
+  dateFrom.value = todayStr;
+  dateTo.value = todayStr;
+}
+
+function setRangeDefault(): void {
+  const { from, to } = getDefaultRange();
+  dateFrom.value = from;
+  dateTo.value = to;
+}
+
+function setRangeLast7Days(): void {
+  const todayStr = toWIBDateString();
+  const todayMid = toWIBMidnight(todayStr);
+  const start = new Date(todayMid);
+  start.setDate(start.getDate() - 6);
+  dateFrom.value = toWIBDateString(start);
+  dateTo.value = todayStr;
+}
+
+function setRangeThisMonth(): void {
+  const todayStr = toWIBDateString();
+  const todayMid = toWIBMidnight(todayStr);
+  const start = new Date(todayMid.getFullYear(), todayMid.getMonth(), 1);
+  dateFrom.value = toWIBDateString(start);
+  dateTo.value = todayStr;
+}
+
+async function applyFilters(): Promise<void> {
+  await loadPayments();
+}
+
 function resetFilters() {
   searchQuery.value = '';
   selectedCustomer.value = '';
   selectedMethod.value = '';
-  dateFrom.value = '';
-  dateTo.value = '';
+  setRangeDefault();
+  applyFilters();
 }
 
 function exportExcel() {
@@ -141,6 +190,7 @@ function getMethodVariant(method: string | null): 'default' | 'success' | 'info'
 }
 
 onMounted(() => {
+  setRangeDefault();
   loadPayments();
 });
 </script>
@@ -188,8 +238,13 @@ onMounted(() => {
           <input v-model="dateTo" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
         </div>
       </div>
-      <div class="flex gap-2">
-        <Button variant="default" @click="resetFilters">Reset Filter</Button>
+      <div class="flex flex-wrap gap-2 items-center">
+        <Button variant="default" size="sm" :disabled="loading" @click="() => { setRangeToday(); applyFilters(); }">Hari Ini</Button>
+        <Button variant="default" size="sm" :disabled="loading" @click="() => { setRangeLast7Days(); applyFilters(); }">Minggu Ini (7 hari)</Button>
+        <Button variant="default" size="sm" :disabled="loading" @click="() => { setRangeThisMonth(); applyFilters(); }">Bulan Ini</Button>
+        <div class="flex-1"></div>
+        <Button variant="primary" size="sm" :disabled="loading" @click="applyFilters">Filter</Button>
+        <Button variant="default" size="sm" :disabled="loading" @click="resetFilters">Reset</Button>
       </div>
     </div>
 

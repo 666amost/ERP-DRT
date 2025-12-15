@@ -153,12 +153,38 @@ function formatTotalWeights(): string {
 async function loadReport() {
   loading.value = true;
   try {
-    const params = new URLSearchParams({ endpoint: 'list', limit: '1000' });
-    const res = await fetch(`/api/shipments?${params}`);
-    if (res.ok) {
+    const LIMIT = 1000;
+    const MAX_PAGES = 50;
+
+    const buildParams = (page: number): URLSearchParams => {
+      const params = new URLSearchParams({ endpoint: 'list', limit: String(LIMIT), page: String(page) });
+      if (dateFrom.value) params.set('start_date', dateFrom.value);
+      if (dateTo.value) params.set('end_date', dateTo.value);
+      if (selectedStatus.value) params.set('status', selectedStatus.value);
+      if (selectedServiceType.value) params.set('service_type', selectedServiceType.value);
+      if (selectedJenis.value) params.set('jenis', selectedJenis.value);
+      return params;
+    };
+
+    const all: ShipmentReport[] = [];
+    let page = 1;
+    let total = 0;
+
+    while (page <= MAX_PAGES) {
+      const params = buildParams(page);
+      const res = await fetch(`/api/shipments?${params.toString()}`);
+      if (!res.ok) break;
       const data = await res.json();
-      items.value = data.items || [];
+      const batch = (data.items || []) as ShipmentReport[];
+      const pagination = data.pagination as { total?: number } | undefined;
+      total = Number(pagination?.total || total || 0);
+      all.push(...batch);
+      if (batch.length === 0) break;
+      if (total && all.length >= total) break;
+      page += 1;
     }
+
+    items.value = all;
   } catch (e) {
     console.error('Failed to load report:', e);
   } finally {
@@ -277,9 +303,16 @@ function formatDateTime(): string {
 }
 
 watch([dateFrom, dateTo], () => {
-  if (dateFrom.value || dateTo.value) {
+  if (dateFrom.value || dateTo.value) loadReport();
+});
+
+let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+watch([selectedStatus, selectedServiceType, selectedJenis], () => {
+  if (!dateFrom.value && !dateTo.value) return;
+  if (reloadTimer) clearTimeout(reloadTimer);
+  reloadTimer = setTimeout(() => {
     loadReport();
-  }
+  }, 200);
 });
 
 onMounted(async () => {

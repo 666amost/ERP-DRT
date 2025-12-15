@@ -43,6 +43,11 @@ const corsHeaders = {
   'Access-Control-Allow-Credentials': 'true'
 };
 
+function clampInt(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.trunc(value)));
+}
+
 // use writeJson helper
 
 export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -135,14 +140,25 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       writeJson(res, stats);
       return;
     } else if (endpoint === 'invoices') {
+      const DEFAULT_LIMIT = 10;
+      const MAX_LIMIT = 100;
+
+      const page = clampInt(parseInt(url.searchParams.get('page') || '1', 10) || 1, 1, 1_000_000);
+      const limit = clampInt(parseInt(url.searchParams.get('limit') || String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT, 1, MAX_LIMIT);
+      const offset = (page - 1) * limit;
+
+      const totalRes = await sql`select count(*)::int as count from invoices` as { count: number }[];
+      const total = totalRes[0]?.count || 0;
+
       const invoices = await sql`
         select 
           id, invoice_number, customer_name, amount, status, issued_at
         from invoices
         order by issued_at desc
+        limit ${limit} offset ${offset}
       ` as Invoice[];
       
-      writeJson(res, { items: invoices });
+      writeJson(res, { items: invoices, meta: { page, limit, total, pages: Math.ceil(total / limit) } });
       return;
     } else if (endpoint === 'tracking') {
       const shipments = await sql`

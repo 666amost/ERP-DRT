@@ -43,8 +43,17 @@ function viewBarcode(shipment: Shipment) {
 async function loadShipments() {
   loading.value = true;
   try {
-    const searchParam = searchQuery.value.trim() ? `&search=${encodeURIComponent(searchQuery.value)}` : '';
-    const res = await fetch(`/api/shipments?endpoint=list${searchParam}`);
+    const params = new URLSearchParams({ endpoint: 'list' });
+    const q = searchQuery.value.trim();
+    if (q) {
+      params.set('search', q);
+      params.set('limit', '100');
+    } else {
+      // Default: show yesterday + today without pulling full history
+      params.set('days', '1');
+      params.set('limit', '500');
+    }
+    const res = await fetch(`/api/shipments?${params.toString()}`);
     const data = await res.json();
     shipments.value = data.items || [];
   } catch (e) {

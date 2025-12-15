@@ -110,6 +110,19 @@ const corsHeaders = {
   'Access-Control-Allow-Credentials': 'true'
 };
 
+function clampInt(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.trunc(value)));
+}
+
+function isValidDate(val?: string | null): val is string {
+  return Boolean(val && /^\d{4}-\d{2}-\d{2}$/.test(val));
+}
+
+function escapeSqlLiteral(val: string): string {
+  return val.replace(/'/g, "''");
+}
+
 function generatePublicCode(plateRegion: string, destination: string, totalColli: number, sequence: number): string {
   const plate = (plateRegion || 'XX').toUpperCase().substring(0, 2).padEnd(2, 'X');
   const seq = String(sequence).padStart(4, '0');
@@ -128,11 +141,25 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
     const sql = getSql();
 
     if (endpoint === 'list' && req.method === 'GET') {
-      const page = parseInt(url.searchParams.get('page') || '1');
-      const searchQuery = (url.searchParams.get('search') || '').replace(/'/g, "''");
-      const limit = parseInt(url.searchParams.get('limit') || (searchQuery ? '9999' : '500'));
+      const DEFAULT_LIMIT = 50;
+      const MAX_LIMIT = 500;
+
+      const page = clampInt(parseInt(url.searchParams.get('page') || '1', 10) || 1, 1, 1_000_000);
+      const searchQuery = escapeSqlLiteral(String(url.searchParams.get('search') || '').trim());
+      const limit = clampInt(parseInt(url.searchParams.get('limit') || String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT, 1, MAX_LIMIT);
       const status = url.searchParams.get('status');
-      const days = parseInt(url.searchParams.get('days') || '0');
+      const days = clampInt(parseInt(url.searchParams.get('days') || '0', 10) || 0, 0, 3650);
+
+      const startDateRaw = url.searchParams.get('start_date') || url.searchParams.get('date_from') || url.searchParams.get('from');
+      const endDateRaw = url.searchParams.get('end_date') || url.searchParams.get('date_to') || url.searchParams.get('to');
+      const startDate = isValidDate(startDateRaw) ? startDateRaw : null;
+      const endDate = isValidDate(endDateRaw) ? endDateRaw : null;
+
+      const serviceTypeRaw = url.searchParams.get('service_type');
+      const jenisRaw = url.searchParams.get('jenis');
+      const serviceType = serviceTypeRaw && /^[a-z0-9_]{1,20}$/i.test(serviceTypeRaw) ? escapeSqlLiteral(serviceTypeRaw.toUpperCase()) : null;
+      const jenis = jenisRaw && /^[a-z0-9_]{1,20}$/i.test(jenisRaw) ? escapeSqlLiteral(jenisRaw.toUpperCase()) : null;
+
       const offset = (page - 1) * limit;
 
       let shipments: Shipment[];
@@ -146,6 +173,22 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
 
       if (days > 0) {
         whereConditions.push(`s.created_at >= current_date - interval '${days} days'`);
+      }
+
+      if (startDate) {
+        whereConditions.push(`s.created_at >= '${startDate}'::date`);
+      }
+
+      if (endDate) {
+        whereConditions.push(`s.created_at < ('${endDate}'::date + interval '1 day')`);
+      }
+
+      if (serviceType) {
+        whereConditions.push(`upper(coalesce(s.service_type, '')) = '${serviceType}'`);
+      }
+
+      if (jenis) {
+        whereConditions.push(`upper(coalesce(s.jenis, '')) = '${jenis}'`);
       }
 
       if (searchQuery) {

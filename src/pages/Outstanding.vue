@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import Button from '../components/ui/Button.vue';
 import { useFormatters } from '../composables/useFormatters';
 import { Icon } from '@iconify/vue';
@@ -113,7 +113,10 @@ const totalWeight = computed(() => filteredItems.value.reduce((sum, i) => sum + 
 async function loadOutstanding() {
   loading.value = true;
   try {
-    const res = await fetch('/api/invoices?endpoint=outstanding');
+    const params = new URLSearchParams({ endpoint: 'outstanding' });
+    if (dateFrom.value) params.set('from', dateFrom.value);
+    if (dateTo.value) params.set('to', dateTo.value);
+    const res = await fetch(`/api/invoices?${params.toString()}`);
     if (res.ok) {
       const data = await res.json();
       items.value = (data.items || []).map((i: OutstandingItem) => ({
@@ -205,6 +208,14 @@ onMounted(async () => {
       currentUser.value = data.user || data;
     }
   } catch { /* ignore */ }
+});
+
+let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+watch([dateFrom, dateTo], () => {
+  if (reloadTimer) clearTimeout(reloadTimer);
+  reloadTimer = setTimeout(() => {
+    loadOutstanding();
+  }, 250);
 });
 </script>
 
@@ -599,4 +610,3 @@ onMounted(async () => {
   }
 }
 </style>
-

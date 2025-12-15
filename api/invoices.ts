@@ -933,7 +933,18 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     writeJson(res, { items: shipments });
     return;
   } else if (endpoint === 'outstanding' && req.method === 'GET') {
-    const items = await sql`
+    const isValidDate = (val?: string | null): val is string => Boolean(val && /^\d{4}-\d{2}-\d{2}$/.test(val));
+    const fromDateRaw = url.searchParams.get('from') || url.searchParams.get('start_date');
+    const toDateRaw = url.searchParams.get('to') || url.searchParams.get('end_date');
+    const fromDate = isValidDate(fromDateRaw) ? fromDateRaw : null;
+    const toDate = isValidDate(toDateRaw) ? toDateRaw : null;
+
+    const dateConditions: string[] = [];
+    if (fromDate) dateConditions.push(`s.created_at >= '${fromDate}'::date`);
+    if (toDate) dateConditions.push(`s.created_at < ('${toDate}'::date + interval '1 day')`);
+    const dateClause = dateConditions.length ? ` and ${dateConditions.join(' and ')}` : '';
+
+    const query = `
       select 
         s.id, s.spb_number, s.public_code, s.customer_id, s.customer_name,
         s.origin, s.destination, s.total_colli, 
@@ -961,24 +972,24 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         ) as invoice_status
       from shipments s
       left join dbl d on d.id = s.dbl_id
-        left join invoice_items ii on ii.shipment_id = s.id
-        left join invoices ii_inv on ii_inv.id = ii.invoice_id
-        left join invoices spb_inv on spb_inv.spb_number = s.spb_number and ii.id is null
-        where s.nominal > 0
-          and (
-            -- include if there is an invoice with remaining amount > 0
-            (ii_inv.id is not null and coalesce(ii_inv.remaining_amount, 0) > 0)
-            or (spb_inv.id is not null and coalesce(spb_inv.remaining_amount, 0) > 0)
-            -- or if there is no invoice at all (shipment not invoiced yet)
-            or (ii_inv.id is null and spb_inv.id is null)
-          )
+      left join invoice_items ii on ii.shipment_id = s.id
+      left join invoices ii_inv on ii_inv.id = ii.invoice_id
+      left join invoices spb_inv on spb_inv.spb_number = s.spb_number and ii.id is null
+      where s.nominal > 0${dateClause}
+        and (
+          (ii_inv.id is not null and coalesce(ii_inv.remaining_amount, 0) > 0)
+          or (spb_inv.id is not null and coalesce(spb_inv.remaining_amount, 0) > 0)
+          or (ii_inv.id is null and spb_inv.id is null)
+        )
       group by s.id, s.spb_number, s.public_code, s.customer_id, s.customer_name,
                s.origin, s.destination, s.total_colli, s.berat, s.nominal, s.created_at,
                s.dbl_id, d.dbl_number, d.driver_name, d.driver_phone, d.vehicle_plate, d.dbl_date, s.sj_returned,
                ii_inv.id, ii_inv.invoice_number, ii_inv.remaining_amount, ii_inv.amount, ii_inv.subtotal, ii_inv.status,
                spb_inv.id, spb_inv.invoice_number, spb_inv.remaining_amount, spb_inv.status
       order by s.created_at desc
-    `;
+    ` as string;
+
+    const items = await sql(query as never);
     writeJson(res, { items });
     return;
   } else if (endpoint === 'payment-history' && req.method === 'GET') {

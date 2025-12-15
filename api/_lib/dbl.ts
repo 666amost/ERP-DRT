@@ -77,6 +77,11 @@ const corsHeaders = {
   'Access-Control-Allow-Credentials': 'true'
 };
 
+function clampInt(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.trunc(value)));
+}
+
 export async function dblHandler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method === 'OPTIONS') { res.writeHead(204, corsHeaders); res.end(); return }
 
@@ -414,9 +419,12 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
 
     } else if (endpoint === 'available-shipments' && req.method === 'GET') {
       try {
-        const page = parseInt(url.searchParams.get('page') || '1');
+        const DEFAULT_LIMIT = 100;
+        const MAX_LIMIT = 500;
+
+        const page = clampInt(parseInt(url.searchParams.get('page') || '1', 10) || 1, 1, 1_000_000);
         const searchQuery = (url.searchParams.get('search') || '').replace(/'/g, "''");
-        const limit = parseInt(url.searchParams.get('limit') || (searchQuery ? '9999' : '1000'));
+        const limit = clampInt(parseInt(url.searchParams.get('limit') || String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT, 1, MAX_LIMIT);
         const offset = (page - 1) * limit;
 
         const whereConditions: string[] = [

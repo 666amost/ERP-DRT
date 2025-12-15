@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import Button from '../components/ui/Button.vue';
 import Badge from '../components/ui/Badge.vue';
 import { useFormatters } from '../composables/useFormatters';
@@ -24,6 +24,11 @@ type DBLReportItem = {
   total_colli: number;
   total_weight: number;
   total_nominal: number;
+  paid_cash_bali?: number;
+  paid_cash_jakarta?: number;
+  paid_tf_bali?: number;
+  paid_tf_jakarta?: number;
+  paid_cicilan?: number;
   created_at: string;
   departure_date: string | null;
 };
@@ -32,11 +37,21 @@ const items = ref<DBLReportItem[]>([]);
 const loading = ref(true);
 const dateFrom = ref('');
 const dateTo = ref('');
+const selectedDbl = ref('');
+const selectedMethod = ref('');
 const selectedStatus = ref('');
 const selectedRegion = ref('');
 const reportType = ref<'daily' | 'monthly'>('daily');
 const company = ref<CompanyProfile | null>(null);
 const currentUser = ref<MeUser | null>(null);
+
+const appliedDateFrom = ref('');
+const appliedDateTo = ref('');
+const appliedDbl = ref('');
+const appliedMethod = ref('');
+const appliedStatus = ref('');
+const appliedRegion = ref('');
+const appliedReportType = ref<'daily' | 'monthly'>('daily');
 
 const statusOptions = [
   { value: '', label: 'Semua Status' },
@@ -61,6 +76,37 @@ const regionOptions = [
   { value: 'MALUKU', label: 'Maluku' }
 ];
 
+const dblOptions = computed(() => {
+  const nums = items.value.map(i => i.dbl_number).filter(Boolean) as string[];
+  return [...new Set(nums)].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+});
+
+const methodOptions = [
+  { value: '', label: 'Semua Metode' },
+  { value: 'CASH BALI', label: 'Cash Bali' },
+  { value: 'CASH JAKARTA', label: 'Cash Jakarta' },
+  { value: 'TF BALI', label: 'Tf Bali' },
+  { value: 'TF JAKARTA', label: 'Tf Jakarta' }
+];
+
+function getCashTotal(item: DBLReportItem): number {
+  return Number(item.paid_cash_bali || 0) + Number(item.paid_cash_jakarta || 0);
+}
+
+function getTfTotal(item: DBLReportItem): number {
+  return Number(item.paid_tf_bali || 0) + Number(item.paid_tf_jakarta || 0);
+}
+
+function getMethodAmount(item: DBLReportItem, method: string): number {
+  const m = String(method || '').toUpperCase();
+  if (!m) return 0;
+  if (m === 'CASH BALI') return Number(item.paid_cash_bali || 0);
+  if (m === 'CASH JAKARTA') return Number(item.paid_cash_jakarta || 0);
+  if (m === 'TF BALI') return Number(item.paid_tf_bali || 0);
+  if (m === 'TF JAKARTA') return Number(item.paid_tf_jakarta || 0);
+  return 0;
+}
+
 function getRegionFromDestination(destination: string): string {
   const dest = (destination || '').toUpperCase();
   if (dest.includes('BALI') || dest.includes('DENPASAR') || dest.includes('SINGARAJA') || dest.includes('GIANYAR') || dest.includes('TABANAN') || dest.includes('KLUNGKUNG') || dest.includes('KARANGASEM') || dest.includes('BULELENG') || dest.includes('BADUNG') || dest.includes('JEMBRANA') || dest.includes('BANGLI')) return 'BALI';
@@ -79,23 +125,8 @@ function getRegionFromDestination(destination: string): string {
 
 const filteredItems = computed(() => {
   let result = items.value;
-  if (dateFrom.value) {
-    result = result.filter(i => {
-      const itemDate = new Date(i.departure_date || i.created_at);
-      return itemDate >= new Date(dateFrom.value);
-    });
-  }
-  if (dateTo.value) {
-    result = result.filter(i => {
-      const itemDate = new Date(i.departure_date || i.created_at);
-      return itemDate <= new Date(dateTo.value + 'T23:59:59');
-    });
-  }
-  if (selectedStatus.value) {
-    result = result.filter(i => i.status === selectedStatus.value);
-  }
-  if (selectedRegion.value) {
-    result = result.filter(i => getRegionFromDestination(i.destination || '') === selectedRegion.value);
+  if (appliedRegion.value) {
+    result = result.filter(i => getRegionFromDestination(i.destination || '') === appliedRegion.value);
   }
   return result;
 });
@@ -105,14 +136,54 @@ const totalShipments = computed(() => filteredItems.value.reduce((sum, i) => sum
 const totalColli = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_colli || 0), 0));
 const totalWeight = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_weight || 0), 0));
 const totalNominal = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_nominal || 0), 0));
+const totalCashReceived = computed(() => filteredItems.value.reduce((sum, i) => sum + getCashTotal(i), 0));
+const totalTfReceived = computed(() => filteredItems.value.reduce((sum, i) => sum + getTfTotal(i), 0));
+
+const nominalCardLabel = computed(() => {
+  if (!appliedMethod.value) return 'Total Nominal';
+  const label = methodOptions.find(o => o.value === appliedMethod.value)?.label || appliedMethod.value;
+  return `Total Diterima (${label})`;
+});
+
+const nominalCardValue = computed(() => {
+  if (!appliedMethod.value) return totalNominal.value;
+  return filteredItems.value.reduce((sum, i) => sum + getMethodAmount(i, appliedMethod.value), 0);
+});
+
+const hasPendingChanges = computed(() => (
+  dateFrom.value !== appliedDateFrom.value ||
+  dateTo.value !== appliedDateTo.value ||
+  selectedDbl.value !== appliedDbl.value ||
+  selectedMethod.value !== appliedMethod.value ||
+  selectedStatus.value !== appliedStatus.value ||
+  selectedRegion.value !== appliedRegion.value ||
+  reportType.value !== appliedReportType.value
+));
 
 async function loadReport() {
   loading.value = true;
   try {
-    const res = await fetch('/api/dbl?endpoint=report');
+    const params = new URLSearchParams({ endpoint: 'report' });
+    if (appliedDateFrom.value) params.set('start_date', appliedDateFrom.value);
+    if (appliedDateTo.value) params.set('end_date', appliedDateTo.value);
+    if (appliedStatus.value) params.set('status', appliedStatus.value);
+    if (appliedDbl.value) params.set('dbl_number', appliedDbl.value);
+
+    const res = await fetch(`/api/dbl?${params.toString()}`);
     if (res.ok) {
       const data = await res.json();
-      items.value = data.items || [];
+      items.value = (data.items || []).map((x: Partial<DBLReportItem>) => ({
+        ...x,
+        total_shipments: Number(x.total_shipments || 0),
+        total_colli: Number(x.total_colli || 0),
+        total_weight: Number(x.total_weight || 0),
+        total_nominal: Number(x.total_nominal || 0),
+        paid_cash_bali: Number(x.paid_cash_bali || 0),
+        paid_cash_jakarta: Number(x.paid_cash_jakarta || 0),
+        paid_tf_bali: Number(x.paid_tf_bali || 0),
+        paid_tf_jakarta: Number(x.paid_tf_jakarta || 0),
+        paid_cicilan: Number(x.paid_cicilan || 0)
+      })) as DBLReportItem[];
     }
   } catch (e) {
     console.error('Failed to load DBL report:', e);
@@ -140,8 +211,35 @@ function setThisMonth() {
 function resetFilters() {
   dateFrom.value = '';
   dateTo.value = '';
+  selectedDbl.value = '';
+  selectedMethod.value = '';
   selectedStatus.value = '';
   selectedRegion.value = '';
+}
+
+async function applyFilters(): Promise<void> {
+  const shouldReload =
+    items.value.length === 0 ||
+    appliedDateFrom.value !== dateFrom.value ||
+    appliedDateTo.value !== dateTo.value ||
+    appliedDbl.value !== selectedDbl.value ||
+    appliedStatus.value !== selectedStatus.value;
+
+  appliedDateFrom.value = dateFrom.value;
+  appliedDateTo.value = dateTo.value;
+  appliedDbl.value = selectedDbl.value;
+  appliedMethod.value = selectedMethod.value;
+  appliedStatus.value = selectedStatus.value;
+  appliedRegion.value = selectedRegion.value;
+  appliedReportType.value = reportType.value;
+  if (shouldReload) {
+    await loadReport();
+  }
+}
+
+async function resetAndApply(): Promise<void> {
+  resetFilters();
+  await applyFilters();
 }
 
 function exportExcel() {
@@ -163,7 +261,7 @@ function exportExcel() {
     filename: buildFilename('dbl'),
     sheetName: 'DBL Report',
     title: 'LAPORAN DBL (DAFTAR BONGKAR LOADING)',
-    subtitle: dateFrom.value && dateTo.value ? `Periode: ${formatDate(dateFrom.value)} - ${formatDate(dateTo.value)}` : 'Semua Periode',
+    subtitle: appliedDateFrom.value && appliedDateTo.value ? `Periode: ${formatDate(appliedDateFrom.value)} - ${formatDate(appliedDateTo.value)}` : 'Semua Periode',
     columns: [
       { header: 'No', key: 'no', width: 5, type: 'number', align: 'center' },
       { header: 'Tanggal', key: 'tanggal', width: 12, type: 'text', align: 'center' },
@@ -202,16 +300,16 @@ function makeSlug(input = ''): string {
 }
 
 function buildFilename(prefix = 'dbl'): string {
-  const typePart = reportType.value || 'daily';
-  const regionPart = selectedRegion.value ? makeSlug(regionOptions.find(r => r.value === selectedRegion.value)?.label || selectedRegion.value) : 'all';
-  const statusPart = selectedStatus.value ? makeSlug(selectedStatus.value) : '';
-  const datePart = `${dateFrom.value || 'all'}_${dateTo.value || 'all'}`;
+  const typePart = appliedReportType.value || 'daily';
+  const regionPart = appliedRegion.value ? makeSlug(regionOptions.find(r => r.value === appliedRegion.value)?.label || appliedRegion.value) : 'all';
+  const statusPart = appliedStatus.value ? makeSlug(appliedStatus.value) : '';
+  const datePart = `${appliedDateFrom.value || 'all'}_${appliedDateTo.value || 'all'}`;
   const parts = [prefix, typePart, regionPart, statusPart, datePart].filter(Boolean);
   return parts.join('-');
 }
 
-function formatDateTime(): string {
-  return new Date().toLocaleString('id-ID', {
+function formatDateTime(date: Date = new Date()): string {
+  return date.toLocaleString('id-ID', {
     day: '2-digit',
     month: 'long',
     year: 'numeric',
@@ -230,15 +328,9 @@ function getStatusVariant(status: string): 'default' | 'info' | 'warning' | 'suc
   return variants[status] || 'default';
 }
 
-watch([dateFrom, dateTo], () => {
-  if (dateFrom.value || dateTo.value) {
-    loadReport();
-  }
-});
-
 onMounted(async () => {
   setToday();
-  loadReport();
+  await applyFilters();
   company.value = await getCompany();
   try {
     const res = await fetch('/api/auth?endpoint=me', { credentials: 'include' });
@@ -281,6 +373,19 @@ onMounted(async () => {
       </div>
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div>
+          <label class="block text-sm font-medium mb-1">No. DBL</label>
+          <select v-model="selectedDbl" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            <option value="">Semua DBL</option>
+            <option v-for="dbl in dblOptions" :key="dbl" :value="dbl">{{ dbl }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Metode</label>
+          <select v-model="selectedMethod" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            <option v-for="opt in methodOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </select>
+        </div>
+        <div>
           <label class="block text-sm font-medium mb-1">Dari Tanggal</label>
           <input v-model="dateFrom" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
         </div>
@@ -302,7 +407,8 @@ onMounted(async () => {
         </div>
       </div>
       <div class="flex gap-2">
-        <Button variant="default" @click="resetFilters">Reset</Button>
+        <Button variant="default" @click="resetAndApply">Reset</Button>
+        <Button variant="primary" :disabled="loading || !hasPendingChanges" @click="applyFilters">Apply</Button>
       </div>
     </div>
 
@@ -324,8 +430,8 @@ onMounted(async () => {
         <div class="text-xl font-bold text-amber-600">{{ totalWeight.toFixed(1) }}</div>
       </div>
       <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 col-span-2 sm:col-span-1">
-        <div class="text-xs text-gray-500 dark:text-gray-400">Total Nominal</div>
-        <div class="text-xl font-bold text-purple-600">{{ formatRupiah(totalNominal) }}</div>
+        <div class="text-xs text-gray-500 dark:text-gray-400">{{ nominalCardLabel }}</div>
+        <div class="text-xl font-bold text-purple-600">{{ formatRupiah(nominalCardValue) }}</div>
       </div>
     </div>
 
@@ -368,7 +474,11 @@ onMounted(async () => {
                 <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ item.total_shipments }}</td>
                 <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ item.total_colli }}</td>
                 <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ (item.total_weight || 0).toFixed(1) }}</td>
-                <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ formatRupiah(item.total_nominal) }}</td>
+                <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">
+                  <div class="font-medium">{{ formatRupiah(item.total_nominal) }}</div>
+                  <div class="text-[11px] text-green-600">Cash: {{ formatRupiah(getCashTotal(item)) }}</div>
+                  <div class="text-[11px] text-blue-600">TF: {{ formatRupiah(getTfTotal(item)) }}</div>
+                </td>
                 <td class="px-2 py-2 text-center">
                   <Badge :variant="getStatusVariant(item.status)">{{ item.status }}</Badge>
                 </td>
@@ -380,7 +490,11 @@ onMounted(async () => {
                 <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ totalShipments }}</td>
                 <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ totalColli }}</td>
                 <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ totalWeight.toFixed(1) }}</td>
-                <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ formatRupiah(totalNominal) }}</td>
+                <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">
+                  <div class="font-medium">{{ formatRupiah(totalNominal) }}</div>
+                  <div class="text-[11px] text-green-700">Cash: {{ formatRupiah(totalCashReceived) }}</div>
+                  <div class="text-[11px] text-blue-700">TF: {{ formatRupiah(totalTfReceived) }}</div>
+                </td>
                 <td></td>
               </tr>
             </tfoot>
@@ -409,6 +523,8 @@ onMounted(async () => {
               <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs">{{ item.total_colli }} colli</span>
               <span class="px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300 text-xs">{{ (item.total_weight || 0).toFixed(1) }}</span>
               <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs">{{ formatRupiah(item.total_nominal) }}</span>
+              <span class="text-[11px] text-green-600">Cash: {{ formatRupiah(getCashTotal(item)) }}</span>
+              <span class="text-[11px] text-blue-600">TF: {{ formatRupiah(getTfTotal(item)) }}</span>
             </div>
           </div>
         </div>
@@ -430,7 +546,7 @@ onMounted(async () => {
           </div>
         </div>
         <div class="print-title">LAPORAN DBL (DAFTAR BONGKAR LOADING)</div>
-        <div class="print-subtitle">{{ dateFrom && dateTo ? `Periode: ${formatDate(dateFrom)} - ${formatDate(dateTo)}` : 'Semua Periode' }}{{ selectedRegion ? ` | Wilayah: ${regionOptions.find(r => r.value === selectedRegion)?.label || selectedRegion}` : '' }}</div>
+        <div class="print-subtitle">{{ appliedDateFrom && appliedDateTo ? `Periode: ${formatDate(appliedDateFrom)} - ${formatDate(appliedDateTo)}` : 'Semua Periode' }}{{ appliedRegion ? ` | Wilayah: ${regionOptions.find(r => r.value === appliedRegion)?.label || appliedRegion}` : '' }}</div>
       </div>
       <table class="print-table">
         <thead>

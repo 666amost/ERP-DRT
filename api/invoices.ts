@@ -110,6 +110,7 @@ type CreateInvoiceBody = {
   paid_amount?: number;
   remaining_amount?: number;
   status?: string;
+  payment_method?: string;
   invoice_date?: string;
   due_date?: string;
   bank_account?: string;
@@ -548,9 +549,22 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         }
         
         if (paidAmount > 0) {
+          const methodRaw = String(body.payment_method || '').trim().toUpperCase();
+          const allowedMethods = new Set([
+            'TRANSFER',
+            'CASH',
+            'GIRO',
+            'CHEQUE',
+            'CICILAN',
+            'CASH BALI',
+            'CASH JAKARTA',
+            'TF BALI',
+            'TF JAKARTA'
+          ]);
+          const paymentMethod = allowedMethods.has(methodRaw) ? methodRaw : 'TRANSFER';
           await trx`
             insert into invoice_payments (invoice_id, amount, payment_date, payment_method, notes)
-            values (${newInvoiceId}, ${paidAmount}, now(), 'TRANSFER', 'Pembayaran awal saat buat invoice')
+            values (${newInvoiceId}, ${paidAmount}, now(), ${paymentMethod}, 'Pembayaran awal saat buat invoice')
           `;
         }
         

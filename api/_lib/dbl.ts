@@ -566,7 +566,67 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
       return
 
     } else if (endpoint === 'report' && req.method === 'GET') {
-      const items = await sql`
+      const startDate = url.searchParams.get('start_date');
+      const endDate = url.searchParams.get('end_date');
+      const status = url.searchParams.get('status');
+      const dblNumber = url.searchParams.get('dbl_number');
+
+      const isValidDate = (val?: string | null): val is string => Boolean(val && /^\d{4}-\d{2}-\d{2}$/.test(val));
+      const escapeSqlLiteral = (val: string): string => val.replace(/'/g, "''");
+
+      const conditions: string[] = [];
+      if (isValidDate(startDate)) {
+        conditions.push(`coalesce(d.dbl_date::date, d.created_at::date) >= '${startDate}'::date`);
+      }
+      if (isValidDate(endDate)) {
+        conditions.push(`coalesce(d.dbl_date::date, d.created_at::date) <= '${endDate}'::date`);
+      }
+      if (status && /^[A-Z_]{1,32}$/.test(status)) {
+        conditions.push(`d.status = '${escapeSqlLiteral(status)}'`);
+      }
+      if (dblNumber && dblNumber.trim()) {
+        const dbl = dblNumber.trim();
+        if (dbl.length <= 80) {
+          conditions.push(`d.dbl_number = '${escapeSqlLiteral(dbl)}'`);
+        }
+      }
+
+      let query = `
+        with inv_sub as (
+          select invoice_id,
+                 sum((coalesce(unit_price, 0) + coalesce(other_fee, 0) - coalesce(item_discount, 0)))::numeric as subtotal
+          from invoice_items
+          group by invoice_id
+        ),
+        item_line as (
+          select invoice_id,
+                 shipment_id,
+                 (coalesce(unit_price, 0) + coalesce(other_fee, 0) - coalesce(item_discount, 0))::numeric as line_total
+          from invoice_items
+          where shipment_id is not null
+        ),
+        alloc as (
+          select
+            s.dbl_id,
+            upper(coalesce(ip.payment_method, '')) as payment_method,
+            (ip.amount::numeric * il.line_total / nullif(inv.subtotal, 0))::numeric as alloc_amount
+          from invoice_payments ip
+          join item_line il on il.invoice_id = ip.invoice_id
+          join inv_sub inv on inv.invoice_id = ip.invoice_id
+          join shipments s on s.id = il.shipment_id
+          where s.dbl_id is not null
+        ),
+        paid_by_dbl as (
+          select
+            dbl_id,
+            coalesce(sum(case when payment_method = 'CASH BALI' then alloc_amount else 0 end), 0)::float as paid_cash_bali,
+            coalesce(sum(case when payment_method in ('CASH JAKARTA', 'CASH') then alloc_amount else 0 end), 0)::float as paid_cash_jakarta,
+            coalesce(sum(case when payment_method = 'TF BALI' then alloc_amount else 0 end), 0)::float as paid_tf_bali,
+            coalesce(sum(case when payment_method in ('TF JAKARTA', 'TRANSFER', 'TF') then alloc_amount else 0 end), 0)::float as paid_tf_jakarta,
+            coalesce(sum(case when payment_method = 'CICILAN' then alloc_amount else 0 end), 0)::float as paid_cicilan
+          from alloc
+          group by dbl_id
+        )
         select 
           d.id,
           d.dbl_number,
@@ -579,10 +639,23 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
           (select count(*)::int from dbl_items where dbl_id = d.id) as total_shipments,
           (select coalesce(sum(s.total_colli), 0)::int from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_colli,
           (select coalesce(sum(s.berat), 0)::float from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_weight,
-          (select coalesce(sum(s.nominal), 0)::float from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_nominal
+          (select coalesce(sum(s.nominal), 0)::float from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_nominal,
+          coalesce(p.paid_cash_bali, 0)::float as paid_cash_bali,
+          coalesce(p.paid_cash_jakarta, 0)::float as paid_cash_jakarta,
+          coalesce(p.paid_tf_bali, 0)::float as paid_tf_bali,
+          coalesce(p.paid_tf_jakarta, 0)::float as paid_tf_jakarta,
+          coalesce(p.paid_cicilan, 0)::float as paid_cicilan
         from dbl d
-        order by d.dbl_date desc, d.created_at desc
-      ` as Array<{
+        left join paid_by_dbl p on p.dbl_id = d.id
+      `;
+
+      if (conditions.length > 0) {
+        query += ` where ${conditions.join(' and ')}`;
+      }
+
+      query += ` order by d.dbl_date desc, d.created_at desc`;
+
+      const items = await sql(query as never) as Array<{
         id: number;
         dbl_number: string;
         vehicle_plate: string | null;
@@ -595,6 +668,11 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
         total_colli: number;
         total_weight: number;
         total_nominal: number;
+        paid_cash_bali: number;
+        paid_cash_jakarta: number;
+        paid_tf_bali: number;
+        paid_tf_jakarta: number;
+        paid_cicilan: number;
       }>;
 
       writeJson(res, { items });

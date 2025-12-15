@@ -25,13 +25,26 @@ const payments = ref<PaymentHistory[]>([]);
 const loading = ref(true);
 const searchQuery = ref('');
 const selectedCustomer = ref('');
+const selectedMethod = ref('');
 const dateFrom = ref('');
 const dateTo = ref('');
+
+function normalizeMethod(value?: string | null): string {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
 
 const customers = computed(() => {
   const names = payments.value.map(p => p.customer_name).filter(Boolean);
   return [...new Set(names)].sort();
 });
+
+const methodOptions = computed(() => [
+  'CASH BALI',
+  'CASH JAKARTA',
+  'TF BALI',
+  'TF JAKARTA',
+  'CICILAN'
+]);
 
 const filteredPayments = computed(() => {
   let result = payments.value;
@@ -47,6 +60,10 @@ const filteredPayments = computed(() => {
   }
   if (selectedCustomer.value) {
     result = result.filter(p => p.customer_name === selectedCustomer.value);
+  }
+  if (selectedMethod.value) {
+    const target = normalizeMethod(selectedMethod.value);
+    result = result.filter(p => normalizeMethod(p.payment_method) === target);
   }
   if (dateFrom.value) {
     result = result.filter(p => new Date(p.payment_date) >= new Date(dateFrom.value));
@@ -83,6 +100,7 @@ async function loadPayments() {
 function resetFilters() {
   searchQuery.value = '';
   selectedCustomer.value = '';
+  selectedMethod.value = '';
   dateFrom.value = '';
   dateTo.value = '';
 }
@@ -117,8 +135,8 @@ function exportExcel() {
 function getMethodVariant(method: string | null): 'default' | 'success' | 'info' {
   if (!method) return 'default';
   const m = method.toLowerCase();
-  if (m === 'cash') return 'success';
-  if (m === 'transfer') return 'info';
+  if (m === 'cash' || m.startsWith('cash ')) return 'success';
+  if (m === 'transfer' || m.startsWith('transfer ') || m === 'tf' || m.startsWith('tf ')) return 'info';
   return 'default';
 }
 
@@ -137,7 +155,7 @@ onMounted(() => {
     </div>
 
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-4">
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
         <div>
           <label class="block text-sm font-medium mb-1">Cari</label>
           <input
@@ -152,6 +170,13 @@ onMounted(() => {
           <select v-model="selectedCustomer" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
             <option value="">Semua Customer</option>
             <option v-for="c in customers" :key="c || 'unknown'" :value="c">{{ c || '-' }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Metode</label>
+          <select v-model="selectedMethod" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            <option value="">Semua Metode</option>
+            <option v-for="m in methodOptions" :key="m" :value="m">{{ m }}</option>
           </select>
         </div>
         <div>

@@ -156,6 +156,17 @@ const paymentForm = ref({
 const showPphModal = ref(false);
 const pphFormPercent = ref<string>('0');
 
+type CreatePaymentType = 'CICILAN' | 'CASH_BALI' | 'CASH_JAKARTA' | 'TF_BALI' | 'TF_JAKARTA';
+const createPaymentType = ref<CreatePaymentType>('TF_JAKARTA');
+
+function getCreatePaymentMethod(type: CreatePaymentType): string | undefined {
+  if (type === 'CICILAN') return 'CICILAN';
+  if (type === 'CASH_BALI') return 'CASH BALI';
+  if (type === 'CASH_JAKARTA') return 'CASH JAKARTA';
+  if (type === 'TF_BALI') return 'TF BALI';
+  return 'TF JAKARTA';
+}
+
 const form = ref<CreateInvoiceForm>({
   customer_name: '',
   customer_id: null,
@@ -357,11 +368,14 @@ async function loadItemsForInvoice(id: number | null, fallbackSpb?: string | nul
       const lineTotal = (Number(i.unit_price) || 0) + otherFee - (Number(i.item_discount) || 0);
       return {
         ...i,
+        description: i.description || 'Jasa pengiriman',
+        quantity: Number(i.quantity ?? 1),
+        unit_price: Number(i.unit_price ?? 0),
         other_fee: otherFee,
         colli: i.colli ?? i.quantity ?? null,
         qty: i.qty ?? i.quantity ?? null,
         recipient_name: i.recipient_name ?? i.penerima_name ?? i.recipient ?? '',
-        spb_number: spbFromFallback || i.tracking_code,
+        spb_number: spbFromFallback || i.tracking_code || '',
         sj_returned: Boolean(i.sj_returned),
         _unit_price_display: lineTotal ? formatRupiah(lineTotal) : ''
       };
@@ -466,6 +480,7 @@ function filterInvoices() {
 function openCreateModal(): void {
   editingId.value = null;
   form.value = { customer_name: '', customer_id: null, amount: '', status: 'paid' };
+  createPaymentType.value = 'TF_JAKARTA';
   items.value = [];
   allUnpaidShipments.value = [];
   selectedShipmentIds.value = new Set();
@@ -605,21 +620,18 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
     } else if (mode === 'bulk') {
       let paidAmount = 0;
       let remainingAmount = totalTagihan;
-      let finalStatus = form.value.status || 'pending';
-      
+      const shouldAutoPayFull = createPaymentType.value !== 'CICILAN';
       if (manualAmountMode.value && inputAmount > 0) {
         paidAmount = inputAmount;
         remainingAmount = Math.max(0, totalTagihan - paidAmount);
-      } else if (form.value.status === 'paid') {
+      } else if (shouldAutoPayFull) {
         paidAmount = totalTagihan;
         remainingAmount = 0;
       }
 
-      if (remainingAmount <= 0 && paidAmount > 0) {
-        finalStatus = 'paid';
-      } else if (paidAmount > 0) {
-        finalStatus = 'partial';
-      }
+      let finalStatus = 'pending';
+      if (remainingAmount <= 0 && paidAmount > 0) finalStatus = 'paid';
+      else if (paidAmount > 0) finalStatus = 'partial';
 
       const spbSet = new Map<string, string>();
       itemsSnapshot
@@ -647,6 +659,7 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
           paid_amount: paidAmount,
           remaining_amount: remainingAmount,
           status: finalStatus,
+          payment_method: getCreatePaymentMethod(createPaymentType.value),
           discount_amount: discountAmount.value || 0,
           tax_percent: taxPercent.value || 0,
           notes: notes.value || undefined,
@@ -688,7 +701,8 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
 
           let paidAmount = 0;
           let remainingAmount = itemTotalTagihan;
-          let finalStatus = form.value.status || 'pending';
+          let finalStatus = 'pending';
+          const shouldAutoPayFull = createPaymentType.value !== 'CICILAN';
           
           if (manualAmountMode.value && inputAmount > 0) {
             paidAmount = inputAmount;
@@ -698,9 +712,10 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
             } else if (paidAmount > 0) {
               finalStatus = 'partial';
             }
-          } else if (form.value.status === 'paid') {
+          } else if (shouldAutoPayFull) {
             paidAmount = itemTotalTagihan;
             remainingAmount = 0;
+            finalStatus = 'paid';
           }
 
           const res = await fetch('/api/invoices?endpoint=create', {
@@ -718,6 +733,7 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
               paid_amount: paidAmount,
               remaining_amount: remainingAmount,
               status: finalStatus,
+              payment_method: getCreatePaymentMethod(createPaymentType.value),
               discount_amount: itemDiscountAmount || 0,
               tax_percent: taxPercent.value || 0,
               notes: notes.value || undefined,
@@ -1833,11 +1849,7 @@ watch(() => invoiceFilterType.value, () => {
             <div class="flex flex-col gap-3">
               <div v-if="!editingId">
                 <div class="flex items-center justify-between mb-1">
-                  <label class="block text-sm font-medium">Dibayar (Rp)</label>
-                  <label class="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
-                    <input type="checkbox" v-model="manualAmountMode" class="h-3 w-3" />
-                    Cicilan
-                  </label>
+                  <label class="block text-sm font-medium">Pembayaran Awal (Rp)</label>
                 </div>
                 <input
                   v-model="form.amount"
@@ -1859,15 +1871,14 @@ watch(() => invoiceFilterType.value, () => {
               <div v-if="!editingId">
                 <label class="block text-sm font-medium mb-1">Status</label>
                 <select
-                  v-model="form.status"
+                  v-model="createPaymentType"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 >
-                  <option value="partial">
-                    Cicilan
-                  </option>
-                  <option value="paid">
-                    Paid
-                  </option>
+                  <option value="CASH_BALI">Cash Bali</option>
+                  <option value="CASH_JAKARTA">Cash Jakarta</option>
+                  <option value="TF_BALI">Tf Bali</option>
+                  <option value="TF_JAKARTA">Tf Jakarta</option>
+                  <option value="CICILAN">Cicilan</option>
                 </select>
               </div>
             </div>

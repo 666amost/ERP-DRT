@@ -111,6 +111,7 @@ type CreateInvoiceBody = {
   remaining_amount?: number;
   status?: string;
   payment_method?: string;
+  payment_notes?: string;
   invoice_date?: string;
   due_date?: string;
   bank_account?: string;
@@ -562,9 +563,13 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             'TF JAKARTA'
           ]);
           const paymentMethod = allowedMethods.has(methodRaw) ? methodRaw : 'TRANSFER';
+          const paymentNotes =
+            (typeof body.payment_notes === 'string' ? body.payment_notes : null) ??
+            (typeof body.notes === 'string' ? body.notes : null) ??
+            '';
           await trx`
             insert into invoice_payments (invoice_id, amount, payment_date, payment_method, notes)
-            values (${newInvoiceId}, ${paidAmount}, now(), ${paymentMethod}, 'Pembayaran awal saat buat invoice')
+            values (${newInvoiceId}, ${paidAmount}, now(), ${paymentMethod}, ${String(paymentNotes).trim() || null})
           `;
         }
         

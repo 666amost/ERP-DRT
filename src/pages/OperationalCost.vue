@@ -5,7 +5,7 @@ import Badge from '@/components/ui/Badge.vue';
 import { useFormatters } from '../composables/useFormatters';
 import { useAuth } from '../composables/useAuth';
 
-const { formatRupiah, formatDate } = useFormatters();
+const { formatRupiah, formatDate, toWIBDateString } = useFormatters();
 const { fetchUser } = useAuth();
 
 type DBLWithCost = {
@@ -67,7 +67,7 @@ const selectedDbl = ref<DBLWithCost | null>(null);
 
 const startDate = ref('');
 const endDate = ref('');
-const destinationFilter = ref<'all' | 'jakarta' | 'bali'>('all');
+const destinationFilter = ref('all');
 const viewMode = ref<'input' | 'report'>('input');
 
 const form = ref<CostForm>({
@@ -120,22 +120,19 @@ function initDates(): void {
   const now = new Date();
   const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
   const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  startDate.value = firstDay.toISOString().split('T')[0] ?? '';
-  endDate.value = lastDay.toISOString().split('T')[0] ?? '';
+  startDate.value = toWIBDateString(firstDay);
+  endDate.value = toWIBDateString(lastDay);
 }
 
 async function loadData(): Promise<void> {
   loading.value = true;
   try {
-    let url = '/api/dbl?endpoint=operational-costs';
-    if (startDate.value && endDate.value) {
-      url += `&start_date=${startDate.value}&end_date=${endDate.value}`;
-    }
-    if (destinationFilter.value !== 'all') {
-      url += `&destination=${destinationFilter.value}`;
-    }
+    const params = new URLSearchParams({ endpoint: 'operational-costs' });
+    if (startDate.value) params.set('start_date', startDate.value);
+    if (endDate.value) params.set('end_date', endDate.value);
+    if (destinationFilter.value !== 'all') params.set('destination', destinationFilter.value);
 
-    const res = await fetch(url);
+    const res = await fetch(`/api/dbl?${params.toString()}`);
     const data = await res.json();
     dblList.value = data.items || [];
   } catch {
@@ -148,15 +145,12 @@ async function loadData(): Promise<void> {
 async function loadReport(): Promise<void> {
   loading.value = true;
   try {
-    let url = '/api/dbl?endpoint=margin-report';
-    if (startDate.value && endDate.value) {
-      url += `&start_date=${startDate.value}&end_date=${endDate.value}`;
-    }
-    if (destinationFilter.value !== 'all') {
-      url += `&destination=${destinationFilter.value}`;
-    }
+    const params = new URLSearchParams({ endpoint: 'margin-report' });
+    if (startDate.value) params.set('start_date', startDate.value);
+    if (endDate.value) params.set('end_date', endDate.value);
+    if (destinationFilter.value !== 'all') params.set('destination', destinationFilter.value);
 
-    const res = await fetch(url);
+    const res = await fetch(`/api/dbl?${params.toString()}`);
     const data = await res.json();
     reportItems.value = data.items || [];
     summary.value = data.summary || { total_nominal: 0, total_operational: 0, total_margin: 0 };
@@ -222,6 +216,29 @@ watch([viewMode, startDate, endDate, destinationFilter], () => {
   } else {
     loadData();
   }
+});
+
+const destinationOptions = computed(() => {
+  const source = viewMode.value === 'report' ? reportItems.value : dblList.value;
+  const unique = new Set<string>();
+  for (const item of source) {
+    const dest = String(item.destination || '').trim();
+    if (dest) unique.add(dest);
+  }
+
+  const sorted = Array.from(unique).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+  const base = [
+    { value: 'all', label: 'Semua Tujuan' },
+    { value: 'bali', label: 'Bali (semua kota Bali)' },
+    { value: 'jakarta', label: 'Jakarta' }
+  ];
+
+  const extra = sorted
+    .filter((d) => !base.some((b) => b.value.toLowerCase() === d.toLowerCase()))
+    .map((d) => ({ value: d, label: d }));
+
+  return [...base, ...extra];
 });
 
 onMounted(() => {
@@ -294,9 +311,7 @@ onMounted(() => {
             v-model="destinationFilter"
             class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
           >
-            <option value="all">Semua Tujuan</option>
-            <option value="jakarta">Jakarta</option>
-            <option value="bali">Bali</option>
+            <option v-for="opt in destinationOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
         </div>
         <div class="flex items-end">

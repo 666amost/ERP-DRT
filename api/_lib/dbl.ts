@@ -82,6 +82,33 @@ function clampInt(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.trunc(value)));
 }
 
+function isValidDate(val?: string | null): val is string {
+  return Boolean(val && /^\d{4}-\d{2}-\d{2}$/.test(val));
+}
+
+function escapeSqlLiteral(val: string): string {
+  return val.replace(/'/g, "''");
+}
+
+function buildDestinationCondition(raw?: string | null): string | null {
+  const value = String(raw || '').trim().toLowerCase();
+  if (!value) return null;
+
+  // Common ERP destination values can be city names (e.g. DENPASAR), so "BALI" needs aliases.
+  if (value === 'bali') {
+    const keys = ['bali', 'denpasar', 'singaraja', 'gianyar', 'tabanan', 'klungkung', 'karangasem', 'buleleng', 'badung', 'jembrana', 'bangli'];
+    return `(${keys.map(k => `lower(d.destination) like '%${k}%'`).join(' or ')})`;
+  }
+
+  if (value === 'jakarta') {
+    const keys = ['jakarta', 'priok', 'tanjung priok'];
+    return `(${keys.map(k => `lower(d.destination) like '%${k}%'`).join(' or ')})`;
+  }
+
+  if (value.length > 80) return null;
+  return `lower(d.destination) like '%${escapeSqlLiteral(value)}%'`;
+}
+
 export async function dblHandler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method === 'OPTIONS') { res.writeHead(204, corsHeaders); res.end(); return }
 
@@ -709,44 +736,49 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
           writeJson(res, { item: null, dbl: dblResult[0] || null });
         }
       } else {
-        const startDate = url.searchParams.get('start_date');
-        const endDate = url.searchParams.get('end_date');
-        const destination = url.searchParams.get('destination');
+        const startDateRaw = url.searchParams.get('start_date');
+        const endDateRaw = url.searchParams.get('end_date');
+        const destinationRaw = url.searchParams.get('destination');
+
+        const startDate = isValidDate(startDateRaw) ? startDateRaw : null;
+        const endDate = isValidDate(endDateRaw) ? endDateRaw : null;
+        const destinationCond = buildDestinationCondition(destinationRaw);
         
         let items;
+        const dateExpr = `coalesce(d.dbl_date::date, d.created_at::date)`;
+        const orderExpr = `coalesce(d.dbl_date, d.created_at) desc`;
+
         if (startDate && endDate) {
-          if (destination) {
-            items = await sql`
-              select d.id, d.dbl_number, d.origin, d.destination, d.driver_name, d.dbl_date, d.vehicle_plate,
-                (select coalesce(sum(s.nominal), 0)::float from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_nominal,
-                oc.bayar_supir, oc.solar, oc.sewa_mobil, oc.kuli_muat, oc.kuli_bongkar, oc.biaya_lain, oc.total_operational, oc.catatan as oc_catatan
-              from dbl d
-              left join dbl_operational_costs oc on oc.dbl_id = d.id
-              where d.dbl_date >= ${startDate}::date and d.dbl_date <= ${endDate}::date
-                and lower(d.destination) like ${`%${destination.toLowerCase()}%`}
-              order by d.dbl_date desc
-            `;
-          } else {
-            items = await sql`
-              select d.id, d.dbl_number, d.origin, d.destination, d.driver_name, d.dbl_date, d.vehicle_plate,
-                (select coalesce(sum(s.nominal), 0)::float from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_nominal,
-                oc.bayar_supir, oc.solar, oc.sewa_mobil, oc.kuli_muat, oc.kuli_bongkar, oc.biaya_lain, oc.total_operational, oc.catatan as oc_catatan
-              from dbl d
-              left join dbl_operational_costs oc on oc.dbl_id = d.id
-              where d.dbl_date >= ${startDate}::date and d.dbl_date <= ${endDate}::date
-              order by d.dbl_date desc
-            `;
-          }
-        } else {
-          items = await sql`
+          const conditions: string[] = [
+            `${dateExpr} >= '${startDate}'::date`,
+            `${dateExpr} <= '${endDate}'::date`
+          ];
+          if (destinationCond) conditions.push(destinationCond);
+          const whereClause = `where ${conditions.join(' and ')}`;
+
+          const query = `
             select d.id, d.dbl_number, d.origin, d.destination, d.driver_name, d.dbl_date, d.vehicle_plate,
               (select coalesce(sum(s.nominal), 0)::float from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_nominal,
               oc.bayar_supir, oc.solar, oc.sewa_mobil, oc.kuli_muat, oc.kuli_bongkar, oc.biaya_lain, oc.total_operational, oc.catatan as oc_catatan
             from dbl d
             left join dbl_operational_costs oc on oc.dbl_id = d.id
-            order by d.dbl_date desc
+            ${whereClause}
+            order by ${orderExpr}
+          ` as string;
+
+          items = await sql(query as never);
+        } else {
+          const query = `
+            select d.id, d.dbl_number, d.origin, d.destination, d.driver_name, d.dbl_date, d.vehicle_plate,
+              (select coalesce(sum(s.nominal), 0)::float from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_nominal,
+              oc.bayar_supir, oc.solar, oc.sewa_mobil, oc.kuli_muat, oc.kuli_bongkar, oc.biaya_lain, oc.total_operational, oc.catatan as oc_catatan
+            from dbl d
+            left join dbl_operational_costs oc on oc.dbl_id = d.id
+            order by ${orderExpr}
             limit 50
-          `;
+          ` as string;
+
+          items = await sql(query as never);
         }
         
         writeJson(res, { items });
@@ -813,9 +845,13 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
       return
 
     } else if (endpoint === 'margin-report' && req.method === 'GET') {
-      const startDate = url.searchParams.get('start_date');
-      const endDate = url.searchParams.get('end_date');
-      const destination = url.searchParams.get('destination');
+      const startDateRaw = url.searchParams.get('start_date');
+      const endDateRaw = url.searchParams.get('end_date');
+      const destinationRaw = url.searchParams.get('destination');
+
+      const startDate = isValidDate(startDateRaw) ? startDateRaw : null;
+      const endDate = isValidDate(endDateRaw) ? endDateRaw : null;
+      const destinationCond = buildDestinationCondition(destinationRaw);
       
       let baseQuery = `
         select 
@@ -833,14 +869,15 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
       `;
 
       const conditions: string[] = [];
-      if (startDate) conditions.push(`d.dbl_date >= '${startDate}'::date`);
-      if (endDate) conditions.push(`d.dbl_date <= '${endDate}'::date`);
-      if (destination) conditions.push(`lower(d.destination) like '%${destination.toLowerCase()}%'`);
+      const dateExpr = `coalesce(d.dbl_date::date, d.created_at::date)`;
+      if (startDate) conditions.push(`${dateExpr} >= '${startDate}'::date`);
+      if (endDate) conditions.push(`${dateExpr} <= '${endDate}'::date`);
+      if (destinationCond) conditions.push(destinationCond);
 
       if (conditions.length > 0) {
         baseQuery += ` where ${conditions.join(' and ')}`;
       }
-      baseQuery += ` order by d.dbl_date desc`;
+      baseQuery += ` order by coalesce(d.dbl_date, d.created_at) desc`;
 
       const items = await sql(baseQuery as never) as Array<{
         id: number;

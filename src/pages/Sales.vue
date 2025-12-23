@@ -78,11 +78,15 @@ function getRegionFromDestination(destination: string): string {
   return '';
 }
 
+function normalizeSearch(input: string): string {
+  return String(input || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
 const filteredItems = computed(() => {
   let result = items.value;
-  if (searchQuery.value) {
-    const q = searchQuery.value.toLowerCase();
-    result = result.filter(i => (i.customer_name || '').toLowerCase().includes(q));
+  const q = normalizeSearch(searchQuery.value);
+  if (q) {
+    result = result.filter(i => normalizeSearch(i.customer_name || '').includes(q));
   }
   if (selectedRegion.value) {
     result = result.filter(i => getRegionFromDestination(i.destination || '') === selectedRegion.value);
@@ -90,12 +94,12 @@ const filteredItems = computed(() => {
   return result;
 });
 
-const totalShipments = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_shipments || 0), 0));
-const totalColli = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_colli || 0), 0));
-const totalWeight = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_weight || 0), 0));
-const totalNominal = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_nominal || 0), 0));
-const totalPaid = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_paid || 0), 0));
-const totalOutstanding = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_outstanding || 0), 0));
+const totalShipments = computed(() => filteredItems.value.reduce((sum, i) => sum + (Number(i.total_shipments) || 0), 0));
+const totalColli = computed(() => filteredItems.value.reduce((sum, i) => sum + (Number(i.total_colli) || 0), 0));
+const totalWeight = computed(() => filteredItems.value.reduce((sum, i) => sum + (Number(i.total_weight) || 0), 0));
+const totalNominal = computed(() => filteredItems.value.reduce((sum, i) => sum + (Number(i.total_nominal) || 0), 0));
+const totalPaid = computed(() => filteredItems.value.reduce((sum, i) => sum + (Number(i.total_paid) || 0), 0));
+const totalOutstanding = computed(() => filteredItems.value.reduce((sum, i) => sum + (Number(i.total_outstanding) || 0), 0));
 
 function formatDateTime(date: Date): string {
   return date.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }) +

@@ -282,29 +282,41 @@ onMounted(async () => {
     </div>
 
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 print:hidden">
-      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+      <div class="min-w-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
         <div class="text-xs text-gray-500 dark:text-gray-400">Customer</div>
-        <div class="text-xl font-bold text-blue-600">{{ filteredItems.length }}</div>
+        <div class="font-bold text-blue-600 whitespace-nowrap leading-tight tracking-tight text-[clamp(0.9rem,1.6vw,1.25rem)]">
+          {{ filteredItems.length }}
+        </div>
       </div>
-      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+      <div class="min-w-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
         <div class="text-xs text-gray-500 dark:text-gray-400">Total SPB</div>
-        <div class="text-xl font-bold text-green-600">{{ totalShipments }}</div>
+        <div class="font-bold text-green-600 whitespace-nowrap leading-tight tracking-tight text-[clamp(0.9rem,1.6vw,1.25rem)]">
+          {{ totalShipments }}
+        </div>
       </div>
-      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+      <div class="min-w-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
         <div class="text-xs text-gray-500 dark:text-gray-400">Total Colli</div>
-        <div class="text-xl font-bold text-orange-500">{{ totalColli }}</div>
+        <div class="font-bold text-orange-500 whitespace-nowrap leading-tight tracking-tight text-[clamp(0.9rem,1.6vw,1.25rem)]">
+          {{ totalColli }}
+        </div>
       </div>
-      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+      <div class="min-w-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
         <div class="text-xs text-gray-500 dark:text-gray-400">Total Berat</div>
-        <div class="text-xl font-bold text-amber-600">{{ totalWeight.toFixed(1) }}</div>
+        <div class="font-bold text-amber-600 whitespace-nowrap leading-tight tracking-tight text-[clamp(0.9rem,1.6vw,1.25rem)]">
+          {{ totalWeight.toFixed(1) }}
+        </div>
       </div>
-      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+      <div class="min-w-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
         <div class="text-xs text-gray-500 dark:text-gray-400">Total Sales</div>
-        <div class="text-xl font-bold text-purple-600">{{ formatRupiah(totalNominal) }}</div>
+        <div class="font-bold text-purple-600 whitespace-nowrap leading-tight tracking-tight text-[clamp(0.85rem,1.4vw,1.25rem)]">
+          {{ formatRupiah(totalNominal) }}
+        </div>
       </div>
-      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+      <div class="min-w-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
         <div class="text-xs text-gray-500 dark:text-gray-400">Outstanding</div>
-        <div class="text-xl font-bold text-red-600">{{ formatRupiah(totalOutstanding) }}</div>
+        <div class="font-bold text-red-600 whitespace-nowrap leading-tight tracking-tight text-[clamp(0.85rem,1.4vw,1.25rem)]">
+          {{ formatRupiah(totalOutstanding) }}
+        </div>
       </div>
     </div>
 

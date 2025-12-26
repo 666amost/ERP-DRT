@@ -221,6 +221,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const page = parseInt(url.searchParams.get('page') || '1');
     const limit = parseInt(url.searchParams.get('limit') || '50');
     const status = url.searchParams.get('status');
+    const qRaw = url.searchParams.get('q') || url.searchParams.get('search');
+    const search = qRaw && qRaw.trim() ? `%${qRaw.trim()}%` : null;
     const offset = (page - 1) * limit;
     
     let invoices: Invoice[];
@@ -259,6 +261,14 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             and ii.shipment_id is not null
         ) as stats on true
         where i.status = ${status}
+          and (
+            ${search}::text is null
+            or i.invoice_number ilike ${search}
+            or i.customer_name ilike ${search}
+            or i.spb_number ilike ${search}
+            or coalesce(i.notes, '') ilike ${search}
+            or i.status ilike ${search}
+          )
         order by i.issued_at desc
         limit ${limit} offset ${offset}
       ` as Invoice[];
@@ -266,6 +276,14 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       const countResult = await sql`
         select count(*)::int as count from invoices
         where status = ${status}
+          and (
+            ${search}::text is null
+            or invoice_number ilike ${search}
+            or customer_name ilike ${search}
+            or spb_number ilike ${search}
+            or coalesce(notes, '') ilike ${search}
+            or status ilike ${search}
+          )
       ` as [{ count: number }];
       
       total = countResult[0]?.count || 0;
@@ -301,12 +319,28 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           where ii.invoice_id = i.id
             and ii.shipment_id is not null
         ) as stats on true
+        where (
+          ${search}::text is null
+          or i.invoice_number ilike ${search}
+          or i.customer_name ilike ${search}
+          or i.spb_number ilike ${search}
+          or coalesce(i.notes, '') ilike ${search}
+          or i.status ilike ${search}
+        )
         order by i.issued_at desc
         limit ${limit} offset ${offset}
       ` as Invoice[];
       
       const countResult = await sql`
         select count(*)::int as count from invoices
+        where (
+          ${search}::text is null
+          or invoice_number ilike ${search}
+          or customer_name ilike ${search}
+          or spb_number ilike ${search}
+          or coalesce(notes, '') ilike ${search}
+          or status ilike ${search}
+        )
       ` as [{ count: number }];
       
       total = countResult[0]?.count || 0;

@@ -133,13 +133,22 @@ type UnpaidShipment = {
 };
 
 const invoices = ref<Invoice[]>([]);
-const filteredInvoices = ref<Invoice[]>([]);
-const searchQuery = ref('');
 const route = useRoute();
 const router = useRouter();
+const searchQuery = ref(typeof route.query.q === 'string' ? route.query.q : '');
+const filteredInvoices = computed(() => invoices.value);
 const loading = ref(true);
 const showModal = ref(false);
 const editingId = ref<number | null>(null);
+const pagination = ref({ page: 1, limit: 50, total: 0, pages: 1 });
+const canPrevPage = computed(() => pagination.value.page > 1);
+const canNextPage = computed(() => pagination.value.page < pagination.value.pages);
+const pageStart = computed(() => {
+  if (pagination.value.total === 0) return 0;
+  return (pagination.value.page - 1) * pagination.value.limit + 1;
+});
+const pageEnd = computed(() => Math.min(pagination.value.page * pagination.value.limit, pagination.value.total));
+let searchDebounce: number | undefined;
 
 const showPaymentModal = ref(false);
 const selectedInvoice = ref<Invoice | null>(null);
@@ -439,12 +448,20 @@ function calcTotal(): number {
   return Math.max(0, subtotal - pph);
 }
 
-async function loadInvoices() {
+async function loadInvoices(options: { page?: number; q?: string } = {}): Promise<void> {
   loading.value = true;
   try {
-    const res = await fetch('/api/invoices?endpoint=list&limit=500');
+    const pageToLoad = options.page ?? pagination.value.page;
+    const q = (options.q ?? searchQuery.value).trim();
+    const params = new URLSearchParams({
+      endpoint: 'list',
+      limit: String(pagination.value.limit),
+      page: String(pageToLoad)
+    });
+    if (q) params.set('q', q);
+    const res = await fetch(`/api/invoices?${params.toString()}`);
     const data = await res.json();
-    invoices.value = (data.items || []).map((x: Partial<Invoice>) => ({
+    const items = (data.items || []).map((x: Partial<Invoice>) => ({
       ...x,
       tax_percent: Number(x.tax_percent || 0),
       discount_amount: Number(x.discount_amount || 0),
@@ -453,8 +470,17 @@ async function loadInvoices() {
       sj_returned_count: Number(x.sj_returned_count || 0),
       shipment_count: Number(x.shipment_count || 0)
     }));
-    // initialize filtered
-    filterInvoices();
+    invoices.value = items;
+    const nextPage = data.pagination?.page ?? pageToLoad;
+    const nextLimit = data.pagination?.limit ?? pagination.value.limit;
+    const nextTotal = data.pagination?.total ?? items.length;
+    const nextPages = data.pagination?.pages ?? Math.ceil((nextTotal || 0) / (nextLimit || 1));
+    pagination.value = {
+      page: nextPage,
+      limit: nextLimit,
+      total: nextTotal,
+      pages: Math.max(1, nextPages || 1)
+    };
   } catch (e) {
     console.error('Failed to load invoices:', e);
   } finally {
@@ -462,19 +488,31 @@ async function loadInvoices() {
   }
 }
 
-function filterInvoices() {
-  if (!searchQuery.value.trim()) {
-    filteredInvoices.value = invoices.value;
-  } else {
-    const q = searchQuery.value.toLowerCase();
-    filteredInvoices.value = invoices.value.filter(i =>
-      String(i.invoice_number).toLowerCase().includes(q) ||
-      String(i.customer_name || '').toLowerCase().includes(q) ||
-      String(i.spb_number || '').toLowerCase().includes(q) ||
-      String(i.status || '').toLowerCase().includes(q) ||
-      String(i.notes || '').toLowerCase().includes(q)
-    );
-  }
+function syncSearchRoute(value: string): void {
+  const clean = value.trim();
+  const current = typeof route.query.q === 'string' ? route.query.q : '';
+  if (clean === current) return;
+  const newQuery = { ...route.query };
+  if (clean) newQuery.q = clean;
+  else delete newQuery.q;
+  router.replace({ name: 'invoice', query: newQuery });
+}
+
+function goToPage(target: number): void {
+  const totalPages = Math.max(1, pagination.value.pages || 1);
+  const next = Math.min(Math.max(1, target), totalPages);
+  if (next === pagination.value.page) return;
+  loadInvoices({ page: next });
+}
+
+function prevPage(): void {
+  if (!canPrevPage.value) return;
+  goToPage(pagination.value.page - 1);
+}
+
+function nextPage(): void {
+  if (!canNextPage.value) return;
+  goToPage(pagination.value.page + 1);
 }
 
 function openCreateModal(): void {
@@ -943,17 +981,21 @@ function getSjStatus(inv: Invoice): { label: string; variant: 'default' | 'warni
 onMounted(async () => {
   const { fetchUser } = useAuth();
   await fetchUser();
-  if (route.query.q) {
-    searchQuery.value = String(route.query.q || '');
-  }
-  loadInvoices();
+  loadInvoices({ page: 1, q: searchQuery.value });
   if (route.query.create) {
     openCreateModal();
   }
 });
 
-watch([invoices, searchQuery], () => {
-  filterInvoices();
+watch(searchQuery, (val) => {
+  if (searchDebounce !== undefined) {
+    window.clearTimeout(searchDebounce);
+  }
+  searchDebounce = window.setTimeout(() => {
+    syncSearchRoute(val);
+    pagination.value.page = 1;
+    loadInvoices({ page: 1, q: val });
+  }, 300);
 });
 // react to route changes when header triggers a new query
 watch(() => route.query.q, (val) => {
@@ -1764,6 +1806,20 @@ watch(() => invoiceFilterType.value, () => {
             Delete
           </Button>
         </div>
+      </div>
+    </div>
+
+    <div
+      v-if="!loading && pagination.total > 0"
+      class="flex items-center justify-between gap-3 flex-wrap bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3"
+    >
+      <div class="text-xs text-gray-500 dark:text-gray-400">
+        Menampilkan {{ pageStart }}-{{ pageEnd }} dari {{ pagination.total }} invoice
+      </div>
+      <div class="flex items-center gap-2">
+        <Button variant="default" size="sm" :disabled="!canPrevPage" @click="prevPage">Sebelumnya</Button>
+        <div class="text-xs text-gray-600 dark:text-gray-300">Hal {{ pagination.page }} / {{ pagination.pages }}</div>
+        <Button variant="default" size="sm" :disabled="!canNextPage" @click="nextPage">Berikutnya</Button>
       </div>
     </div>
 

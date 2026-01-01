@@ -1111,6 +1111,9 @@ async function printInvoice(inv: Invoice): Promise<void> {
       padding: 12mm;
       background: white;
       page-break-after: always;
+      position: relative;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
     .header {
       display: flex;
@@ -1289,6 +1292,26 @@ async function printInvoice(inv: Invoice): Promise<void> {
       text-transform: uppercase;
       letter-spacing: 3px;
       pointer-events: none;
+      z-index: 100;
+    }
+    .container::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-image: url('${LOGO_URL}');
+      background-repeat: repeat;
+      background-size: 180px auto;
+      background-position: center;
+      opacity: 0.03;
+      pointer-events: none;
+      z-index: 1;
+      transform: rotate(-30deg) scale(1.5);
+      transform-origin: center;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
     @media print {
       html, body { 
@@ -1303,6 +1326,27 @@ async function printInvoice(inv: Invoice): Promise<void> {
         margin: 0;
         padding: 12mm;
         page-break-inside: avoid;
+        position: relative;
+      }
+      .header {
+        position: relative;
+        z-index: 10;
+      }
+      .content {
+        position: relative;
+        z-index: 10;
+      }
+      .bank-section {
+        position: relative;
+        z-index: 10;
+      }
+      .notes-section {
+        position: relative;
+        z-index: 10;
+      }
+      .footer {
+        position: relative;
+        z-index: 10;
       }
     }
     @media print and (min-resolution: 72dpi) and (max-resolution: 150dpi) {
@@ -1370,6 +1414,12 @@ async function printInvoice(inv: Invoice): Promise<void> {
         color: rgba(0, 0, 0, 0.2);
         border-color: rgba(0, 0, 0, 0.2);
         border-width: 6px;
+        z-index: 100;
+      }
+      .container::before {
+        opacity: 0.05;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
       }
     }
   </style>

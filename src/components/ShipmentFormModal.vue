@@ -79,6 +79,23 @@ const isCreatingCustomer = ref(false);
 
 const isEdit = computed(() => !!props.shipment);
 
+function formatNumberID(value: number | string): string {
+  const num = typeof value === 'string' ? parseFloat(value.replace(/\./g, '').replace(',', '.')) : value;
+  if (isNaN(num)) return '';
+  const parts = num.toFixed(2).split('.');
+  if (parts[0]) {
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  }
+  return parts.join(',');
+}
+
+function parseNumberID(value: string): number {
+  if (!value || value.trim() === '') return 0;
+  const cleaned = value.replace(/\./g, '').replace(',', '.');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+}
+
 function createDefaultForm(): ShipmentForm {
   return {
     spb_number: '',
@@ -131,7 +148,7 @@ function resetForm(shipment: Shipment | null) {
       macam_barang: shipment.macam_barang || '',
       qty: String(shipment.qty || 1),
       satuan: shipment.satuan || 'KG',
-      berat: String((shipment as unknown as { berat?: number }).berat || 0),
+      berat: formatNumberID((shipment as unknown as { berat?: number }).berat || 0),
       nominal: String(shipment.nominal || 0),
       total_colli: String(shipment.total_colli || 1),
       keterangan: shipment.keterangan || '',
@@ -280,7 +297,7 @@ function closeModal() {
 async function saveShipment() {
   const totalColli = parseInt(form.value.total_colli) || 1;
   const qtyVal = parseInt(form.value.qty) || 1;
-  const beratVal = parseFloat(form.value.berat) || 0;
+  const beratVal = parseNumberID(form.value.berat);
   const nominalVal = parseFloat(form.value.nominal) || 0;
 
   const customerName = form.value.customer_name?.trim() || form.value.penerima_name?.trim() || null;
@@ -490,11 +507,12 @@ onMounted(() => {
             <label class="block text-sm font-medium mb-1">Berat (KG)</label>
             <input
               v-model="form.berat"
-              type="number"
-              step="0.01"
+              type="text"
+              inputmode="decimal"
               class="w-full px-3 py-2 border border-gray-300 rounded-lg"
               placeholder="0"
               @focus="($event.target as HTMLInputElement).select()"
+              @blur="form.berat = formatNumberID(form.berat)"
             />
           </div>
           <div>

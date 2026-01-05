@@ -497,7 +497,7 @@ async function printDaftarMuat(dbl: DBL) {
     </div>
   </div>
 
-  <table class="mb-4">
+  <table class="mb-2">
     <thead class="bg-gray-200">
       <tr>
         <th class="border px-2 py-1 w-10">No</th>
@@ -510,16 +510,17 @@ async function printDaftarMuat(dbl: DBL) {
         <th class="border px-2 py-1 w-20">Jumlah</th>
       </tr>
     </thead>
-    <tfoot>
-      <tr class="font-bold bg-gray-100">
-        <td colspan="6" class="border px-2 py-1 text-right">TOTAL</td>
-        <td class="border px-2 py-1 text-center">${totalCol}</td>
-        <td class="border px-2 py-1 text-right">${formatRupiah(totalNom)}</td>
-      </tr>
-    </tfoot>
     <tbody>
       ${rows}
     </tbody>
+  </table>
+
+  <table class="mb-4 footer-section">
+    <tr class="font-bold bg-gray-100">
+      <td colspan="6" class="border px-2 py-1 text-right">TOTAL</td>
+      <td class="border px-2 py-1 text-center w-12">${totalCol}</td>
+      <td class="border px-2 py-1 text-right w-20">${formatRupiah(totalNom)}</td>
+    </tr>
   </table>
 
   <div class="footer-section grid grid-cols-2 gap-2 mb-2 text-xs">

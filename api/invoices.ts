@@ -1114,19 +1114,20 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             count(s.id)::int as total_shipments,
             coalesce(sum(s.total_colli), 0)::int as total_colli,
             coalesce(sum(s.berat), 0)::float as total_weight,
-            coalesce(sum(s.nominal), 0)::float as total_nominal
+            coalesce(sum(s.nominal), 0)::float as total_nominal,
+            max(s.destination) as destination
           from shipments s
           left join customers c on c.id = s.customer_id
           where (s.created_at at time zone 'Asia/Jakarta') >= ${fromDate}::date
             and (s.created_at at time zone 'Asia/Jakarta') < (${toDate}::date + interval '1 day')
           group by 1,2
         ), paid as (
-          select customer_id, coalesce(sum(amount),0)::float as total_paid
-          from invoices
-          where status = 'paid'
-            and coalesce(invoice_date, issued_at) at time zone 'Asia/Jakarta' >= ${fromDate}::date
-            and coalesce(invoice_date, issued_at) at time zone 'Asia/Jakarta' < (${toDate}::date + interval '1 day')
-          group by customer_id
+          select coalesce(i.customer_id, 0) as customer_id, coalesce(sum(ip.amount),0)::float as total_paid
+          from invoice_payments ip
+          join invoices i on i.id = ip.invoice_id
+          where (ip.payment_date at time zone 'Asia/Jakarta') >= ${fromDate}::date
+            and (ip.payment_date at time zone 'Asia/Jakarta') < (${toDate}::date + interval '1 day')
+          group by coalesce(i.customer_id, 0)
         ), outstanding as (
           select customer_id, coalesce(sum(remaining_amount),0)::float as total_outstanding
           from invoices
@@ -1137,7 +1138,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         )
         select sa.customer_id, sa.customer_name, sa.total_shipments, sa.total_colli, sa.total_weight, sa.total_nominal,
                coalesce(paid.total_paid, 0)::float as total_paid,
-               coalesce(outstanding.total_outstanding, 0)::float as total_outstanding
+               coalesce(outstanding.total_outstanding, 0)::float as total_outstanding,
+               sa.destination
         from s_agg sa
         left join paid on paid.customer_id = sa.customer_id
         left join outstanding on outstanding.customer_id = sa.customer_id
@@ -1152,15 +1154,16 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             count(s.id)::int as total_shipments,
             coalesce(sum(s.total_colli), 0)::int as total_colli,
             coalesce(sum(s.berat), 0)::float as total_weight,
-            coalesce(sum(s.nominal), 0)::float as total_nominal
+            coalesce(sum(s.nominal), 0)::float as total_nominal,
+            max(s.destination) as destination
           from shipments s
           left join customers c on c.id = s.customer_id
           group by 1,2
         ), paid as (
-          select customer_id, coalesce(sum(amount),0)::float as total_paid
-          from invoices
-          where status = 'paid'
-          group by customer_id
+          select coalesce(i.customer_id, 0) as customer_id, coalesce(sum(ip.amount),0)::float as total_paid
+          from invoice_payments ip
+          join invoices i on i.id = ip.invoice_id
+          group by coalesce(i.customer_id, 0)
         ), outstanding as (
           select customer_id, coalesce(sum(remaining_amount),0)::float as total_outstanding
           from invoices
@@ -1169,7 +1172,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         )
         select sa.customer_id, sa.customer_name, sa.total_shipments, sa.total_colli, sa.total_weight, sa.total_nominal,
                coalesce(paid.total_paid, 0)::float as total_paid,
-               coalesce(outstanding.total_outstanding, 0)::float as total_outstanding
+               coalesce(outstanding.total_outstanding, 0)::float as total_outstanding,
+               sa.destination
         from s_agg sa
         left join paid on paid.customer_id = sa.customer_id
         left join outstanding on outstanding.customer_id = sa.customer_id

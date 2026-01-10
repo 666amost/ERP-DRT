@@ -121,8 +121,23 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       ` as { count: number; amount: number }[];
 
       const pelunasan = await sql`
-        select count(*)::int as count, coalesce(sum(amount), 0)::numeric as amount 
-        from invoice_payments
+        with shipment_customers as (
+          select distinct coalesce(customer_id, 0) as customer_id
+          from shipments
+        ), paid_by_customer as (
+          select
+            coalesce(i.customer_id, 0) as customer_id,
+            count(*)::int as payment_count,
+            coalesce(sum(ip.amount), 0)::numeric as payment_amount
+          from invoice_payments ip
+          join invoices i on i.id = ip.invoice_id
+          group by coalesce(i.customer_id, 0)
+        )
+        select
+          coalesce(sum(p.payment_count), 0)::int as count,
+          coalesce(sum(p.payment_amount), 0)::numeric as amount
+        from shipment_customers sc
+        join paid_by_customer p on p.customer_id = sc.customer_id
       ` as { count: number; amount: number }[];
       
       const stats: Stats = {

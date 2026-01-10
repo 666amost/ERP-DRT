@@ -296,13 +296,15 @@ async function saveDBL() {
   }
 }
 
-async function deleteDBL(id: number) {
-  if (!confirm('Yakin ingin menghapus DBL ini?')) return;
-  deletingId.value = id;
+async function deleteDBL(dbl: DBL) {
+  const deleteMsg = `Ingin menghapus DBL "${dbl.dbl_number}"?\n\nSupir: ${dbl.driver_name || '-'}\nRute: ${dbl.origin || '-'} → ${dbl.destination || '-'}\nJumlah Resi: ${dbl.shipment_count}`;
+
+  if (!confirm(deleteMsg)) return;
+  deletingId.value = dbl.id;
   try {
-    const res = await fetch(`/api/dbl?endpoint=delete&id=${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/dbl?endpoint=delete&id=${dbl.id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Delete failed');
-    dblList.value = dblList.value.filter(d => d.id !== id);
+    dblList.value = dblList.value.filter(d => d.id !== dbl.id);
     filterDBLList();
   } catch (e) {
     console.error('Delete error:', e);
@@ -634,7 +636,7 @@ onMounted(async () => {
                   <Button 
                     variant="default" 
                     class="px-2 py-1 h-7 text-xs text-red-600" 
-                    @click="deleteDBL(dbl.id)"
+                    @click="deleteDBL(dbl)"
                     :disabled="deletingId === dbl.id"
                   >
                     {{ deletingId === dbl.id ? '...' : 'Hapus' }}
@@ -689,7 +691,7 @@ onMounted(async () => {
               block 
               variant="default" 
               class="col-span-2 text-red-600" 
-              @click="deleteDBL(dbl.id)"
+              @click="deleteDBL(dbl)"
               :disabled="deletingId === dbl.id"
             >
               {{ deletingId === dbl.id ? 'Menghapus...' : 'Hapus' }}

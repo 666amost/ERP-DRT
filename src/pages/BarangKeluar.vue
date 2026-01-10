@@ -55,7 +55,9 @@ async function loadShipments() {
     }
     const res = await fetch(`/api/shipments?${params.toString()}`);
     const data = await res.json();
-    shipments.value = data.items || [];
+    const items: Shipment[] = (data.items || []) as Shipment[];
+    // Exclude shipments that have been loaded into a DBL
+    shipments.value = items.filter((s) => !s.dbl_id && !s.dbl_number);
   } catch (e) {
     console.error('Failed to load shipments:', e);
   } finally {
@@ -92,11 +94,14 @@ async function handleShipmentSaved() {
   closeFormModal();
 }
 
-async function deleteShipment(id: number) {
-  if (!confirm('Yakin ingin menghapus shipment ini?')) return;
+async function deleteShipment(shipment: Shipment) {
+  const spbNumber = shipment.spb_number || `SPB-${shipment.id}`;
+  const deleteMsg = `Ingin menghapus SPB "${spbNumber}"?\n\nCustomer: ${shipment.customer_name || '-'}\nPenerima: ${shipment.penerima_name || '-'}`;
+
+  if (!confirm(deleteMsg)) return;
   
   try {
-    const res = await fetch(`/api/shipments?endpoint=delete&id=${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/shipments?endpoint=delete&id=${shipment.id}`, { method: 'DELETE' });
     
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
@@ -359,7 +364,7 @@ onMounted(() => {
                   <div class="flex gap-1 justify-end flex-wrap">
                     <Button variant="success" class="px-2 py-1 h-7 text-xs whitespace-nowrap" @click="viewBarcode(ship)" title="Barcode">Barcode</Button>
                     <Button v-if="canEdit" variant="primary" class="px-2 py-1 h-7 text-xs whitespace-nowrap" @click="openEditModal(ship)" title="Edit">Edit</Button>
-                    <Button v-if="canDelete" variant="default" class="px-2 py-1 h-7 text-xs text-red-600 hover:text-red-700 bg-red-50 dark:bg-red-900/20 whitespace-nowrap" @click="deleteShipment(ship.id)" title="Delete">Del</Button>
+                    <Button v-if="canDelete" variant="default" class="px-2 py-1 h-7 text-xs text-red-600 hover:text-red-700 bg-red-50 dark:bg-red-900/20 whitespace-nowrap" @click="deleteShipment(ship)" title="Delete">Del</Button>
                   </div>
                 </td>
               </tr>
@@ -425,7 +430,7 @@ onMounted(() => {
               <div class="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
                 <Button block variant="success" size="sm" @click="viewBarcode(s)" class="text-xs">Barcode</Button>
                 <Button v-if="canEdit" block variant="primary" size="sm" @click="openEditModal(s)" class="text-xs">Edit</Button>
-                <Button v-if="canDelete" block variant="default" size="sm" class="text-red-600 hover:text-red-700 bg-red-50 dark:bg-red-900/20 text-xs" @click="deleteShipment(s.id)">Hapus</Button>
+                <Button v-if="canDelete" block variant="default" size="sm" class="text-red-600 hover:text-red-700 bg-red-50 dark:bg-red-900/20 text-xs" @click="deleteShipment(s)">Hapus</Button>
               </div>
             </div>
           </div>

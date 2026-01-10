@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import Button from '../components/ui/Button.vue';
 import { useFormatters } from '../composables/useFormatters';
 import { useAuth } from '../composables/useAuth';
 import { Icon } from '@iconify/vue';
 import { exportToExcel } from '../lib/excelExport';
 import { getCompany, type CompanyProfile, LOGO_URL } from '../lib/company';
+import SalesDetailModal from '../components/SalesDetailModal.vue';
 
 type MeUser = { id: number; email: string; name?: string; role?: string };
 
@@ -33,6 +34,10 @@ const dateFrom = ref('');
 const dateTo = ref('');
 const searchQuery = ref('');
 const selectedRegion = ref('');
+
+const showDetail = ref(false);
+const detailCustomerId = ref<number | null>(null);
+const detailCustomerName = ref<string>('');
 
 const regionOptions = [
   { value: '', label: 'Semua Wilayah' },
@@ -124,6 +129,13 @@ async function loadReport() {
   }
 }
 
+function setToday() {
+  const today = toWIBDateString(new Date());
+  dateFrom.value = today;
+  dateTo.value = today;
+  loadReport();
+}
+
 function setThisMonth() {
   const now = new Date();
   const firstDay = toWIBDateString(new Date(now.getFullYear(), now.getMonth(), 1));
@@ -199,6 +211,12 @@ function printReport() {
   }
 }
 
+function openDetail(item: SalesItem) {
+  detailCustomerId.value = Number(item.customer_id || 0) || null;
+  detailCustomerName.value = item.customer_name || '';
+  showDetail.value = true;
+}
+
 function makeSlug(input = ''): string {
   return (input || '').toString().trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '');
 }
@@ -211,14 +229,11 @@ function buildFilename(prefix = 'sales'): string {
   return parts.join('-');
 }
 
-watch([dateFrom, dateTo], () => {
-  if (dateFrom.value || dateTo.value) {
-    loadReport();
-  }
-});
-
 onMounted(async () => {
-  setThisMonth();
+  const today = toWIBDateString(new Date());
+  dateFrom.value = today;
+  dateTo.value = today;
+  
   fetchUser();
   try {
     company.value = await getCompany();
@@ -234,6 +249,8 @@ onMounted(async () => {
   } catch (e) {
     console.error('Failed to load user:', e);
   }
+  
+  await loadReport();
 });
 </script>
 
@@ -278,6 +295,7 @@ onMounted(async () => {
         </div>
       </div>
       <div class="flex flex-wrap gap-2">
+        <Button variant="default" @click="setToday">Hari Ini</Button>
         <Button variant="default" @click="setThisMonth">Bulan Ini</Button>
         <Button variant="default" @click="setLastMonth">Bulan Lalu</Button>
         <Button variant="primary" @click="loadReport">Terapkan</Button>
@@ -349,7 +367,7 @@ onMounted(async () => {
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-            <tr v-for="(item, idx) in filteredItems" :key="item.customer_id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+            <tr v-for="(item, idx) in filteredItems" :key="item.customer_id" class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer" @click="openDetail(item)">
               <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ idx + 1 }}</td>
               <td class="px-2 py-2 font-medium text-gray-900 dark:text-gray-100">{{ item.customer_name || '-' }}</td>
               <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ item.total_shipments }}</td>
@@ -458,6 +476,15 @@ onMounted(async () => {
         <div class="print-summary">Total Customer: {{ filteredItems.length }} | Total SPB: {{ totalShipments }}</div>
       </div>
     </div>
+
+    <SalesDetailModal 
+      :show="showDetail" 
+      :customer-id="detailCustomerId ?? null" 
+      :customer-name="detailCustomerName" 
+      :from="dateFrom" 
+      :to="dateTo" 
+      @close="showDetail = false" 
+    />
   </div>
 </template>
 

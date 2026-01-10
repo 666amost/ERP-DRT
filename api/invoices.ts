@@ -986,6 +986,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const query = `
       select 
         s.id, s.spb_number, s.public_code, s.customer_id, s.customer_name,
+        s.pengirim_name, s.penerima_name,
         s.origin, s.destination, s.total_colli, 
         coalesce(s.berat, 0)::float as total_weight,
         coalesce(s.nominal, 0)::float as nominal,
@@ -1021,6 +1022,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           or (ii_inv.id is null and spb_inv.id is null)
         )
       group by s.id, s.spb_number, s.public_code, s.customer_id, s.customer_name,
+               s.pengirim_name, s.penerima_name,
                s.origin, s.destination, s.total_colli, s.berat, s.nominal, s.created_at,
                s.dbl_id, d.dbl_number, d.driver_name, d.driver_phone, d.vehicle_plate, d.dbl_date, s.sj_returned,
                ii_inv.id, ii_inv.invoice_number, ii_inv.remaining_amount, ii_inv.amount, ii_inv.subtotal, ii_inv.status,
@@ -1101,43 +1103,153 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   } else if (endpoint === 'sales-report' && req.method === 'GET') {
     const fromDate = url.searchParams.get('from');
     const toDate = url.searchParams.get('to');
-    
+
     let items;
     if (fromDate && toDate) {
       items = await sql`
-        select 
-          coalesce(s.customer_id, 0) as customer_id,
-          coalesce(c.name, s.customer_name, 'Unknown') as customer_name,
-          count(s.id)::int as total_shipments,
-          coalesce(sum(s.total_colli), 0)::int as total_colli,
-          coalesce(sum(s.berat), 0)::float as total_weight,
-          coalesce(sum(s.nominal), 0)::float as total_nominal,
-          coalesce(sum(case when i.status = 'paid' then i.amount else 0 end), 0)::float as total_paid,
-          coalesce(sum(case when i.status in ('pending', 'partial') then i.remaining_amount else 0 end), 0)::float as total_outstanding
-        from shipments s
-        left join customers c on c.id = s.customer_id
-        left join invoices i on i.customer_id = s.customer_id
-        where s.created_at >= ${fromDate} and s.created_at <= ${toDate + 'T23:59:59'}
-        group by s.customer_id, c.name, s.customer_name
-        order by total_nominal desc
+        with s_agg as (
+          select 
+            coalesce(s.customer_id, 0) as customer_id,
+            coalesce(c.name, s.customer_name, 'Unknown') as customer_name,
+            count(s.id)::int as total_shipments,
+            coalesce(sum(s.total_colli), 0)::int as total_colli,
+            coalesce(sum(s.berat), 0)::float as total_weight,
+            coalesce(sum(s.nominal), 0)::float as total_nominal
+          from shipments s
+          left join customers c on c.id = s.customer_id
+          where (s.created_at at time zone 'Asia/Jakarta') >= ${fromDate}::date
+            and (s.created_at at time zone 'Asia/Jakarta') < (${toDate}::date + interval '1 day')
+          group by 1,2
+        ), paid as (
+          select customer_id, coalesce(sum(amount),0)::float as total_paid
+          from invoices
+          where status = 'paid'
+            and coalesce(invoice_date, issued_at) at time zone 'Asia/Jakarta' >= ${fromDate}::date
+            and coalesce(invoice_date, issued_at) at time zone 'Asia/Jakarta' < (${toDate}::date + interval '1 day')
+          group by customer_id
+        ), outstanding as (
+          select customer_id, coalesce(sum(remaining_amount),0)::float as total_outstanding
+          from invoices
+          where coalesce(status,'pending') in ('pending','partial')
+            and coalesce(invoice_date, issued_at) at time zone 'Asia/Jakarta' >= ${fromDate}::date
+            and coalesce(invoice_date, issued_at) at time zone 'Asia/Jakarta' < (${toDate}::date + interval '1 day')
+          group by customer_id
+        )
+        select sa.customer_id, sa.customer_name, sa.total_shipments, sa.total_colli, sa.total_weight, sa.total_nominal,
+               coalesce(paid.total_paid, 0)::float as total_paid,
+               coalesce(outstanding.total_outstanding, 0)::float as total_outstanding
+        from s_agg sa
+        left join paid on paid.customer_id = sa.customer_id
+        left join outstanding on outstanding.customer_id = sa.customer_id
+        order by sa.total_nominal desc
       `;
     } else {
       items = await sql`
-        select 
-          coalesce(s.customer_id, 0) as customer_id,
-          coalesce(c.name, s.customer_name, 'Unknown') as customer_name,
-          count(s.id)::int as total_shipments,
-          coalesce(sum(s.total_colli), 0)::int as total_colli,
-          coalesce(sum(s.berat), 0)::float as total_weight,
-          coalesce(sum(s.nominal), 0)::float as total_nominal,
-          coalesce(sum(case when i.status = 'paid' then i.amount else 0 end), 0)::float as total_paid,
-          coalesce(sum(case when i.status in ('pending', 'partial') then i.remaining_amount else 0 end), 0)::float as total_outstanding
-        from shipments s
-        left join customers c on c.id = s.customer_id
-        left join invoices i on i.customer_id = s.customer_id
-        group by s.customer_id, c.name, s.customer_name
-        order by total_nominal desc
+        with s_agg as (
+          select 
+            coalesce(s.customer_id, 0) as customer_id,
+            coalesce(c.name, s.customer_name, 'Unknown') as customer_name,
+            count(s.id)::int as total_shipments,
+            coalesce(sum(s.total_colli), 0)::int as total_colli,
+            coalesce(sum(s.berat), 0)::float as total_weight,
+            coalesce(sum(s.nominal), 0)::float as total_nominal
+          from shipments s
+          left join customers c on c.id = s.customer_id
+          group by 1,2
+        ), paid as (
+          select customer_id, coalesce(sum(amount),0)::float as total_paid
+          from invoices
+          where status = 'paid'
+          group by customer_id
+        ), outstanding as (
+          select customer_id, coalesce(sum(remaining_amount),0)::float as total_outstanding
+          from invoices
+          where coalesce(status,'pending') in ('pending','partial')
+          group by customer_id
+        )
+        select sa.customer_id, sa.customer_name, sa.total_shipments, sa.total_colli, sa.total_weight, sa.total_nominal,
+               coalesce(paid.total_paid, 0)::float as total_paid,
+               coalesce(outstanding.total_outstanding, 0)::float as total_outstanding
+        from s_agg sa
+        left join paid on paid.customer_id = sa.customer_id
+        left join outstanding on outstanding.customer_id = sa.customer_id
+        order by sa.total_nominal desc
       `;
+    }
+    writeJson(res, { items });
+    return;
+  } else if (endpoint === 'sales-detail' && req.method === 'GET') {
+    const customerIdRaw = url.searchParams.get('customer_id');
+    const customerNameRaw = url.searchParams.get('customer_name');
+    const fromDate = url.searchParams.get('from');
+    const toDate = url.searchParams.get('to');
+
+    const customerId = customerIdRaw ? parseInt(customerIdRaw) : 0;
+    const nameKey = (customerNameRaw || '').trim().toLowerCase();
+
+    if (!customerId && !nameKey) { writeJson(res, { error: 'Missing customer_id or customer_name' }, 400); return; }
+
+    let items;
+    if (fromDate && toDate) {
+      if (customerId) {
+        items = await sql`
+          select 
+            s.id, s.spb_number, s.public_code, s.customer_id, s.customer_name,
+            s.origin, s.destination, s.total_colli,
+            coalesce(s.berat, 0)::float as total_weight,
+            coalesce(s.nominal, 0)::float as nominal,
+            s.created_at,
+            s.dbl_id
+          from shipments s
+          where s.customer_id = ${customerId}
+            and (s.created_at at time zone 'Asia/Jakarta') >= ${fromDate}::date
+            and (s.created_at at time zone 'Asia/Jakarta') < (${toDate}::date + interval '1 day')
+          order by s.created_at desc
+        `;
+      } else {
+        items = await sql`
+          select 
+            s.id, s.spb_number, s.public_code, s.customer_id, s.customer_name,
+            s.origin, s.destination, s.total_colli,
+            coalesce(s.berat, 0)::float as total_weight,
+            coalesce(s.nominal, 0)::float as nominal,
+            s.created_at,
+            s.dbl_id
+          from shipments s
+          where lower(coalesce(s.customer_name,'')) = ${nameKey}
+            and (s.created_at at time zone 'Asia/Jakarta') >= ${fromDate}::date
+            and (s.created_at at time zone 'Asia/Jakarta') < (${toDate}::date + interval '1 day')
+          order by s.created_at desc
+        `;
+      }
+    } else {
+      if (customerId) {
+        items = await sql`
+          select 
+            s.id, s.spb_number, s.public_code, s.customer_id, s.customer_name,
+            s.origin, s.destination, s.total_colli,
+            coalesce(s.berat, 0)::float as total_weight,
+            coalesce(s.nominal, 0)::float as nominal,
+            s.created_at,
+            s.dbl_id
+          from shipments s
+          where s.customer_id = ${customerId}
+          order by s.created_at desc
+        `;
+      } else {
+        items = await sql`
+          select 
+            s.id, s.spb_number, s.public_code, s.customer_id, s.customer_name,
+            s.origin, s.destination, s.total_colli,
+            coalesce(s.berat, 0)::float as total_weight,
+            coalesce(s.nominal, 0)::float as nominal,
+            s.created_at,
+            s.dbl_id
+          from shipments s
+          where lower(coalesce(s.customer_name,'')) = ${nameKey}
+          order by s.created_at desc
+        `;
+      }
     }
     writeJson(res, { items });
     return;

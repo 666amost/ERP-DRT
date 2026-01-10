@@ -17,7 +17,6 @@ type ShipmentForm = {
   origin: string;
   destination: string;
   macam_barang: string;
-  qty: string;
   satuan: string;
   berat: string;
   nominal: string;
@@ -108,7 +107,6 @@ function createDefaultForm(): ShipmentForm {
     origin: '',
     destination: '',
     macam_barang: '',
-    qty: '1',
     satuan: 'KG',
     berat: '0',
     nominal: '0',
@@ -146,7 +144,6 @@ function resetForm(shipment: Shipment | null) {
       origin: shipment.origin,
       destination: shipment.destination,
       macam_barang: shipment.macam_barang || '',
-      qty: String(shipment.qty || 1),
       satuan: shipment.satuan || 'KG',
       berat: formatNumberID((shipment as unknown as { berat?: number }).berat || 0),
       nominal: String(shipment.nominal || 0),
@@ -296,7 +293,6 @@ function closeModal() {
 
 async function saveShipment() {
   const totalColli = parseInt(form.value.total_colli) || 1;
-  const qtyVal = parseInt(form.value.qty) || 1;
   const beratVal = parseNumberID(form.value.berat);
   const nominalVal = parseFloat(form.value.nominal) || 0;
 
@@ -327,7 +323,6 @@ async function saveShipment() {
           origin: form.value.origin,
           destination: form.value.destination,
           macam_barang: form.value.macam_barang || null,
-          qty: qtyVal,
           satuan: form.value.satuan || 'KG',
           berat: beratVal,
           nominal: nominalVal,
@@ -361,7 +356,6 @@ async function saveShipment() {
           origin: form.value.origin,
           destination: form.value.destination,
           macam_barang: form.value.macam_barang || null,
-          qty: qtyVal,
           satuan: form.value.satuan || 'KG',
           berat: beratVal,
           nominal: nominalVal,
@@ -483,7 +477,7 @@ onMounted(() => {
             <p v-if="validationErrors.destination" class="text-red-600 text-xs mt-1">{{ validationErrors.destination }}</p>
           </div>
         </div>
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
           <div>
             <label class="block text-sm font-medium mb-1">Macam Barang</label>
             <input
@@ -491,16 +485,6 @@ onMounted(() => {
               type="text"
               class="w-full px-3 py-2 border border-gray-300 rounded-lg"
               placeholder="Jenis barang"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Qty</label>
-            <input
-              v-model="form.qty"
-              type="number"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
-              placeholder="1"
-              @focus="($event.target as HTMLInputElement).select()"
             />
           </div>
           <div>

@@ -18,6 +18,8 @@ type OutstandingItem = {
   public_code: string | null;
   customer_id: number | null;
   customer_name: string | null;
+  pengirim_name?: string | null;
+  penerima_name?: string | null;
   origin: string;
   destination: string;
   total_colli: number;
@@ -42,6 +44,8 @@ const loading = ref(true);
 const searchQuery = ref('');
 const selectedCustomer = ref('');
 const selectedDbl = ref('');
+const selectedPengirim = ref('');
+const selectedPenerima = ref('');
 const dateFrom = ref('');
 const dateTo = ref('');
 const sjFilter = ref('');
@@ -50,6 +54,16 @@ const currentUser = ref<MeUser | null>(null);
 
 const customers = computed(() => {
   const names = items.value.map(i => i.customer_name).filter(Boolean);
+  return [...new Set(names)].sort();
+});
+
+const pengirimList = computed(() => {
+  const names = items.value.map(i => i.pengirim_name || '').filter(Boolean);
+  return [...new Set(names)].sort();
+});
+
+const penerimaList = computed(() => {
+  const names = items.value.map(i => i.penerima_name || '').filter(Boolean);
   return [...new Set(names)].sort();
 });
 
@@ -86,6 +100,12 @@ const filteredItems = computed(() => {
   }
   if (selectedCustomer.value) {
     result = result.filter(i => i.customer_name === selectedCustomer.value);
+  }
+  if (selectedPengirim.value) {
+    result = result.filter(i => (i.pengirim_name || '') === selectedPengirim.value);
+  }
+  if (selectedPenerima.value) {
+    result = result.filter(i => (i.penerima_name || '') === selectedPenerima.value);
   }
   if (selectedDbl.value === '__no_dbl') {
     result = result.filter(i => !i.dbl_number);
@@ -181,6 +201,8 @@ function resetFilters() {
   searchQuery.value = '';
   selectedCustomer.value = '';
   selectedDbl.value = '';
+  selectedPengirim.value = '';
+  selectedPenerima.value = '';
   sjFilter.value = '';
   setRangeDefault();
   applyFilters();
@@ -273,7 +295,7 @@ onMounted(async () => {
     </div>
 
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-4 print:hidden">
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-8 gap-3">
         <div>
           <label class="block text-sm font-medium mb-1 dark:text-gray-300">Cari</label>
           <input
@@ -288,6 +310,20 @@ onMounted(async () => {
           <select v-model="selectedCustomer" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg text-sm">
             <option value="">Semua Customer</option>
             <option v-for="c in customers" :key="c || 'unknown'" :value="c">{{ c || '-' }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">Pengirim</label>
+          <select v-model="selectedPengirim" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg text-sm">
+            <option value="">Semua Pengirim</option>
+            <option v-for="p in pengirimList" :key="p || 'unknown'" :value="p">{{ p || '-' }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">Penerima</label>
+          <select v-model="selectedPenerima" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg text-sm">
+            <option value="">Semua Penerima</option>
+            <option v-for="p in penerimaList" :key="p || 'unknown'" :value="p">{{ p || '-' }}</option>
           </select>
         </div>
         <div>

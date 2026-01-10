@@ -26,7 +26,11 @@ export function useFormatters() {
   }
 
   function toWIBDateString(date: Date = new Date()): string {
-    return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+    const wibDate = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
+    const year = wibDate.getFullYear();
+    const month = String(wibDate.getMonth() + 1).padStart(2, '0');
+    const day = String(wibDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   function toWIBMidnight(dateStr: string): Date {

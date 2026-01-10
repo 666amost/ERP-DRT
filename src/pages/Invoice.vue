@@ -824,11 +824,19 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
   }
 }
 
-async function deleteInvoice(id: number) {
-  if (!confirm('Yakin ingin menghapus invoice ini?')) return;
+async function deleteInvoice(inv: Invoice) {
+  const invoiceInfo = `
+Invoice: ${inv.invoice_number}
+Customer: ${inv.customer_name}
+Amount: ${formatRupiah(inv.amount || 0)}
+Status: ${inv.status}
+
+Anda yakin ingin menghapus invoice ini? Tindakan ini tidak dapat dibatalkan.`;
+
+  if (!confirm(invoiceInfo)) return;
   
   try {
-    const res = await fetch(`/api/invoices?endpoint=delete&id=${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/invoices?endpoint=delete&id=${inv.id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Delete failed');
     loadInvoices();
   } catch (e) {
@@ -1754,7 +1762,7 @@ watch(() => invoiceFilterType.value, () => {
                 </button>
                 <button
                   class="px-2 py-1 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded transition-colors"
-                  @click="deleteInvoice(inv.id)"
+                  @click="deleteInvoice(inv)"
                 >
                   Hapus
                 </button>
@@ -1851,7 +1859,7 @@ watch(() => invoiceFilterType.value, () => {
             block
             variant="default"
             class="text-red-600 hover:text-red-700 bg-red-50 dark:bg-red-900/20"
-            @click="deleteInvoice(inv.id)"
+            @click="deleteInvoice(inv)"
           >
             Delete
           </Button>

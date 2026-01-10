@@ -21,6 +21,7 @@ const shipments = ref<Shipment[]>([]);
 const loading = ref(true);
 const searchQuery = ref('');
 const showFormModal = ref(false);
+const showAllUnloaded = ref(false);
 const editingShipment = ref<Shipment | null>(null);
 const selectedShipment = ref<Shipment | null>(null);
 const showBarcodeModal = ref(false);
@@ -49,9 +50,13 @@ async function loadShipments() {
       params.set('search', q);
       params.set('limit', '100');
     } else {
-      // Default: show yesterday + today without pulling full history
-      params.set('days', '1');
-      params.set('limit', '500');
+      // Default: show yesterday + today; optional toggle for all not yet loaded to DBL
+      if (showAllUnloaded.value) {
+        params.set('limit', '500');
+      } else {
+        params.set('days', '1');
+        params.set('limit', '500');
+      }
     }
     const res = await fetch(`/api/shipments?${params.toString()}`);
     const data = await res.json();
@@ -72,6 +77,11 @@ watch(searchQuery, () => {
   searchDebounceTimer = setTimeout(() => {
     loadShipments();
   }, 300);
+});
+
+watch(showAllUnloaded, () => {
+  // Immediate reload when toggling scope
+  loadShipments();
 });
 
 function openCreateModal() {
@@ -285,6 +295,10 @@ onMounted(() => {
             placeholder="Cari kode, SPB, DBL, supir, customer, rute..."
             class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 dark:border-gray-600 text-sm"
           >
+          <label class="flex items-center gap-2 text-xs px-2 py-1 border border-gray-300 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200">
+            <input type="checkbox" v-model="showAllUnloaded" class="h-4 w-4" />
+            <span>Semua belum di-DBL</span>
+          </label>
           <Button
             variant="primary"
             class="flex-shrink-0 text-sm px-3"

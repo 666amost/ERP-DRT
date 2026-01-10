@@ -1,6 +1,4 @@
-import { neon, neonConfig } from '@neondatabase/serverless';
-
-neonConfig.fetchConnectionCache = true;
+import { neon } from '@neondatabase/serverless';
 
 export type Sql = ReturnType<typeof neon>;
 

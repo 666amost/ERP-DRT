@@ -67,7 +67,6 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       }
       
       const ok = await verifyPassword(password, user.password_hash);
-      console.log('Password verified:', ok);
       
       if (!ok) {
         console.error('Invalid password for:', email);

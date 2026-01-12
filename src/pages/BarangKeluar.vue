@@ -15,17 +15,37 @@ const { permissions, fetchUser } = useAuth();
 const canDelete = computed(() => permissions.value.canDeleteShipment);
 const canEdit = computed(() => permissions.value.canEditShipment);
 
-const { formatDate } = useFormatters();
+const { formatDate, formatRupiah } = useFormatters();
 
-const shipments = ref<Shipment[]>([]);
 const loading = ref(true);
 const searchQuery = ref('');
 const showFormModal = ref(false);
-const showAllUnloaded = ref(false);
+const activeTab = ref<'unloaded' | 'loaded'>('unloaded');
+const selectedRegion = ref('');
 const editingShipment = ref<Shipment | null>(null);
 const selectedShipment = ref<Shipment | null>(null);
 const showBarcodeModal = ref(false);
 const modalBarcodeValue = ref<string>('');
+
+const tabOptions = [
+  { key: 'unloaded', label: 'Belum dikirim' },
+  { key: 'loaded', label: 'Sudah dikirim' }
+] as const;
+
+const regionOptions = [
+  { value: '', label: 'Semua Wilayah' },
+  { value: 'BALI', label: 'Bali' },
+  { value: 'KALIMANTAN', label: 'Kalimantan' },
+  { value: 'SUMATERA', label: 'Sumatera' },
+  { value: 'SULAWESI', label: 'Sulawesi' },
+  { value: 'PAPUA', label: 'Papua' },
+  { value: 'JAWA_TENGAH', label: 'Jawa Tengah' },
+  { value: 'JAWA_TIMUR', label: 'Jawa Timur' },
+  { value: 'SUMBAWA', label: 'Sumbawa' },
+  { value: 'LOMBOK', label: 'Lombok' },
+  { value: 'NTT', label: 'NTT' },
+  { value: 'MALUKU', label: 'Maluku' }
+];
 
 const allStatusOptions = [
   { value: 'DRAFT', label: 'Draft', variant: 'default' },
@@ -41,32 +61,99 @@ function viewBarcode(shipment: Shipment) {
   modalBarcodeValue.value = shipment.spb_number || `SPB-${shipment.id}`;
 }
 
-async function loadShipments() {
-  loading.value = true;
+function formatPublicCode(code: string | null | undefined): string {
+  const val = String(code || '').trim();
+  if (!val) return '-';
+  const idx = val.indexOf('-');
+  if (idx < 0) return val;
+  return `${val.slice(0, idx + 1)}\n${val.slice(idx + 1)}`;
+}
+
+function getRegionFromDestination(destination: string): string {
+  const dest = (destination || '').toUpperCase();
+  if (dest.includes('BALI') || dest.includes('DENPASAR') || dest.includes('SINGARAJA') || dest.includes('GIANYAR') || dest.includes('TABANAN') || dest.includes('KLUNGKUNG') || dest.includes('KARANGASEM') || dest.includes('BULELENG') || dest.includes('BADUNG') || dest.includes('JEMBRANA') || dest.includes('BANGLI')) return 'BALI';
+  if (dest.includes('KALIMANTAN') || dest.includes('BANJARMASIN') || dest.includes('PONTIANAK') || dest.includes('BALIKPAPAN') || dest.includes('SAMARINDA') || dest.includes('PALANGKARAYA') || dest.includes('TARAKAN') || dest.includes('BONTANG') || dest.includes('KALTIM') || dest.includes('KALSEL') || dest.includes('KALBAR') || dest.includes('KALTENG') || dest.includes('KALTARA')) return 'KALIMANTAN';
+  if (dest.includes('SUMATERA') || dest.includes('SUMATRA') || dest.includes('MEDAN') || dest.includes('PALEMBANG') || dest.includes('PADANG') || dest.includes('PEKANBARU') || dest.includes('LAMPUNG') || dest.includes('JAMBI') || dest.includes('BENGKULU') || dest.includes('ACEH') || dest.includes('BANGKA') || dest.includes('BELITUNG') || dest.includes('RIAU') || dest.includes('SIBOLGA')) return 'SUMATERA';
+  if (dest.includes('SULAWESI') || dest.includes('MAKASSAR') || dest.includes('MANADO') || dest.includes('PALU') || dest.includes('KENDARI') || dest.includes('GORONTALO') || dest.includes('MAMUJU')) return 'SULAWESI';
+  if (dest.includes('PAPUA') || dest.includes('JAYAPURA') || dest.includes('SORONG') || dest.includes('MERAUKE') || dest.includes('TIMIKA') || dest.includes('MANOKWARI') || dest.includes('BIAK')) return 'PAPUA';
+  if (dest.includes('SEMARANG') || dest.includes('SOLO') || dest.includes('SURAKARTA') || dest.includes('KUDUS') || dest.includes('PEKALONGAN') || dest.includes('TEGAL') || dest.includes('MAGELANG') || dest.includes('PURWOKERTO') || dest.includes('CILACAP') || dest.includes('SALATIGA')) return 'JAWA_TENGAH';
+  if (dest.includes('SURABAYA') || dest.includes('MALANG') || dest.includes('SIDOARJO') || dest.includes('JEMBER') || dest.includes('KEDIRI') || dest.includes('BLITAR') || dest.includes('PASURUAN') || dest.includes('MADIUN') || dest.includes('MOJOKERTO') || dest.includes('PROBOLINGGO') || dest.includes('BANYUWANGI') || dest.includes('GRESIK') || dest.includes('TUBAN') || dest.includes('LAMONGAN')) return 'JAWA_TIMUR';
+  if (dest.includes('SUMBAWA') || dest.includes('BIMA') || dest.includes('DOMPU')) return 'SUMBAWA';
+  if (dest.includes('LOMBOK') || dest.includes('MATARAM') || dest.includes('PRAYA')) return 'LOMBOK';
+  if (dest.includes('KUPANG') || dest.includes('FLORES') || dest.includes('ENDE') || dest.includes('MAUMERE') || dest.includes('LABUAN BAJO') || dest.includes('RUTENG') || dest.includes('SUMBA') || dest.includes('WAINGAPU') || dest.includes('ATAMBUA') || dest.includes('ALOR') || dest.includes('LEMBATA') || dest.includes('ROTE')) return 'NTT';
+  if (dest.includes('MALUKU') || dest.includes('AMBON') || dest.includes('TERNATE') || dest.includes('TUAL')) return 'MALUKU';
+  return '';
+}
+
+function getRegionLabelFromDestination(destination: string): string {
+  const key = getRegionFromDestination(destination);
+  return regionOptions.find((o) => o.value === key)?.label || '';
+}
+
+const unloadedShipments = ref<Shipment[]>([]);
+const loadedShipments = ref<Shipment[]>([]);
+
+const filteredUnloadedShipments = computed(() => {
+  let result = unloadedShipments.value;
+  if (selectedRegion.value) {
+    result = result.filter((s) => getRegionFromDestination(s.destination) === selectedRegion.value);
+  }
+  return result;
+});
+
+const filteredLoadedShipments = computed(() => {
+  let result = loadedShipments.value;
+  if (selectedRegion.value) {
+    result = result.filter((s) => getRegionFromDestination(s.destination) === selectedRegion.value);
+  }
+  return result;
+});
+
+const filteredShipments = computed(() => {
+  return activeTab.value === 'loaded' ? filteredLoadedShipments.value : filteredUnloadedShipments.value;
+});
+
+const loadedCount = computed(() => filteredLoadedShipments.value.length);
+const unloadedCount = computed(() => filteredUnloadedShipments.value.length);
+
+const totalNominal = computed(() => {
+  return filteredShipments.value.reduce((sum, s) => sum + (Number(s.nominal) || 0), 0);
+});
+
+async function loadTabShipments(tab: 'unloaded' | 'loaded') {
+  const shouldToggleLoading = tab === activeTab.value;
+  if (shouldToggleLoading) {
+    loading.value = true;
+  }
   try {
     const params = new URLSearchParams({ endpoint: 'list' });
     const q = searchQuery.value.trim();
-    if (q) {
-      params.set('search', q);
-      params.set('limit', '100');
+    const hasSearch = q.length > 0;
+    if (hasSearch) params.set('search', q);
+
+    if (tab === 'loaded') {
+      params.set('days', '1');
+      params.set('dbl', 'loaded');
+      params.set('limit', hasSearch ? '500' : '500');
     } else {
-      // Default: show yesterday + today; optional toggle for all not yet loaded to DBL
-      if (showAllUnloaded.value) {
-        params.set('limit', '500');
-      } else {
-        params.set('days', '1');
-        params.set('limit', '500');
-      }
+      params.set('dbl', 'unloaded');
+      params.set('limit', hasSearch ? '500' : '5000');
     }
+
     const res = await fetch(`/api/shipments?${params.toString()}`);
     const data = await res.json();
     const items: Shipment[] = (data.items || []) as Shipment[];
-    // Exclude shipments that have been loaded into a DBL
-    shipments.value = items.filter((s) => !s.dbl_id && !s.dbl_number);
+    if (tab === 'loaded') {
+      loadedShipments.value = items.filter((s) => Boolean(s.dbl_id || s.dbl_number));
+    } else {
+      unloadedShipments.value = items.filter((s) => !s.dbl_id && !s.dbl_number);
+    }
   } catch (e) {
     console.error('Failed to load shipments:', e);
   } finally {
-    loading.value = false;
+    if (shouldToggleLoading) {
+      loading.value = false;
+    }
   }
 }
 
@@ -75,13 +162,12 @@ let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 watch(searchQuery, () => {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
   searchDebounceTimer = setTimeout(() => {
-    loadShipments();
+    loadTabShipments(activeTab.value);
   }, 300);
 });
 
-watch(showAllUnloaded, () => {
-  // Immediate reload when toggling scope
-  loadShipments();
+watch(activeTab, () => {
+  loadTabShipments(activeTab.value);
 });
 
 function openCreateModal() {
@@ -100,7 +186,7 @@ function closeFormModal() {
 }
 
 async function handleShipmentSaved() {
-  await loadShipments();
+  await loadTabShipments(activeTab.value);
   closeFormModal();
 }
 
@@ -118,7 +204,7 @@ async function deleteShipment(shipment: Shipment) {
       throw new Error(errorData.error || errorData.details || 'Delete failed');
     }
     
-    await loadShipments();
+    await loadTabShipments(activeTab.value);
   } catch (e) {
     console.error('Delete error:', e);
     const errorMessage = e instanceof Error ? e.message : 'Unknown error';
@@ -277,16 +363,41 @@ async function printLabel() {
 
 onMounted(() => {
   fetchUser();
-  loadShipments();
+  loadTabShipments('unloaded');
+  loadTabShipments('loaded');
 });
 </script>
 
 <template>
   <div class="space-y-4 pb-20 lg:pb-0 overflow-x-auto">
     <div class="w-full min-w-0">
-      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 px-4 lg:px-0">
-        <div class="text-xl font-semibold dark:text-gray-100">
-          SPB (Barang Masuk)
+      <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3 px-4 lg:px-0">
+        <div class="min-w-0">
+          <div class="text-xl font-semibold dark:text-gray-100">
+            SPB (Barang Masuk)
+          </div>
+          <div class="flex flex-wrap items-center gap-2 mt-2">
+            <button
+              v-for="tab in tabOptions"
+              :key="tab.key"
+              type="button"
+              class="px-3 py-2 rounded-lg text-sm border transition-colors"
+              :class="tab.key === activeTab
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600'"
+              @click="activeTab = tab.key"
+            >
+              <span>{{ tab.label }}</span>
+              <span
+                class="ml-2 text-xs px-2 py-0.5 rounded-full"
+                :class="tab.key === activeTab
+                  ? 'bg-white/20 text-white'
+                  : 'bg-gray-100 text-gray-600 dark:bg-gray-600 dark:text-gray-100'"
+              >
+                {{ tab.key === 'unloaded' ? unloadedCount : loadedCount }}
+              </span>
+            </button>
+          </div>
         </div>
         <div class="flex gap-2 w-full lg:w-auto">
           <input
@@ -295,10 +406,12 @@ onMounted(() => {
             placeholder="Cari kode, SPB, DBL, supir, customer, rute..."
             class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 dark:border-gray-600 text-sm"
           >
-          <label class="flex items-center gap-2 text-xs px-2 py-1 border border-gray-300 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200">
-            <input type="checkbox" v-model="showAllUnloaded" class="h-4 w-4" />
-            <span>Semua belum di-DBL</span>
-          </label>
+          <select
+            v-model="selectedRegion"
+            class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 dark:border-gray-600 text-sm"
+          >
+            <option v-for="opt in regionOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </select>
           <Button
             variant="primary"
             class="flex-shrink-0 text-sm px-3"
@@ -307,6 +420,13 @@ onMounted(() => {
             + Tambah
           </Button>
         </div>
+      </div>
+
+      <div
+        v-if="!loading"
+        class="px-4 lg:px-0 text-sm text-gray-600 dark:text-gray-300"
+      >
+        Total nominal: <span class="font-semibold text-gray-900 dark:text-gray-100">{{ formatRupiah(totalNominal) }}</span>
       </div>
 
       <div
@@ -327,28 +447,33 @@ onMounted(() => {
           <table class="w-full text-sm border-collapse">
             <thead class="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 sticky top-0">
               <tr>
-                <th class="px-3 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap min-w-max">Kode</th>
-                <th class="px-3 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap min-w-max">SPB</th>
+                <th class="px-3 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap min-w-[90px]">Kode / SPB</th>
                 <th class="px-3 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap min-w-[120px]">DBL / Supir</th>
                 <th class="px-3 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap min-w-[150px]">Penerima</th>
                 <th class="px-3 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap min-w-[180px]">Rute</th>
+                <th class="px-3 py-3 text-center text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap min-w-[110px]">Wilayah</th>
+                <th class="px-3 py-3 text-right text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap min-w-[120px]">Nominal</th>
                 <th class="px-3 py-3 text-center text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap">Colli</th>
                 <th class="px-3 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap">Status</th>
                 <th class="px-3 py-3 text-right text-xs font-semibold text-gray-700 dark:text-gray-200 whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-              <tr v-if="shipments.length === 0">
-                <td colspan="8" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">Belum ada shipment</td>
-              </tr>
-              <tr v-for="ship in shipments" :key="ship.id" class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-150 border-b border-gray-100 dark:border-gray-700">
-                <td class="px-3 py-3 text-xs font-medium dark:text-gray-200 whitespace-nowrap">
-                  {{ ship.public_code || '-' }}
+              <tr v-if="filteredShipments.length === 0">
+                <td colspan="9" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                  {{ activeTab === 'unloaded' ? 'Belum ada shipment belum dikirim' : 'Belum ada shipment sudah dikirim' }}
                 </td>
+              </tr>
+              <tr v-for="ship in filteredShipments" :key="ship.id" class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-150 border-b border-gray-100 dark:border-gray-700">
                 <td class="px-3 py-3 text-xs dark:text-gray-300">
-                  <span class="inline-block text-[10px] leading-tight bg-black text-white rounded px-2 py-1 font-medium">
-                    {{ ship.spb_number || `SPB-${ship.id}` }}
-                  </span>
+                  <div class="flex flex-col gap-1">
+                    <div class="text-[10px] font-medium dark:text-gray-200 whitespace-pre-line leading-tight max-w-[90px]">
+                      {{ formatPublicCode(ship.public_code) }}
+                    </div>
+                    <span class="inline-block text-[10px] leading-tight bg-black text-white rounded px-2 py-1 font-medium whitespace-nowrap">
+                      {{ ship.spb_number || `SPB-${ship.id}` }}
+                    </span>
+                  </div>
                 </td>
                 <td class="px-3 py-3 text-xs dark:text-gray-300">
                   <div class="flex flex-col gap-1">
@@ -367,6 +492,14 @@ onMounted(() => {
                 </td>
                 <td class="px-3 py-3 text-xs dark:text-gray-300 whitespace-normal break-words max-w-[240px]">
                   <div class="font-medium line-clamp-2 whitespace-normal break-words">{{ ship.origin }} → {{ ship.destination }}</div>
+                </td>
+                <td class="px-3 py-3 text-xs text-center dark:text-gray-300 font-medium whitespace-nowrap">
+                  <span :title="ship.vehicle_plate_region || ''">
+                    {{ getRegionLabelFromDestination(ship.destination) || '-' }}
+                  </span>
+                </td>
+                <td class="px-3 py-3 text-xs text-right dark:text-gray-300 font-medium whitespace-nowrap tabular-nums">
+                  {{ formatRupiah(ship.nominal || 0) }}
                 </td>
                 <td class="px-3 py-3 text-xs text-center dark:text-gray-300 font-medium whitespace-nowrap">
                   {{ ship.total_colli }}
@@ -393,19 +526,19 @@ onMounted(() => {
         class="lg:hidden space-y-3 px-4 lg:px-0"
       >
         <div
-          v-if="shipments.length === 0"
+          v-if="filteredShipments.length === 0"
           class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 text-center"
         >
           <p class="text-sm text-gray-500 dark:text-gray-400">
-            Belum ada shipment
+            {{ activeTab === 'unloaded' ? 'Belum ada shipment belum dikirim' : 'Belum ada shipment sudah dikirim' }}
           </p>
         </div>
         <div v-else class="space-y-3">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div v-for="s in shipments" :key="s.id" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md flex flex-col">
+            <div v-for="s in filteredShipments" :key="s.id" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md flex flex-col">
               <div class="flex items-start justify-between gap-2">
                 <div class="flex-1">
-                  <div class="text-sm font-semibold dark:text-gray-100">{{ s.public_code || 'N/A' }}</div>
+                  <div class="text-xs font-semibold dark:text-gray-100 whitespace-pre-line leading-tight">{{ formatPublicCode(s.public_code) }}</div>
                   <div class="mt-0.5">
                     <span class="inline-block text-[10px] leading-tight bg-black text-white rounded px-1.5 py-0.5 font-medium">
                       {{ s.spb_number || `SPB-${s.id}` }}
@@ -433,8 +566,19 @@ onMounted(() => {
                   <span class="dark:text-gray-300 line-clamp-2 whitespace-normal break-words">{{ s.origin }} → {{ s.destination }}</span>
                 </div>
                 <div class="flex items-center gap-2">
+                  <Icon icon="mdi:map-outline" class="text-base text-gray-400 dark:text-gray-500 flex-shrink-0" />
+                  <span class="dark:text-gray-300">
+                    Wilayah: {{ getRegionLabelFromDestination(s.destination) || '-' }}
+                    <span v-if="s.vehicle_plate_region" class="text-gray-400">({{ s.vehicle_plate_region }})</span>
+                  </span>
+                </div>
+                <div class="flex items-center gap-2">
                   <Icon icon="mdi:archive-outline" class="text-base text-gray-400 dark:text-gray-500 flex-shrink-0" />
                   <span class="dark:text-gray-300">{{ s.total_colli }} colli</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <Icon icon="mdi:cash" class="text-base text-gray-400 dark:text-gray-500 flex-shrink-0" />
+                  <span class="dark:text-gray-300">Nominal: {{ formatRupiah(s.nominal || 0) }}</span>
                 </div>
                 <div v-if="s.eta" class="flex items-center gap-2">
                   <Icon icon="mdi:calendar-outline" class="text-base text-gray-400 dark:text-gray-500 flex-shrink-0" />

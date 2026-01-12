@@ -142,13 +142,14 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
 
     if (endpoint === 'list' && req.method === 'GET') {
       const DEFAULT_LIMIT = 50;
-      const MAX_LIMIT = 500;
+      const MAX_LIMIT = 5000;
 
       const page = clampInt(parseInt(url.searchParams.get('page') || '1', 10) || 1, 1, 1_000_000);
       const searchQuery = escapeSqlLiteral(String(url.searchParams.get('search') || '').trim());
       const limit = clampInt(parseInt(url.searchParams.get('limit') || String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT, 1, MAX_LIMIT);
       const status = url.searchParams.get('status');
       const days = clampInt(parseInt(url.searchParams.get('days') || '0', 10) || 0, 0, 3650);
+      const dbl = (url.searchParams.get('dbl') || '').toLowerCase();
 
       const startDateRaw = url.searchParams.get('start_date') || url.searchParams.get('date_from') || url.searchParams.get('from');
       const endDateRaw = url.searchParams.get('end_date') || url.searchParams.get('date_to') || url.searchParams.get('to');
@@ -189,6 +190,12 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
 
       if (jenis) {
         whereConditions.push(`upper(coalesce(s.jenis, '')) = '${jenis}'`);
+      }
+
+      if (dbl === 'loaded') {
+        whereConditions.push('s.dbl_id is not null');
+      } else if (dbl === 'unloaded') {
+        whereConditions.push('s.dbl_id is null');
       }
 
       if (searchQuery) {

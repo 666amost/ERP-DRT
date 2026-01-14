@@ -122,6 +122,7 @@ const totalNominal = computed(() => {
 
 async function loadTabShipments(tab: 'unloaded' | 'loaded') {
   const shouldToggleLoading = tab === activeTab.value;
+  const requestId = ++loadTabShipments.requestSeq[tab];
   if (shouldToggleLoading) {
     loading.value = true;
   }
@@ -132,7 +133,8 @@ async function loadTabShipments(tab: 'unloaded' | 'loaded') {
     if (hasSearch) params.set('search', q);
 
     if (tab === 'loaded') {
-      params.set('days', '1');
+      // If searching, don't restrict by recent days.
+      if (!hasSearch) params.set('days', '1');
       params.set('dbl', 'loaded');
       params.set('limit', hasSearch ? '500' : '500');
     } else {
@@ -141,8 +143,18 @@ async function loadTabShipments(tab: 'unloaded' | 'loaded') {
     }
 
     const res = await fetch(`/api/shipments?${params.toString()}`);
-    const data = await res.json();
-    const items: Shipment[] = (data.items || []) as Shipment[];
+    const raw = (await res.json().catch(() => null)) as unknown;
+    const data = (raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}) as Record<string, unknown>;
+    if (!res.ok) {
+      const msg =
+        (typeof data.error === 'string' && data.error) ||
+        (typeof data.details === 'string' && data.details) ||
+        `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+    const itemsRaw = Array.isArray(data.items) ? data.items : [];
+    const items: Shipment[] = itemsRaw as Shipment[];
+    if (requestId !== loadTabShipments.requestSeq[tab]) return;
     if (tab === 'loaded') {
       loadedShipments.value = items.filter((s) => Boolean(s.dbl_id || s.dbl_number));
     } else {
@@ -150,19 +162,33 @@ async function loadTabShipments(tab: 'unloaded' | 'loaded') {
     }
   } catch (e) {
     console.error('Failed to load shipments:', e);
+    if (requestId === loadTabShipments.requestSeq[tab]) {
+      if (tab === 'loaded') loadedShipments.value = [];
+      else unloadedShipments.value = [];
+    }
   } finally {
-    if (shouldToggleLoading) {
+    if (shouldToggleLoading && requestId === loadTabShipments.requestSeq[tab] && tab === activeTab.value) {
       loading.value = false;
     }
   }
 }
+loadTabShipments.requestSeq = { unloaded: 0, loaded: 0 } as Record<'unloaded' | 'loaded', number>;
 
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let previousHadSearch = false;
 
 watch(searchQuery, () => {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
   searchDebounceTimer = setTimeout(() => {
-    loadTabShipments(activeTab.value);
+    const hasSearch = searchQuery.value.trim().length > 0;
+    // Keep both tab counts in sync during search, even if the other tab isn't opened.
+    if (hasSearch || previousHadSearch) {
+      loadTabShipments('unloaded');
+      loadTabShipments('loaded');
+    } else {
+      loadTabShipments(activeTab.value);
+    }
+    previousHadSearch = hasSearch;
   }, 300);
 });
 
@@ -269,7 +295,6 @@ async function printLabel() {
     barcodeDataUrl = null;
   }
 
-  // Use berat from shipment directly, fallback to colli items if not set
   let totalWeight = selectedShipment.value.berat || 0;
   if (totalWeight === 0) {
     try {
@@ -296,7 +321,6 @@ async function printLabel() {
   const penerimaNameHtml = esc(penerimaName);
   const penerimaPhoneHtml = esc(penerimaPhone);
 
-  // Generated timestamp for this printed label (changes every print)
   const printedAt = new Date();
   const printedAtDisplay = `${printedAt.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })} ${printedAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`;
 

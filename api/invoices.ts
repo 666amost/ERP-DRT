@@ -163,12 +163,31 @@ type AddPaymentBody = {
   notes?: string;
 };
 
+type SettleCustomerBody = {
+  customer_id?: number;
+  customer_name?: string;
+  payment_date: string;
+  payment_method?: string;
+  bank_account?: string;
+  reference_no?: string;
+  notes?: string;
+};
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
   'Access-Control-Allow-Credentials': 'true'
 };
+
+function clampInt(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.trunc(value)));
+}
+
+function isValidDateString(val?: string | null): val is string {
+  return Boolean(val && /^\d{4}-\d{2}-\d{2}$/.test(val));
+}
 
 function parseSpbList(value?: string | null): string[] {
   if (!value) return [];
@@ -355,6 +374,155 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         pages: Math.ceil(total / limit)
       }
     });
+    return;
+  } else if (endpoint === 'unpaid' && req.method === 'GET') {
+    const DEFAULT_LIMIT = 1000;
+    const MAX_LIMIT = 5000;
+    const limit = clampInt(parseInt(url.searchParams.get('limit') || String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT, 1, MAX_LIMIT);
+    const customerId = parseInt(url.searchParams.get('customer_id') || '0', 10) || 0;
+    const customerNameRaw = (url.searchParams.get('customer_name') || '').trim();
+    const qRaw = url.searchParams.get('q') || url.searchParams.get('search');
+    const search = qRaw && qRaw.trim() ? `%${qRaw.trim()}%` : null;
+
+    let items: Invoice[];
+    if (customerId) {
+      items = await sql`
+        select 
+          i.id, i.shipment_id, i.dbl_id, i.invoice_number, i.spb_number, i.customer_name, i.customer_id,
+          coalesce(i.amount, 0)::float as amount, 
+          coalesce(i.subtotal, 0)::float as subtotal,
+          coalesce(i.pph_percent, 0)::float as pph_percent,
+          coalesce(i.pph_amount, 0)::float as pph_amount,
+          coalesce(i.total_tagihan, i.amount, 0)::float as total_tagihan,
+          coalesce(i.paid_amount, 0)::float as paid_amount,
+          coalesce(i.remaining_amount, i.amount, 0)::float as remaining_amount,
+          i.status, i.issued_at, i.invoice_date, i.due_date, i.paid_at, 
+          i.bank_account, i.transfer_date, i.tax_percent, i.discount_amount, i.notes,
+          coalesce(stats.shipment_count, 0)::int as shipment_count,
+          coalesce(stats.returned_count, 0)::int as sj_returned_count,
+          coalesce(stats.pending_count, 0)::int as sj_pending_count,
+          case 
+            when stats.shipment_count is null or stats.shipment_count = 0 then null
+            when coalesce(stats.pending_count, 0) = 0 then true
+            else false
+          end as sj_all_returned
+        from invoices i
+        left join lateral (
+          select 
+            count(s.id)::int as shipment_count,
+            count(*) filter (where coalesce(s.sj_returned, false))::int as returned_count,
+            count(*) filter (where coalesce(s.sj_returned, false) = false)::int as pending_count
+          from invoice_items ii
+          left join shipments s on s.id = ii.shipment_id
+          where ii.invoice_id = i.id
+            and ii.shipment_id is not null
+        ) as stats on true
+        where i.customer_id = ${customerId}
+          and coalesce(i.status, 'pending') in ('pending','partial','overdue')
+          and coalesce(i.remaining_amount, i.amount, 0) > 0
+          and (
+            ${search}::text is null
+            or i.invoice_number ilike ${search}
+            or i.customer_name ilike ${search}
+            or i.spb_number ilike ${search}
+            or coalesce(i.notes, '') ilike ${search}
+          )
+        order by i.issued_at desc
+        limit ${limit}
+      ` as Invoice[];
+    } else if (customerNameRaw) {
+      items = await sql`
+        select 
+          i.id, i.shipment_id, i.dbl_id, i.invoice_number, i.spb_number, i.customer_name, i.customer_id,
+          coalesce(i.amount, 0)::float as amount, 
+          coalesce(i.subtotal, 0)::float as subtotal,
+          coalesce(i.pph_percent, 0)::float as pph_percent,
+          coalesce(i.pph_amount, 0)::float as pph_amount,
+          coalesce(i.total_tagihan, i.amount, 0)::float as total_tagihan,
+          coalesce(i.paid_amount, 0)::float as paid_amount,
+          coalesce(i.remaining_amount, i.amount, 0)::float as remaining_amount,
+          i.status, i.issued_at, i.invoice_date, i.due_date, i.paid_at, 
+          i.bank_account, i.transfer_date, i.tax_percent, i.discount_amount, i.notes,
+          coalesce(stats.shipment_count, 0)::int as shipment_count,
+          coalesce(stats.returned_count, 0)::int as sj_returned_count,
+          coalesce(stats.pending_count, 0)::int as sj_pending_count,
+          case 
+            when stats.shipment_count is null or stats.shipment_count = 0 then null
+            when coalesce(stats.pending_count, 0) = 0 then true
+            else false
+          end as sj_all_returned
+        from invoices i
+        left join lateral (
+          select 
+            count(s.id)::int as shipment_count,
+            count(*) filter (where coalesce(s.sj_returned, false))::int as returned_count,
+            count(*) filter (where coalesce(s.sj_returned, false) = false)::int as pending_count
+          from invoice_items ii
+          left join shipments s on s.id = ii.shipment_id
+          where ii.invoice_id = i.id
+            and ii.shipment_id is not null
+        ) as stats on true
+        where lower(coalesce(i.customer_name,'')) = lower(${customerNameRaw})
+          and coalesce(i.status, 'pending') in ('pending','partial','overdue')
+          and coalesce(i.remaining_amount, i.amount, 0) > 0
+          and (
+            ${search}::text is null
+            or i.invoice_number ilike ${search}
+            or i.customer_name ilike ${search}
+            or i.spb_number ilike ${search}
+            or coalesce(i.notes, '') ilike ${search}
+          )
+        order by i.issued_at desc
+        limit ${limit}
+      ` as Invoice[];
+    } else {
+      items = await sql`
+        select 
+          i.id, i.shipment_id, i.dbl_id, i.invoice_number, i.spb_number, i.customer_name, i.customer_id,
+          coalesce(i.amount, 0)::float as amount, 
+          coalesce(i.subtotal, 0)::float as subtotal,
+          coalesce(i.pph_percent, 0)::float as pph_percent,
+          coalesce(i.pph_amount, 0)::float as pph_amount,
+          coalesce(i.total_tagihan, i.amount, 0)::float as total_tagihan,
+          coalesce(i.paid_amount, 0)::float as paid_amount,
+          coalesce(i.remaining_amount, i.amount, 0)::float as remaining_amount,
+          i.status, i.issued_at, i.invoice_date, i.due_date, i.paid_at, 
+          i.bank_account, i.transfer_date, i.tax_percent, i.discount_amount, i.notes,
+          coalesce(stats.shipment_count, 0)::int as shipment_count,
+          coalesce(stats.returned_count, 0)::int as sj_returned_count,
+          coalesce(stats.pending_count, 0)::int as sj_pending_count,
+          case 
+            when stats.shipment_count is null or stats.shipment_count = 0 then null
+            when coalesce(stats.pending_count, 0) = 0 then true
+            else false
+          end as sj_all_returned
+        from invoices i
+        left join lateral (
+          select 
+            count(s.id)::int as shipment_count,
+            count(*) filter (where coalesce(s.sj_returned, false))::int as returned_count,
+            count(*) filter (where coalesce(s.sj_returned, false) = false)::int as pending_count
+          from invoice_items ii
+          left join shipments s on s.id = ii.shipment_id
+          where ii.invoice_id = i.id
+            and ii.shipment_id is not null
+        ) as stats on true
+        where coalesce(i.status, 'pending') in ('pending','partial','overdue')
+          and coalesce(i.remaining_amount, i.amount, 0) > 0
+          and (
+            ${search}::text is null
+            or i.invoice_number ilike ${search}
+            or i.customer_name ilike ${search}
+            or i.spb_number ilike ${search}
+            or coalesce(i.notes, '') ilike ${search}
+          )
+        order by i.issued_at desc
+        limit ${limit}
+      ` as Invoice[];
+    }
+
+    writeJson(res, { items });
+    return;
   } else if (endpoint === 'create' && req.method === 'POST') {
     let body: CreateInvoiceBody;
     
@@ -887,6 +1055,96 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
 
     writeJson(res, { id: result[0].id, success: true, paid_amount: newPaidAmount, remaining_amount: newRemainingAmount, status: newStatus }, 201);
+    return;
+  } else if (endpoint === 'settle-customer' && req.method === 'POST') {
+    let body: SettleCustomerBody;
+    try { body = await readJsonNode(req) as SettleCustomerBody; } catch { body = null as unknown as SettleCustomerBody; }
+    if (!body || !isValidDateString(body.payment_date)) {
+      writeJson(res, { error: 'Invalid payment_date (YYYY-MM-DD)' }, 400);
+      return;
+    }
+
+    const customerId = typeof body.customer_id === 'number' ? body.customer_id : parseInt(String(body.customer_id || 0), 10) || 0;
+    const customerName = (body.customer_name || '').trim();
+    if (!customerId && !customerName) {
+      writeJson(res, { error: 'Missing customer_id or customer_name' }, 400);
+      return;
+    }
+
+    const runInTxn = sql.begin
+      ? sql.begin.bind(sql)
+      // eslint-disable-next-line no-unused-vars
+      : async <T>(fn: (_client: Sql) => Promise<T>) => {
+          const client = getSql();
+          try {
+            await client`begin`;
+            const result = await fn(client);
+            await client`commit`;
+            return result;
+          } catch (e) {
+            try { await client`rollback`; } catch { /* ignore rollback errors */ }
+            throw e;
+          }
+        };
+
+    const result = await runInTxn(async (trx: Sql) => {
+      const targets = customerId
+        ? await trx`
+            select id, coalesce(total_tagihan, amount, 0)::float as total_tagihan,
+                   coalesce(paid_amount, 0)::float as paid_amount
+            from invoices
+            where customer_id = ${customerId}
+              and coalesce(status, 'pending') in ('pending','partial','overdue')
+              and coalesce(remaining_amount, amount, 0) > 0
+            for update
+          ` as Array<{ id: number; total_tagihan: number; paid_amount: number }>
+        : await trx`
+            select id, coalesce(total_tagihan, amount, 0)::float as total_tagihan,
+                   coalesce(paid_amount, 0)::float as paid_amount
+            from invoices
+            where lower(coalesce(customer_name,'')) = lower(${customerName})
+              and coalesce(status, 'pending') in ('pending','partial','overdue')
+              and coalesce(remaining_amount, amount, 0) > 0
+            for update
+          ` as Array<{ id: number; total_tagihan: number; paid_amount: number }>;
+
+      let settledCount = 0;
+      let totalPaid = 0;
+      for (const inv of targets) {
+        const remaining = Math.max(0, Number(inv.total_tagihan || 0) - Number(inv.paid_amount || 0));
+        if (remaining <= 0) continue;
+
+        await trx`
+          insert into invoice_payments (
+            invoice_id, payment_date, amount, payment_method, bank_account, reference_no, notes
+          ) values (
+            ${inv.id},
+            ${body.payment_date},
+            ${remaining},
+            ${body.payment_method || null},
+            ${body.bank_account || null},
+            ${body.reference_no || null},
+            ${body.notes || null}
+          )
+        `;
+
+        await trx`
+          update invoices set
+            paid_amount = ${Number(inv.paid_amount || 0) + remaining},
+            remaining_amount = 0,
+            status = 'paid',
+            paid_at = now()
+          where id = ${inv.id}
+        `;
+
+        settledCount += 1;
+        totalPaid += remaining;
+      }
+
+      return { settledCount, totalPaid };
+    });
+
+    writeJson(res, { success: true, settled_count: result.settledCount, total_paid: result.totalPaid });
     return;
   } else if (endpoint === 'delete-payment' && req.method === 'DELETE') {
     const paymentId = url.searchParams.get('payment_id') || url.searchParams.get('id');

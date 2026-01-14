@@ -176,6 +176,14 @@ function getCreatePaymentMethod(type: CreatePaymentType): string | undefined {
   return 'TF JAKARTA';
 }
 
+type CicilanCustomerOption = {
+  key: string;
+  customer_id: number | null;
+  customer_name: string;
+  invoice_count: number;
+  total_remaining: number;
+};
+
 const form = ref<CreateInvoiceForm>({
   customer_name: '',
   customer_id: null,
@@ -198,6 +206,73 @@ const manualAmountMode = ref(false);
 const existingPaidAmount = ref<number>(0);
 const editingCustomerName = ref<string>('');
 const invoiceFilterType = ref<'pengirim' | 'penerima'>('penerima');
+
+const showCicilanModal = ref(false);
+const loadingCicilan = ref(false);
+const allUnpaidInvoices = ref<Invoice[]>([]);
+const cicilanCustomerKey = ref<string>('');
+const cicilanSearch = ref<string>('');
+const cicilanPaymentType = ref<CreatePaymentType>('TF_JAKARTA');
+const cicilanPaymentDate = ref<string>(new Date().toISOString().split('T')[0]!);
+const cicilanReferenceNo = ref<string>('');
+const cicilanNotes = ref<string>('');
+
+const cicilanCustomerOptions = computed<CicilanCustomerOption[]>(() => {
+  const map = new Map<string, CicilanCustomerOption>();
+  for (const inv of allUnpaidInvoices.value) {
+    const name = (inv.customer_name || '').trim() || 'Tanpa Customer';
+    const id = typeof inv.customer_id === 'number' ? inv.customer_id : null;
+    const key = id ? `id:${id}` : `name:${name.toLowerCase()}`;
+    const remaining = Number(inv.remaining_amount ?? inv.amount ?? 0);
+    const prev = map.get(key);
+    if (prev) {
+      prev.invoice_count += 1;
+      prev.total_remaining += remaining;
+    } else {
+      map.set(key, {
+        key,
+        customer_id: id,
+        customer_name: name,
+        invoice_count: 1,
+        total_remaining: remaining
+      });
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => a.customer_name.localeCompare(b.customer_name));
+});
+
+const selectedCicilanCustomer = computed<CicilanCustomerOption | null>(() => {
+  return cicilanCustomerOptions.value.find((c) => c.key === cicilanCustomerKey.value) ?? null;
+});
+
+const filteredCicilanInvoices = computed<Invoice[]>(() => {
+  let list = allUnpaidInvoices.value;
+  const selected = selectedCicilanCustomer.value;
+  if (selected) {
+    if (typeof selected.customer_id === 'number') {
+      list = list.filter((inv) => inv.customer_id === selected.customer_id);
+    } else {
+      const nameKey = selected.customer_name.trim().toLowerCase();
+      list = list.filter((inv) => (inv.customer_name || '').trim().toLowerCase() === nameKey);
+    }
+  }
+  if (cicilanSearch.value.trim()) {
+    const q = cicilanSearch.value.trim().toLowerCase();
+    list = list.filter((inv) => {
+      return (
+        String(inv.invoice_number || '').toLowerCase().includes(q) ||
+        String(inv.spb_number || '').toLowerCase().includes(q) ||
+        String(inv.customer_name || '').toLowerCase().includes(q) ||
+        String(inv.notes || '').toLowerCase().includes(q)
+      );
+    });
+  }
+  return list;
+});
+
+const cicilanTotalOutstanding = computed<number>(() => {
+  return filteredCicilanInvoices.value.reduce((sum, inv) => sum + Number(inv.remaining_amount ?? inv.amount ?? 0), 0);
+});
 
 const uniqueCustomerNames = computed(() => {
   const names = new Set<string>();
@@ -266,6 +341,20 @@ async function loadAllUnpaidShipments(): Promise<void> {
     allUnpaidShipments.value = [];
   } finally {
     loadingUnpaidShipments.value = false;
+  }
+}
+
+async function loadAllUnpaidInvoices(): Promise<void> {
+  loadingCicilan.value = true;
+  try {
+    const res = await fetch('/api/invoices?endpoint=unpaid&limit=5000');
+    const data = await res.json();
+    allUnpaidInvoices.value = Array.isArray(data.items) ? (data.items as Invoice[]) : [];
+  } catch (e) {
+    console.error('Failed to load unpaid invoices:', e);
+    allUnpaidInvoices.value = [];
+  } finally {
+    loadingCicilan.value = false;
   }
 }
 
@@ -535,6 +624,60 @@ function openCreateModal(): void {
   invoiceFilterType.value = 'penerima';
   showModal.value = true;
   loadAllUnpaidShipments();
+}
+
+function openCicilanModal(): void {
+  showCicilanModal.value = true;
+  cicilanCustomerKey.value = '';
+  cicilanSearch.value = '';
+  cicilanPaymentType.value = 'TF_JAKARTA';
+  cicilanPaymentDate.value = new Date().toISOString().split('T')[0]!;
+  cicilanReferenceNo.value = '';
+  cicilanNotes.value = '';
+  loadAllUnpaidInvoices();
+}
+
+async function settleCicilanForSelectedCustomer(): Promise<void> {
+  const selected = selectedCicilanCustomer.value;
+  if (!selected) {
+    alert('Pilih customer terlebih dahulu');
+    return;
+  }
+
+  const invoiceCount = filteredCicilanInvoices.value.length;
+  if (invoiceCount === 0) {
+    alert('Tidak ada invoice yang belum lunas untuk customer ini');
+    return;
+  }
+
+  const total = cicilanTotalOutstanding.value;
+  const confirmMsg = `Lunasi ${invoiceCount} invoice untuk "${selected.customer_name}" sebesar ${formatRupiah(total)}?`;
+  if (!confirm(confirmMsg)) return;
+
+  try {
+    const res = await fetch('/api/invoices?endpoint=settle-customer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customer_id: selected.customer_id ?? undefined,
+        customer_name: selected.customer_name,
+        payment_date: cicilanPaymentDate.value,
+        payment_method: getCreatePaymentMethod(cicilanPaymentType.value),
+        reference_no: cicilanReferenceNo.value || undefined,
+        notes: cicilanNotes.value || undefined
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.error || 'Gagal melunasi invoice');
+    }
+    alert(`Berhasil melunasi ${data.settled_count || 0} invoice (${formatRupiah(data.total_paid || 0)})`);
+    await loadInvoices({ page: pagination.value.page, q: searchQuery.value });
+    await loadAllUnpaidInvoices();
+  } catch (e) {
+    console.error('Settle customer error:', e);
+    alert(e instanceof Error ? e.message : 'Gagal melunasi invoice');
+  }
 }
 
 async function openEditModal(invoice: Invoice) {
@@ -1605,25 +1748,42 @@ watch(() => invoiceFilterType.value, () => {
       <div class="text-xl font-semibold dark:text-gray-100">
           Invoice
         </div>
-      <div class="flex gap-2 flex-1 lg:flex-initial min-w-0">
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Cari nomor invoice, customer..."
-          class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 dark:border-gray-600"
-        >
+      <div class="flex items-center gap-2 flex-1 justify-end min-w-0">
+        <div class="flex gap-2 flex-1 lg:flex-initial min-w-0">
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Cari nomor invoice, customer..."
+            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 dark:border-gray-600"
+          >
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <Button
+            variant="primary"
+            class="text-sm px-3 lg:px-4"
+            data-testid="btn-tambah"
+            @click="openCreateModal"
+          >
+            <Icon
+              icon="mdi:plus"
+              class="text-base lg:text-lg"
+            />
+            <span class="hidden sm:inline">Tambah</span>
+          </Button>
+          <Button
+            variant="warning"
+            class="text-sm px-3 lg:px-4"
+            data-testid="btn-cicilan"
+            @click="openCicilanModal"
+          >
+            <Icon
+              icon="mdi:cash-multiple"
+              class="text-base lg:text-lg"
+            />
+            <span class="hidden sm:inline">Cicilan</span>
+          </Button>
+        </div>
       </div>
-      <Button
-        variant="primary"
-        class="flex-shrink-0 text-sm px-3 lg:px-4"
-        @click="openCreateModal"
-      >
-        <Icon
-          icon="mdi:plus"
-          class="text-base lg:text-lg"
-        />
-        <span class="hidden sm:inline">Tambah</span>
-      </Button>
     </div>
 
     <div
@@ -1878,6 +2038,127 @@ watch(() => invoiceFilterType.value, () => {
         <Button variant="default" size="sm" :disabled="!canPrevPage" @click="prevPage">Sebelumnya</Button>
         <div class="text-xs text-gray-600 dark:text-gray-300">Hal {{ pagination.page }} / {{ pagination.pages }}</div>
         <Button variant="default" size="sm" :disabled="!canNextPage" @click="nextPage">Berikutnya</Button>
+      </div>
+    </div>
+
+    <div
+      v-if="showCicilanModal"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      data-testid="cicilan-modal"
+      @click.self="showCicilanModal = false"
+    >
+      <div class="bg-white rounded-xl p-6 w-full max-w-4xl space-y-4 card overflow-auto max-h-[85vh]">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div class="text-lg font-semibold">Cicilan / Pelunasan Invoice</div>
+          <Button variant="default" @click="showCicilanModal = false">Tutup</Button>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+          <div class="sm:col-span-2">
+            <label class="block text-sm font-medium mb-1">Customer</label>
+            <select v-model="cicilanCustomerKey" class="w-full px-3 py-2 border border-gray-300 rounded-lg" :disabled="loadingCicilan">
+              <option value="">-- Pilih Customer --</option>
+              <option v-for="c in cicilanCustomerOptions" :key="c.key" :value="c.key">
+                {{ c.customer_name }} ({{ c.invoice_count }} inv / {{ formatRupiah(c.total_remaining) }})
+              </option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Cari (opsional)</label>
+            <input
+              v-model="cicilanSearch"
+              type="text"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              placeholder="Invoice/SPB/catatan..."
+              :disabled="loadingCicilan"
+            >
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+          <div>
+            <label class="block text-sm font-medium mb-1">Tanggal</label>
+            <input v-model="cicilanPaymentDate" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Metode</label>
+            <select v-model="cicilanPaymentType" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+              <option value="CASH_BALI">Cash Bali</option>
+              <option value="CASH_JAKARTA">Cash Jakarta</option>
+              <option value="TF_BALI">Tf Bali</option>
+              <option value="TF_JAKARTA">Tf Jakarta</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">No. Referensi (opsional)</label>
+            <input v-model="cicilanReferenceNo" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="No. transfer/giro" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1">Catatan (opsional)</label>
+          <input v-model="cicilanNotes" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Catatan pembayaran" />
+        </div>
+
+        <div class="flex items-center justify-between gap-3 flex-wrap bg-gray-50 p-3 rounded-lg">
+          <div class="text-sm text-gray-700">
+            <span class="font-medium">Total sisa:</span> {{ formatRupiah(cicilanTotalOutstanding) }}
+            <span class="text-gray-500">({{ filteredCicilanInvoices.length }} invoice)</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <Button variant="secondary" :disabled="loadingCicilan" @click="loadAllUnpaidInvoices">Refresh</Button>
+            <Button
+              variant="primary"
+              :disabled="loadingCicilan || !selectedCicilanCustomer || filteredCicilanInvoices.length === 0"
+              @click="settleCicilanForSelectedCustomer"
+            >
+              Lunasi Semua
+            </Button>
+          </div>
+        </div>
+
+        <div v-if="loadingCicilan" class="text-center py-4 text-gray-500">
+          <span class="animate-pulse">Memuat invoice yang belum lunas...</span>
+        </div>
+        <div v-else-if="allUnpaidInvoices.length === 0" class="text-center py-4 text-gray-400">
+          Tidak ada invoice yang belum lunas
+        </div>
+        <div v-else-if="selectedCicilanCustomer && filteredCicilanInvoices.length === 0" class="text-center py-4 text-gray-400">
+          Tidak ada invoice yang belum lunas untuk customer ini
+        </div>
+        <div v-else class="overflow-x-auto max-h-72 overflow-y-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 sticky top-0">
+              <tr>
+                <th class="px-2 py-2 text-left text-xs font-medium">No. Invoice</th>
+                <th class="px-2 py-2 text-left text-xs font-medium">No. SPB</th>
+                <th class="px-2 py-2 text-right text-xs font-medium">Sisa</th>
+                <th class="px-2 py-2 text-left text-xs font-medium">Status</th>
+                <th class="px-2 py-2 text-left text-xs font-medium">Tanggal</th>
+                <th class="px-2 py-2 text-right text-xs font-medium">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="inv in filteredCicilanInvoices" :key="`unpaid-${inv.id}`" class="border-t hover:bg-gray-50">
+                <td class="px-2 py-2 font-medium">{{ inv.invoice_number }}</td>
+                <td class="px-2 py-2 text-xs">{{ inv.spb_number || '-' }}</td>
+                <td class="px-2 py-2 text-right text-orange-600">{{ formatRupiah(inv.remaining_amount ?? inv.amount) }}</td>
+                <td class="px-2 py-2">
+                  <Badge :variant="getPaymentStatus(inv).variant">{{ getPaymentStatus(inv).label }}</Badge>
+                </td>
+                <td class="px-2 py-2 text-xs text-gray-600">{{ formatDate(inv.issued_at) }}</td>
+                <td class="px-2 py-2 text-right">
+                  <button
+                    class="px-2 py-1 text-xs font-medium text-white bg-blue-500 hover:bg-blue-600 rounded transition-colors"
+                    @click="() => { showCicilanModal = false; openPaymentModal(inv); }"
+                  >
+                    Bayar
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 

@@ -206,6 +206,7 @@ const manualAmountMode = ref(false);
 const existingPaidAmount = ref<number>(0);
 const editingCustomerName = ref<string>('');
 const invoiceFilterType = ref<'pengirim' | 'penerima'>('penerima');
+const addInvoiceTab = ref<'unpaid' | 'selected'>('unpaid');
 
 const showCicilanModal = ref(false);
 const loadingCicilan = ref(false);
@@ -438,10 +439,6 @@ function toggleSjReturned(shipmentId?: number | null): void {
 
 function updateItemsFromSelection(): void {
   items.value = allUnpaidShipments.value.filter(s => s.shipment_id && selectedShipmentIds.value.has(s.shipment_id));
-  if (!manualAmountMode.value) {
-    const subtotal = items.value.reduce((sum, it) => sum + lineSubtotal(it), 0);
-    form.value.amount = String(subtotal);
-  }
 }
 
 function onCustomerChange(): void {
@@ -608,6 +605,7 @@ function openCreateModal(): void {
   editingId.value = null;
   form.value = { customer_name: '', customer_id: null, amount: '', status: 'paid' };
   createPaymentType.value = 'TF_JAKARTA';
+  addInvoiceTab.value = 'unpaid';
   items.value = [];
   allUnpaidShipments.value = [];
   selectedShipmentIds.value = new Set();
@@ -685,6 +683,7 @@ async function openEditModal(invoice: Invoice) {
   manualAmountMode.value = true;
   existingPaidAmount.value = invoice.paid_amount || 0;
   editingCustomerName.value = invoice.customer_name || '';
+  addInvoiceTab.value = 'selected';
   spbSearch.value = '';
   showUnreturnedOnly.value = false;
   form.value = {
@@ -1723,17 +1722,12 @@ async function printInvoiceReceipt(inv: Invoice): Promise<void> {
 }
 
 watch([items, pphPercent, discountAmount], () => {
-  if (!manualAmountMode.value) {
-    const total = calcTotal();
-    if (!isNaN(total)) {
-      form.value.amount = String(total);
-    }
-  }
 }, { deep: true, immediate: false });
 
 watch(() => invoiceFilterType.value, () => {
   selectedShipmentIds.value.clear();
   items.value = [];
+  addInvoiceTab.value = 'unpaid';
   form.value.customer_name = '';
   form.value.customer_id = null;
   selectedDblNumber.value = '';
@@ -2167,11 +2161,25 @@ watch(() => invoiceFilterType.value, () => {
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
       @click.self="showModal = false"
     >
-      <div class="bg-white rounded-xl p-6 w-full max-w-4xl space-y-4 card overflow-auto max-h-[85vh]">
-        <div class="text-lg font-semibold">
-          {{ editingId ? 'Edit Invoice' : 'Tambah Invoice' }}
+      <div class="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-7xl h-[90vh] flex flex-col overflow-hidden card">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="text-lg font-semibold dark:text-gray-100">
+              {{ editingId ? 'Edit Invoice' : 'Tambah Invoice' }}
+            </div>
+            <div v-if="!editingId" class="text-xs text-gray-500 dark:text-gray-400">
+              Pilih customer → pilih SPB → cek ringkasan → simpan.
+            </div>
+            <div v-else class="text-xs text-gray-500 dark:text-gray-400">
+              Ubah item/biaya lalu update. Pembayaran dilakukan lewat tombol "Bayar" di list invoice.
+            </div>
+          </div>
+          <Button variant="default" @click="showModal = false">Tutup</Button>
         </div>
-        <div class="space-y-3">
+
+        <div class="flex-1 overflow-auto p-4">
+          <div class="grid grid-cols-12 gap-4">
+            <div class="col-span-12 lg:col-span-8 space-y-4">
           <div v-if="!editingId" class="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-700">
             <label class="block text-sm font-semibold mb-3 text-gray-700 dark:text-gray-200">Tagihan untuk:</label>
             <div class="flex gap-3">
@@ -2247,18 +2255,27 @@ watch(() => invoiceFilterType.value, () => {
               <div v-if="!editingId">
                 <div class="flex items-center justify-between mb-1">
                   <label class="block text-sm font-medium">Pembayaran Awal (Rp)</label>
+                  <label class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300 select-none">
+                    <input
+                      type="checkbox"
+                      class="h-4 w-4"
+                      v-model="manualAmountMode"
+                      @change="() => { if (!manualAmountMode) form.amount = '' }"
+                    />
+                    Isi manual
+                  </label>
                 </div>
                 <input
                   v-model="form.amount"
                   type="number"
                   min="0"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg disabled:opacity-70 disabled:cursor-not-allowed"
                   :class="{ 'bg-gray-50': !manualAmountMode, 'bg-white': manualAmountMode }"
                   inputmode="numeric"
-                  placeholder="0 (kosongkan jika belum bayar)"
-                  @input="manualAmountMode = true"
+                  placeholder="0"
+                  :disabled="!manualAmountMode"
                 >
-                <div class="text-xs text-gray-500 mt-1">Isi jika ada pembayaran awal</div>
+                <div class="text-xs text-gray-500 mt-1">Opsional. Centang "Isi manual" jika ada pembayaran awal.</div>
               </div>
               <div v-else class="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
                 <div class="text-xs text-gray-600 dark:text-gray-400">Info Pembayaran (gunakan tombol Bayar)</div>
@@ -2280,7 +2297,34 @@ watch(() => invoiceFilterType.value, () => {
               </div>
             </div>
           </div>
-          <div v-if="!editingId">
+          <div v-if="!editingId" class="flex items-center gap-2">
+            <button
+              type="button"
+              @click="addInvoiceTab = 'unpaid'"
+              :class="[
+                'px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                addInvoiceTab === 'unpaid'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
+              ]"
+            >
+              SPB Belum Dibayar
+            </button>
+            <button
+              type="button"
+              @click="addInvoiceTab = 'selected'"
+              :class="[
+                'px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                addInvoiceTab === 'selected'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
+              ]"
+            >
+              SPB Terpilih ({{ items.length }})
+            </button>
+          </div>
+
+          <div v-if="!editingId && addInvoiceTab === 'unpaid'">
             <div class="flex flex-wrap items-start justify-between gap-3 mb-2">
               <div class="space-y-1">
                 <label class="block text-sm font-medium">Daftar SPB yang belum dibayar</label>
@@ -2340,7 +2384,7 @@ watch(() => invoiceFilterType.value, () => {
             <div v-else-if="selectedDblNumber && getFilteredUnpaidShipments().length === 0" class="text-center py-4 text-gray-400">
               Tidak ada SPB untuk DBL ini
             </div>
-            <div v-else class="overflow-x-auto max-h-60 overflow-y-auto">
+            <div v-else class="overflow-x-auto max-h-[45vh] overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
               <table class="w-full text-sm">
                 <thead class="bg-gray-50 sticky top-0">
                   <tr>
@@ -2408,9 +2452,12 @@ watch(() => invoiceFilterType.value, () => {
               </table>
             </div>
           </div>
-          <div v-if="!editingId && items.length > 0">
+          <div v-if="!editingId && addInvoiceTab === 'selected'">
             <label class="block text-sm font-medium mb-2">SPB Terpilih ({{ items.length }})</label>
-            <div class="overflow-x-auto">
+            <div v-if="items.length === 0" class="text-center py-6 text-sm text-gray-400">
+              Belum ada SPB terpilih. Pilih dari tab "SPB Belum Dibayar".
+            </div>
+            <div v-else class="overflow-x-auto max-h-[45vh] overflow-y-auto">
               <table class="w-full text-sm">
                 <thead class="bg-green-50">
                   <tr>
@@ -2559,44 +2606,46 @@ watch(() => invoiceFilterType.value, () => {
             </div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+            </div>
+            <div class="col-span-12 lg:col-span-4 space-y-4">
+          <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3 bg-white dark:bg-gray-800">
             <div>
-              <label class="block text-sm font-medium mb-1">PPh Rate (%)</label>
+              <label class="block text-sm font-medium mb-1 dark:text-gray-200">PPh Rate (%)</label>
               <input
                 v-model.number="pphPercent"
                 type="number"
                 step="0.1"
                 min="0"
                 max="100"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-gray-100"
               />
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1">Diskon (Rp)</label>
+              <label class="block text-sm font-medium mb-1 dark:text-gray-200">Diskon (Rp)</label>
               <input
                 v-model.number="discountAmount"
                 type="number"
                 min="0"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-gray-100"
                 placeholder="0"
               />
-              <p class="text-xs text-gray-500 mt-1">Potongan tambahan di luar diskon per item</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Potongan tambahan di luar diskon per item</p>
             </div>
-            <div class="sm:col-span-3">
-              <label class="block text-sm font-medium mb-1">Catatan</label>
+            <div>
+              <label class="block text-sm font-medium mb-1 dark:text-gray-200">Catatan</label>
               <textarea
                 v-model="notes"
                 rows="2"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-gray-100"
                 placeholder="Catatan tambahan..."
               ></textarea>
             </div>
           </div>
 
-          <div class="bg-gray-50 p-4 rounded-lg space-y-2">
+          <div class="bg-gray-50 dark:bg-gray-900/20 border border-gray-200 dark:border-gray-700 p-4 rounded-lg space-y-2">
             <div class="flex justify-between text-sm">
-              <span>Subtotal:</span>
-              <span class="font-semibold">{{ formatRupiah(calcSubtotal()) }}</span>
+              <span class="dark:text-gray-300">Subtotal:</span>
+              <span class="font-semibold dark:text-gray-100">{{ formatRupiah(calcSubtotal()) }}</span>
             </div>
             <div class="flex justify-between text-sm text-orange-600">
               <span>Diskon:</span>
@@ -2607,8 +2656,8 @@ watch(() => invoiceFilterType.value, () => {
               <span class="font-semibold">-{{ formatRupiah(calcPph()) }}</span>
             </div>
             <div class="flex justify-between text-lg font-bold border-t pt-2">
-              <span>Total Tagihan:</span>
-              <span>{{ formatRupiah(calcTotal()) }}</span>
+              <span class="dark:text-gray-100">Total Tagihan:</span>
+              <span class="dark:text-gray-100">{{ formatRupiah(calcTotal()) }}</span>
             </div>
             <template v-if="editingId">
               <div class="flex justify-between text-sm text-green-600 border-t pt-2">
@@ -2634,26 +2683,26 @@ watch(() => invoiceFilterType.value, () => {
               </div>
             </template>
           </div>
-
-          <div class="flex justify-end gap-2 pt-4 border-t">
-            <Button variant="secondary" @click="showModal = false">
-              Batal
-            </Button>
-            <Button
-              v-if="!editingId"
-              variant="success"
-              :disabled="items.length === 0"
-              @click="saveInvoice('bulk')"
-            >
-              Simpan Bulk
-            </Button>
-            <Button variant="primary" @click="saveInvoice">
-              {{ editingId ? 'Update' : 'Simpan' }} Invoice
-            </Button>
-          </div>
         </div>
       </div>
     </div>
+
+    <div class="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+      <Button variant="secondary" @click="showModal = false">Batal</Button>
+      <Button
+        v-if="!editingId"
+        variant="success"
+        :disabled="items.length === 0"
+        @click="saveInvoice('bulk')"
+      >
+        Simpan Bulk
+      </Button>
+      <Button variant="primary" @click="saveInvoice">
+        {{ editingId ? 'Update' : 'Simpan' }} Invoice
+      </Button>
+    </div>
+  </div>
+</div>
 
     <div v-if="showPaymentModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" @click.self="showPaymentModal = false">
       <div class="bg-white dark:bg-gray-800 rounded-xl w-full max-w-lg max-h-[90vh] flex flex-col">

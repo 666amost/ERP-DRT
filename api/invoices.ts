@@ -173,6 +173,15 @@ type SettleCustomerBody = {
   notes?: string;
 };
 
+type BulkSettleInvoicesBody = {
+  invoice_ids: Array<number | string>;
+  payment_date: string;
+  payment_method?: string;
+  bank_account?: string;
+  reference_no?: string;
+  notes?: string;
+};
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
@@ -195,6 +204,14 @@ function parseSpbList(value?: string | null): string[] {
     .split(/[,;\n]/)
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+function normalizeIdList(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  const nums = value
+    .map((v) => parseInt(String(v), 10))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  return Array.from(new Set(nums));
 }
 
 async function generateInvoiceNumber(sql: Sql): Promise<string> {
@@ -1146,6 +1163,221 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
     writeJson(res, { success: true, settled_count: result.settledCount, total_paid: result.totalPaid });
     return;
+  } else if (endpoint === 'bulk-settle' && req.method === 'POST') {
+    let body: BulkSettleInvoicesBody;
+    try { body = await readJsonNode(req) as BulkSettleInvoicesBody; } catch { body = null as unknown as BulkSettleInvoicesBody; }
+
+    const invoiceIds = normalizeIdList(body?.invoice_ids);
+    if (!body || invoiceIds.length === 0) {
+      writeJson(res, { error: 'Missing invoice_ids' }, 400);
+      return;
+    }
+    if (!isValidDateString(body.payment_date)) {
+      writeJson(res, { error: 'Invalid payment_date (YYYY-MM-DD)' }, 400);
+      return;
+    }
+
+    const runInTxn = sql.begin
+      ? sql.begin.bind(sql)
+      // eslint-disable-next-line no-unused-vars
+      : async <T>(fn: (_client: Sql) => Promise<T>) => {
+          const client = getSql();
+          try {
+            await client`begin`;
+            const result = await fn(client);
+            await client`commit`;
+            return result;
+          } catch (e) {
+            try { await client`rollback`; } catch { /* ignore rollback errors */ }
+            throw e;
+          }
+        };
+
+    try {
+      const result = await runInTxn(async (trx: Sql) => {
+        const targets = await trx`
+          select
+            id,
+            invoice_number,
+            spb_number,
+            customer_id,
+            customer_name,
+            coalesce(amount, 0)::float as amount,
+            coalesce(subtotal, 0)::float as subtotal,
+            coalesce(tax_percent, 0)::float as tax_percent,
+            coalesce(discount_amount, 0)::float as discount_amount,
+            coalesce(pph_percent, 0)::float as pph_percent,
+            coalesce(pph_amount, 0)::float as pph_amount,
+            coalesce(total_tagihan, amount, 0)::float as total_tagihan,
+            coalesce(paid_amount, 0)::float as paid_amount,
+            coalesce(remaining_amount, amount, 0)::float as remaining_amount
+          from invoices
+          where id = any(${invoiceIds})
+          for update
+        ` as Array<{
+          id: number;
+          invoice_number: string;
+          spb_number: string | null;
+          customer_id: number | null;
+          customer_name: string | null;
+          amount: number;
+          subtotal: number;
+          tax_percent: number;
+          discount_amount: number;
+          pph_percent: number;
+          pph_amount: number;
+          total_tagihan: number;
+          paid_amount: number;
+          remaining_amount: number;
+        }>;
+
+        if (targets.length !== invoiceIds.length) {
+          throw new Error('INVOICE_NOT_FOUND');
+        }
+
+        const customerIds = new Set<number>();
+        const customerNames = new Set<string>();
+        for (const t of targets) {
+          if (typeof t.customer_id === 'number') customerIds.add(t.customer_id);
+          if (t.customer_name) customerNames.add(t.customer_name.trim().toLowerCase());
+          if (Number(t.remaining_amount || 0) <= 0) throw new Error('NOT_OUTSTANDING');
+        }
+        if (customerIds.size > 1) throw new Error('MIXED_CUSTOMER');
+        if (customerIds.size === 0 && customerNames.size > 1) throw new Error('MIXED_CUSTOMER');
+        if (customerIds.size === 1 && customerNames.size > 1) {
+          const primary = targets.find((t) => typeof t.customer_id === 'number')?.customer_name?.trim().toLowerCase();
+          if (primary && !customerNames.has(primary)) throw new Error('MIXED_CUSTOMER');
+        }
+
+        const customerId = customerIds.size === 1 ? Array.from(customerIds)[0] : null;
+        const customerName = (targets.find((t) => (t.customer_name || '').trim())?.customer_name || '').trim();
+        if (!customerName && !customerId) throw new Error('MISSING_CUSTOMER');
+
+        const taxPercents = new Set<number>(targets.map((t) => Number(t.tax_percent || 0)));
+        const taxPercent = taxPercents.size === 1 ? Array.from(taxPercents)[0] : 0;
+
+        const totalRemainingToPay = targets.reduce((sum, t) => sum + Math.max(0, Number(t.remaining_amount || 0)), 0);
+        const subtotalSum = targets.reduce((sum, t) => sum + Number(t.subtotal || 0), 0);
+        const discountSum = targets.reduce((sum, t) => sum + Number(t.discount_amount || 0), 0);
+        const pphAmountSum = targets.reduce((sum, t) => sum + Number(t.pph_amount || 0), 0);
+        const totalTagihanSum = targets.reduce((sum, t) => sum + Number(t.total_tagihan || t.amount || 0), 0);
+
+        const invoiceNumber = await generateInvoiceNumber(trx);
+        const invoiceNotes = body.notes && String(body.notes).trim() ? String(body.notes).trim() : null;
+
+        const insertRes = await trx`
+          insert into invoices (
+            shipment_id, invoice_number, spb_number, customer_name, customer_id,
+            amount, subtotal, pph_percent, pph_amount, total_tagihan,
+            tax_percent, discount_amount,
+            paid_amount, remaining_amount, status, issued_at, notes
+          ) values (
+            ${null},
+            ${invoiceNumber},
+            ${null},
+            ${customerName},
+            ${customerId},
+            ${totalTagihanSum},
+            ${subtotalSum > 0 ? subtotalSum : totalTagihanSum},
+            ${0},
+            ${pphAmountSum},
+            ${totalTagihanSum},
+            ${taxPercent},
+            ${discountSum},
+            ${totalTagihanSum},
+            ${0},
+            ${'paid'},
+            now(),
+            ${invoiceNotes}
+          ) returning id
+        ` as [{ id: number }];
+
+        const newInvoiceId = insertRes[0].id;
+
+        await trx`
+          update invoice_items
+          set invoice_id = ${newInvoiceId}
+          where invoice_id = any(${invoiceIds})
+        `;
+
+        await trx`
+          update invoice_payments
+          set invoice_id = ${newInvoiceId}
+          where invoice_id = any(${invoiceIds})
+        `;
+        await trx`delete from invoices where id = any(${invoiceIds})`;
+
+        const spbAgg = await trx`
+          select string_agg(distinct s.spb_number, ', ' order by s.spb_number) as spb
+          from invoice_items ii
+          join shipments s on s.id = ii.shipment_id
+          where ii.invoice_id = ${newInvoiceId}
+            and s.spb_number is not null
+        ` as Array<{ spb: string | null }>;
+
+        const fallbackSpb = Array.from(
+          new Map(
+            targets
+              .flatMap((t) => parseSpbList(t.spb_number))
+              .map((val) => [val.toLowerCase(), val] as const)
+          ).values()
+        ).join(', ');
+
+        const spbNumber = spbAgg[0]?.spb || fallbackSpb || null;
+
+        await trx`
+          update invoices set
+            spb_number = ${spbNumber},
+            paid_at = now()
+          where id = ${newInvoiceId}
+        `;
+
+        await trx`
+          insert into invoice_payments (
+            invoice_id, payment_date, amount, payment_method, bank_account, reference_no, notes
+          ) values (
+            ${newInvoiceId},
+            ${body.payment_date},
+            ${totalRemainingToPay},
+            ${body.payment_method || null},
+            ${body.bank_account || null},
+            ${body.reference_no || null},
+            ${body.notes || null}
+          )
+        `;
+
+        return {
+          id: newInvoiceId,
+          invoice_number: invoiceNumber,
+          merged_count: targets.length,
+          total_paid: totalRemainingToPay
+        };
+      });
+
+      writeJson(res, { success: true, ...result }, 201);
+      return;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg === 'INVOICE_NOT_FOUND') {
+        writeJson(res, { error: 'Invoice tidak ditemukan' }, 404);
+        return;
+      }
+      if (msg === 'MIXED_CUSTOMER') {
+        writeJson(res, { error: 'Invoice yang dipilih harus 1 customer yang sama' }, 400);
+        return;
+      }
+      if (msg === 'NOT_OUTSTANDING') {
+        writeJson(res, { error: 'Ada invoice yang sudah tidak punya sisa' }, 400);
+        return;
+      }
+      if (msg === 'MISSING_CUSTOMER') {
+        writeJson(res, { error: 'Customer invoice tidak valid' }, 400);
+        return;
+      }
+      console.error('Invoices API error (bulk-settle):', err);
+      writeJson(res, { error: 'Internal server error' }, 500);
+      return;
+    }
   } else if (endpoint === 'delete-payment' && req.method === 'DELETE') {
     const paymentId = url.searchParams.get('payment_id') || url.searchParams.get('id');
     if (!paymentId) { writeJson(res, { error: 'Missing payment_id' }, 400); return; }

@@ -210,6 +210,7 @@ const addInvoiceTab = ref<'unpaid' | 'selected'>('unpaid');
 
 const showCicilanModal = ref(false);
 const loadingCicilan = ref(false);
+const cicilanActionLoading = ref(false);
 const allUnpaidInvoices = ref<Invoice[]>([]);
 const cicilanCustomerKey = ref<string>('');
 const cicilanSearch = ref<string>('');
@@ -217,6 +218,7 @@ const cicilanPaymentType = ref<CreatePaymentType>('TF_JAKARTA');
 const cicilanPaymentDate = ref<string>(new Date().toISOString().split('T')[0]!);
 const cicilanReferenceNo = ref<string>('');
 const cicilanNotes = ref<string>('');
+const cicilanSelectedInvoiceIds = ref<Set<number>>(new Set());
 
 const cicilanCustomerOptions = computed<CicilanCustomerOption[]>(() => {
   const map = new Map<string, CicilanCustomerOption>();
@@ -274,6 +276,96 @@ const filteredCicilanInvoices = computed<Invoice[]>(() => {
 const cicilanTotalOutstanding = computed<number>(() => {
   return filteredCicilanInvoices.value.reduce((sum, inv) => sum + Number(inv.remaining_amount ?? inv.amount ?? 0), 0);
 });
+
+const cicilanBusy = computed<boolean>(() => loadingCicilan.value || cicilanActionLoading.value);
+
+function isCicilanEligibleForBulk(inv: Invoice): boolean {
+  const remaining = Number(inv.remaining_amount ?? inv.amount ?? 0);
+  return remaining > 0;
+}
+
+const cicilanEligibleInvoices = computed<Invoice[]>(() => {
+  return filteredCicilanInvoices.value.filter(isCicilanEligibleForBulk);
+});
+
+const cicilanCustomerInvoices = computed<Invoice[]>(() => {
+  let list = allUnpaidInvoices.value;
+  const selected = selectedCicilanCustomer.value;
+  if (selected) {
+    if (typeof selected.customer_id === 'number') {
+      list = list.filter((inv) => inv.customer_id === selected.customer_id);
+    } else {
+      const nameKey = selected.customer_name.trim().toLowerCase();
+      list = list.filter((inv) => (inv.customer_name || '').trim().toLowerCase() === nameKey);
+    }
+  }
+  return list;
+});
+
+function getInvoiceSpbCount(inv: Invoice): number {
+  if (typeof inv.shipment_count === 'number' && inv.shipment_count > 0) return inv.shipment_count;
+  const spb = String(inv.spb_number || '').trim();
+  if (!spb) return 1;
+  const parts = spb.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+  return Math.max(1, parts.length);
+}
+
+function sumSpbCount(invoices: Invoice[]): number {
+  return invoices.reduce((sum, inv) => sum + getInvoiceSpbCount(inv), 0);
+}
+
+const cicilanSelectedInvoices = computed<Invoice[]>(() => {
+  return filteredCicilanInvoices.value.filter((inv) => cicilanSelectedInvoiceIds.value.has(inv.id));
+});
+
+const cicilanSelectedOutstandingTotal = computed<number>(() => {
+  return cicilanSelectedInvoices.value.reduce((sum, inv) => sum + Number(inv.remaining_amount ?? inv.amount ?? 0), 0);
+});
+
+const cicilanSelectedSpbCount = computed<number>(() => sumSpbCount(cicilanSelectedInvoices.value));
+
+const cicilanCustomerOutstandingTotal = computed<number>(() => {
+  return cicilanCustomerInvoices.value.reduce((sum, inv) => sum + Number(inv.remaining_amount ?? inv.amount ?? 0), 0);
+});
+
+const cicilanCustomerSpbCount = computed<number>(() => sumSpbCount(cicilanCustomerInvoices.value));
+
+const cicilanFilteredSpbCount = computed<number>(() => sumSpbCount(filteredCicilanInvoices.value));
+const cicilanHasSearch = computed<boolean>(() => Boolean(cicilanSearch.value.trim()));
+
+const cicilanAllEligibleSelected = computed<boolean>(() => {
+  const eligible = cicilanEligibleInvoices.value;
+  if (eligible.length === 0) return false;
+  return eligible.every((inv) => cicilanSelectedInvoiceIds.value.has(inv.id));
+});
+
+function toggleCicilanInvoiceSelection(invoiceId: number, selected?: boolean): void {
+  const next = new Set(cicilanSelectedInvoiceIds.value);
+  const shouldSelect = selected ?? !next.has(invoiceId);
+  if (shouldSelect) next.add(invoiceId);
+  else next.delete(invoiceId);
+  cicilanSelectedInvoiceIds.value = next;
+}
+
+function toggleCicilanSelectAllEligible(checked: boolean): void {
+  const next = new Set(cicilanSelectedInvoiceIds.value);
+  if (checked) {
+    cicilanEligibleInvoices.value.forEach((inv) => next.add(inv.id));
+  } else {
+    cicilanEligibleInvoices.value.forEach((inv) => next.delete(inv.id));
+  }
+  cicilanSelectedInvoiceIds.value = next;
+}
+
+function onCicilanSelectAllChange(e: Event): void {
+  const target = e.target as HTMLInputElement | null;
+  toggleCicilanSelectAllEligible(Boolean(target?.checked));
+}
+
+function onCicilanInvoiceSelectionChange(invoiceId: number, e: Event): void {
+  const target = e.target as HTMLInputElement | null;
+  toggleCicilanInvoiceSelection(invoiceId, Boolean(target?.checked));
+}
 
 const uniqueCustomerNames = computed(() => {
   const names = new Set<string>();
@@ -351,9 +443,11 @@ async function loadAllUnpaidInvoices(): Promise<void> {
     const res = await fetch('/api/invoices?endpoint=unpaid&limit=5000');
     const data = await res.json();
     allUnpaidInvoices.value = Array.isArray(data.items) ? (data.items as Invoice[]) : [];
+    cicilanSelectedInvoiceIds.value = new Set();
   } catch (e) {
     console.error('Failed to load unpaid invoices:', e);
     allUnpaidInvoices.value = [];
+    cicilanSelectedInvoiceIds.value = new Set();
   } finally {
     loadingCicilan.value = false;
   }
@@ -632,8 +726,16 @@ function openCicilanModal(): void {
   cicilanPaymentDate.value = new Date().toISOString().split('T')[0]!;
   cicilanReferenceNo.value = '';
   cicilanNotes.value = '';
+  cicilanSelectedInvoiceIds.value = new Set();
   loadAllUnpaidInvoices();
 }
+
+watch(
+  () => cicilanCustomerKey.value,
+  () => {
+    cicilanSelectedInvoiceIds.value = new Set();
+  }
+);
 
 async function settleCicilanForSelectedCustomer(): Promise<void> {
   const selected = selectedCicilanCustomer.value;
@@ -642,16 +744,18 @@ async function settleCicilanForSelectedCustomer(): Promise<void> {
     return;
   }
 
-  const invoiceCount = filteredCicilanInvoices.value.length;
+  const invoiceCount = cicilanCustomerInvoices.value.length;
   if (invoiceCount === 0) {
     alert('Tidak ada invoice yang belum lunas untuk customer ini');
     return;
   }
 
-  const total = cicilanTotalOutstanding.value;
-  const confirmMsg = `Lunasi ${invoiceCount} invoice untuk "${selected.customer_name}" sebesar ${formatRupiah(total)}?`;
+  const total = cicilanCustomerOutstandingTotal.value;
+  const spbCount = cicilanCustomerSpbCount.value;
+  const confirmMsg = `Lunasi semua untuk "${selected.customer_name}" (${invoiceCount} invoice / ${spbCount} SPB) sebesar ${formatRupiah(total)}?\n\nCatatan: Pelunasan dibuat per-invoice (tidak digabung).`;
   if (!confirm(confirmMsg)) return;
 
+  cicilanActionLoading.value = true;
   try {
     const res = await fetch('/api/invoices?endpoint=settle-customer', {
       method: 'POST',
@@ -675,6 +779,104 @@ async function settleCicilanForSelectedCustomer(): Promise<void> {
   } catch (e) {
     console.error('Settle customer error:', e);
     alert(e instanceof Error ? e.message : 'Gagal melunasi invoice');
+  } finally {
+    cicilanActionLoading.value = false;
+  }
+}
+
+async function bulkSettleCicilanSelectedInvoices(): Promise<void> {
+  const selected = selectedCicilanCustomer.value;
+  if (!selected) {
+    alert('Pilih customer terlebih dahulu');
+    return;
+  }
+
+  const selectedEligible = cicilanSelectedInvoices.value.filter(isCicilanEligibleForBulk);
+  const selectedEligibleIds = selectedEligible.map((inv) => inv.id);
+  if (selectedEligibleIds.length === 0) {
+    alert('Pilih minimal 1 invoice yang masih ada sisa untuk gabung');
+    return;
+  }
+
+  const total = cicilanSelectedOutstandingTotal.value;
+  const spbCount = sumSpbCount(selectedEligible);
+  const confirmMsg = `Gabung terpilih: ${selectedEligibleIds.length} invoice (${spbCount} SPB) untuk "${selected.customer_name}" sebesar ${formatRupiah(total)}?\n\nPeringatan: Invoice terpilih akan digabung menjadi 1 invoice baru (nomor invoice baru). Invoice lama tidak dipakai lagi.`;
+  if (!confirm(confirmMsg)) return;
+
+  cicilanActionLoading.value = true;
+  try {
+    const res = await fetch('/api/invoices?endpoint=bulk-settle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        invoice_ids: selectedEligibleIds,
+        payment_date: cicilanPaymentDate.value,
+        payment_method: getCreatePaymentMethod(cicilanPaymentType.value),
+        reference_no: cicilanReferenceNo.value || undefined,
+        notes: cicilanNotes.value || undefined
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.error || 'Gagal gabung invoice');
+    }
+    alert(`Berhasil gabung (${data.merged_count || selectedEligibleIds.length} invoice). Invoice baru: ${data.invoice_number || data.id}`);
+    cicilanSelectedInvoiceIds.value = new Set();
+    await loadInvoices({ page: pagination.value.page, q: searchQuery.value });
+    await loadAllUnpaidInvoices();
+  } catch (e) {
+    console.error('Bulk settle error:', e);
+    alert(e instanceof Error ? e.message : 'Gagal gabung invoice');
+  } finally {
+    cicilanActionLoading.value = false;
+  }
+}
+
+async function bulkSettleCicilanAllInvoices(): Promise<void> {
+  const selected = selectedCicilanCustomer.value;
+  if (!selected) {
+    alert('Pilih customer terlebih dahulu');
+    return;
+  }
+
+  const allEligible = cicilanCustomerInvoices.value.filter(isCicilanEligibleForBulk);
+  const allEligibleIds = allEligible.map((inv) => inv.id);
+  if (allEligibleIds.length === 0) {
+    alert('Tidak ada invoice yang masih ada sisa untuk customer ini');
+    return;
+  }
+
+  const total = cicilanCustomerOutstandingTotal.value;
+  const spbCount = cicilanCustomerSpbCount.value;
+  const confirmMsg = `Bulk Semua: gabungkan ${allEligibleIds.length} invoice (${spbCount} SPB) untuk "${selected.customer_name}" sebesar ${formatRupiah(total)}?\n\nPeringatan: Semua SPB akan digabung menjadi 1 INVOICE baru. Invoice lama tidak dipakai lagi.`;
+  if (!confirm(confirmMsg)) return;
+
+  cicilanActionLoading.value = true;
+  try {
+    const res = await fetch('/api/invoices?endpoint=bulk-settle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        invoice_ids: allEligibleIds,
+        payment_date: cicilanPaymentDate.value,
+        payment_method: getCreatePaymentMethod(cicilanPaymentType.value),
+        reference_no: cicilanReferenceNo.value || undefined,
+        notes: cicilanNotes.value || undefined
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.error || 'Gagal gabung invoice');
+    }
+    alert(`Berhasil bulk semua (${data.merged_count || allEligibleIds.length} invoice). Invoice baru: ${data.invoice_number || data.id}`);
+    cicilanSelectedInvoiceIds.value = new Set();
+    await loadInvoices({ page: pagination.value.page, q: searchQuery.value });
+    await loadAllUnpaidInvoices();
+  } catch (e) {
+    console.error('Bulk all settle error:', e);
+    alert(e instanceof Error ? e.message : 'Gagal gabung invoice');
+  } finally {
+    cicilanActionLoading.value = false;
   }
 }
 
@@ -2041,7 +2243,7 @@ watch(() => invoiceFilterType.value, () => {
       data-testid="cicilan-modal"
       @click.self="showCicilanModal = false"
     >
-      <div class="bg-white rounded-xl p-6 w-full max-w-4xl space-y-4 card overflow-auto max-h-[85vh]">
+      <div class="bg-white rounded-xl p-6 w-full max-w-7xl space-y-4 card overflow-auto max-h-[85vh]">
         <div class="flex items-center justify-between gap-3 flex-wrap">
           <div class="text-lg font-semibold">Cicilan / Pelunasan Invoice</div>
           <Button variant="default" @click="showCicilanModal = false">Tutup</Button>
@@ -2050,7 +2252,7 @@ watch(() => invoiceFilterType.value, () => {
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
           <div class="sm:col-span-2">
             <label class="block text-sm font-medium mb-1">Customer</label>
-            <select v-model="cicilanCustomerKey" class="w-full px-3 py-2 border border-gray-300 rounded-lg" :disabled="loadingCicilan">
+            <select v-model="cicilanCustomerKey" class="w-full px-3 py-2 border border-gray-300 rounded-lg" :disabled="cicilanBusy">
               <option value="">-- Pilih Customer --</option>
               <option v-for="c in cicilanCustomerOptions" :key="c.key" :value="c.key">
                 {{ c.customer_name }} ({{ c.invoice_count }} inv / {{ formatRupiah(c.total_remaining) }})
@@ -2064,7 +2266,7 @@ watch(() => invoiceFilterType.value, () => {
               type="text"
               class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
               placeholder="Invoice/SPB/catatan..."
-              :disabled="loadingCicilan"
+              :disabled="cicilanBusy"
             >
           </div>
         </div>
@@ -2096,17 +2298,38 @@ watch(() => invoiceFilterType.value, () => {
 
         <div class="flex items-center justify-between gap-3 flex-wrap bg-gray-50 p-3 rounded-lg">
           <div class="text-sm text-gray-700">
-            <span class="font-medium">Total sisa:</span> {{ formatRupiah(cicilanTotalOutstanding) }}
-            <span class="text-gray-500">({{ filteredCicilanInvoices.length }} invoice)</span>
+            <span class="font-medium">Total sisa:</span> {{ formatRupiah(cicilanCustomerOutstandingTotal) }}
+            <span class="text-gray-500">({{ cicilanCustomerInvoices.length }} invoice / {{ cicilanCustomerSpbCount }} SPB)</span>
+            <div v-if="cicilanHasSearch" class="text-xs text-gray-500 mt-1">
+              Filter: {{ formatRupiah(cicilanTotalOutstanding) }} ({{ filteredCicilanInvoices.length }} invoice / {{ cicilanFilteredSpbCount }} SPB)
+            </div>
+            <div v-if="cicilanSelectedInvoices.length" class="text-xs text-gray-500 mt-1">
+              Dipilih: {{ cicilanSelectedInvoices.length }} invoice / {{ cicilanSelectedSpbCount }} SPB ({{ formatRupiah(cicilanSelectedOutstandingTotal) }})
+            </div>
           </div>
           <div class="flex items-center gap-2">
-            <Button variant="secondary" :disabled="loadingCicilan" @click="loadAllUnpaidInvoices">Refresh</Button>
+            <Button variant="default" :disabled="cicilanBusy" @click="loadAllUnpaidInvoices">Refresh</Button>
             <Button
-              variant="primary"
-              :disabled="loadingCicilan || !selectedCicilanCustomer || filteredCicilanInvoices.length === 0"
+              variant="success"
+              :disabled="cicilanBusy || !selectedCicilanCustomer || cicilanCustomerInvoices.length === 0"
               @click="settleCicilanForSelectedCustomer"
             >
-              Lunasi Semua
+              Lunasi Semua (Per Invoice)
+            </Button>
+            <Button
+              v-if="cicilanSelectedInvoices.length"
+              variant="warning"
+              :disabled="cicilanBusy"
+              @click="bulkSettleCicilanSelectedInvoices"
+            >
+              Gabung Terpilih (1 Invoice)
+            </Button>
+            <Button
+              variant="warning"
+              :disabled="cicilanBusy || !selectedCicilanCustomer || cicilanCustomerInvoices.length === 0"
+              @click="bulkSettleCicilanAllInvoices"
+            >
+              Bulk Semua (Gabung 1 Invoice)
             </Button>
           </div>
         </div>
@@ -2124,6 +2347,14 @@ watch(() => invoiceFilterType.value, () => {
           <table class="w-full text-sm">
             <thead class="bg-gray-50 sticky top-0">
               <tr>
+                <th class="px-2 py-2 text-left text-xs font-medium w-8">
+                  <input
+                    type="checkbox"
+                    :checked="cicilanAllEligibleSelected"
+                    :disabled="cicilanBusy || cicilanEligibleInvoices.length === 0"
+                    @change="onCicilanSelectAllChange"
+                  >
+                </th>
                 <th class="px-2 py-2 text-left text-xs font-medium">No. Invoice</th>
                 <th class="px-2 py-2 text-left text-xs font-medium">No. SPB</th>
                 <th class="px-2 py-2 text-right text-xs font-medium">Sisa</th>
@@ -2134,6 +2365,14 @@ watch(() => invoiceFilterType.value, () => {
             </thead>
             <tbody>
               <tr v-for="inv in filteredCicilanInvoices" :key="`unpaid-${inv.id}`" class="border-t hover:bg-gray-50">
+                <td class="px-2 py-2">
+                  <input
+                    type="checkbox"
+                    :checked="cicilanSelectedInvoiceIds.has(inv.id)"
+                    :disabled="cicilanBusy || !isCicilanEligibleForBulk(inv)"
+                    @change="(e) => onCicilanInvoiceSelectionChange(inv.id, e)"
+                  >
+                </td>
                 <td class="px-2 py-2 font-medium">{{ inv.invoice_number }}</td>
                 <td class="px-2 py-2 text-xs">{{ inv.spb_number || '-' }}</td>
                 <td class="px-2 py-2 text-right text-orange-600">{{ formatRupiah(inv.remaining_amount ?? inv.amount) }}</td>

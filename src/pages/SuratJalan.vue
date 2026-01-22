@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import Button from '@/components/ui/Button.vue'
 import Badge from '@/components/ui/Badge.vue'
 import { getCompany } from '../lib/company'
@@ -50,6 +50,7 @@ interface DBLItem {
 
 const activeTab = ref('spb')
 const shipments = ref<Shipment[]>([])
+const shipmentsById = ref<Record<string, Shipment>>({})
 const dblList = ref<DBLItem[]>([])
 const searchQuery = ref('')
 const dblSearchQuery = ref('')
@@ -60,13 +61,30 @@ const selectedDBLs = ref<Set<string>>(new Set())
 const selectAllSPB = ref(false)
 const selectAllDBL = ref(false)
 
-const loadShipments = async (): Promise<void> => {
+const upsertShipmentsById = (items: Shipment[]): void => {
+  if (items.length === 0) return
+  const next: Record<string, Shipment> = { ...shipmentsById.value }
+  for (const item of items) {
+    next[item.id] = item
+  }
+  shipmentsById.value = next
+}
+
+const shipmentsRequestId = ref(0)
+const loadShipments = async (opts: { search?: string } = {}): Promise<void> => {
+  const requestId = ++shipmentsRequestId.value
   loading.value = true
   try {
-    const res = await fetch('/api/shipments?endpoint=list&limit=100')
+    const search = (opts.search ?? '').trim()
+    const limit = search ? 5000 : 100
+    const params = new URLSearchParams({ endpoint: 'list', limit: String(limit) })
+    if (search) params.set('search', search)
+
+    const res = await fetch(`/api/shipments?${params.toString()}`)
+    if (!res.ok) throw new Error('Failed to load shipments')
     const data = await res.json()
-    if (data.items) {
-      shipments.value = data.items
+    if (data.items && requestId === shipmentsRequestId.value) {
+      const normalized: Shipment[] = data.items
         .filter((s: Shipment) => s.status !== 'DRAFT')
         .map((s: Record<string, unknown>) => ({
           id: String(s.id),
@@ -90,15 +108,21 @@ const loadShipments = async (): Promise<void> => {
           description: s.macam_barang as string || '',
           notes: s.keterangan as string || '',
           status: s.status as string || '',
-          created_at: s.created_at as string || '',
-          dbl_id: s.dbl_id as string | null,
-          nominal: Number(s.nominal) || 0
+           created_at: s.created_at as string || '',
+           dbl_id: s.dbl_id as string | null,
+           nominal: Number(s.nominal) || 0
         }))
+
+      shipments.value = normalized
+      upsertShipmentsById(normalized)
+      selectAllSPB.value = false
     }
   } catch {
     console.error('Failed to load shipments')
   } finally {
-    loading.value = false
+    if (requestId === shipmentsRequestId.value) {
+      loading.value = false
+    }
   }
 }
 
@@ -128,16 +152,15 @@ const loadDBLList = async (): Promise<void> => {
   }
 }
 
-const filteredShipments = computed(() => {
-  if (!searchQuery.value) return shipments.value
-  const q = searchQuery.value.toLowerCase()
-  return shipments.value.filter(s =>
-    s.tracking_code?.toLowerCase().includes(q) ||
-    s.spb_number?.toLowerCase().includes(q) ||
-    s.sender_name?.toLowerCase().includes(q) ||
-    s.recipient_name?.toLowerCase().includes(q) ||
-    s.destination_city?.toLowerCase().includes(q)
-  )
+const filteredShipments = computed(() => shipments.value)
+
+let shipmentSearchTimer: ReturnType<typeof setTimeout> | undefined
+watch([searchQuery, activeTab], ([query, tab]) => {
+  if (tab !== 'spb') return
+  if (shipmentSearchTimer) clearTimeout(shipmentSearchTimer)
+  shipmentSearchTimer = setTimeout(() => {
+    void loadShipments({ search: query })
+  }, 350)
 })
 
 const filteredDBL = computed(() => {
@@ -726,7 +749,15 @@ const printSelectedShipments = async (): Promise<void> => {
     return
   }
 
-  const selected = shipments.value.filter(s => selectedShipments.value.has(s.id))
+  const selected = Array.from(selectedShipments.value)
+    .map(id => shipmentsById.value[id])
+    .filter((s): s is Shipment => Boolean(s))
+
+  if (selected.length !== selectedShipments.value.size) {
+    alert('Sebagian SPB terpilih belum termuat. Silakan cari ulang SPB tersebut lalu coba cetak lagi.')
+    return
+  }
+
   const company = await getCompany()
   
   const barcodePromises = selected.map(s => {

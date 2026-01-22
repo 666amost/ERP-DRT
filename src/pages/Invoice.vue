@@ -1072,23 +1072,44 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
       const createdInvoices: string[] = [];
       const failedInvoices: { spb: string; error: string }[] = [];
 
-      for (const item of itemsSnapshot) {
+      const invoiceLevelDiscountRaw = Math.max(0, Number(discountAmount.value || 0));
+      const itemBaseSubtotals = itemsSnapshot.map((item) =>
+        Math.max(
+          0,
+          Number(item.unit_price || 0) + Number(item.other_fee || 0) - Number(item.item_discount || 0)
+        )
+      );
+      const totalBaseSubtotal = itemBaseSubtotals.reduce((sum, val) => sum + val, 0);
+      const invoiceLevelDiscountTotal = Math.min(invoiceLevelDiscountRaw, totalBaseSubtotal);
+      let discountRemaining = invoiceLevelDiscountTotal;
+      const invoiceLevelDiscountByIndex = itemBaseSubtotals.map((baseSubtotal) => {
+        if (invoiceLevelDiscountTotal <= 0 || baseSubtotal <= 0) return 0;
+        const allocated = Math.min(baseSubtotal, Math.max(0, discountRemaining));
+        discountRemaining = Math.max(0, discountRemaining - allocated);
+        return allocated;
+      });
+
+      let paymentRemaining = manualAmountMode.value && inputAmount > 0 ? inputAmount : 0;
+
+      for (let itemIndex = 0; itemIndex < itemsSnapshot.length; itemIndex++) {
+        const item = itemsSnapshot[itemIndex]!;
         try {
           const customerName = item.customer_name || form.value.customer_name;
           const customerId = item.customer_id ?? form.value.customer_id ?? null;
-          const itemSubtotal = (item.unit_price || 0) + (item.other_fee || 0);
-          const itemDiscountAmount = item.item_discount || 0;
-          const itemSubtotalAfterDiscount = itemSubtotal - itemDiscountAmount;
-          const itemPphAmount = itemSubtotalAfterDiscount * (pphPercent.value / 100);
-          const itemTotalTagihan = Math.max(0, itemSubtotalAfterDiscount - itemPphAmount);
+          const baseSubtotal = itemBaseSubtotals[itemIndex] ?? 0;
+          const invoiceLevelDiscount = invoiceLevelDiscountByIndex[itemIndex] ?? 0;
+          const subtotalAfterInvoiceDiscount = Math.max(0, baseSubtotal - invoiceLevelDiscount);
+          const itemPphAmount = subtotalAfterInvoiceDiscount * (pphPercent.value / 100);
+          const itemTotalTagihan = Math.max(0, subtotalAfterInvoiceDiscount - itemPphAmount);
 
           let paidAmount = 0;
           let remainingAmount = itemTotalTagihan;
           let finalStatus = 'pending';
-          const shouldAutoPayFull = createPaymentType.value !== 'CICILAN';
+          const shouldAutoPayFull = createPaymentType.value !== 'CICILAN' && !manualAmountMode.value;
           
-          if (manualAmountMode.value && inputAmount > 0) {
-            paidAmount = inputAmount;
+          if (manualAmountMode.value && paymentRemaining > 0) {
+            paidAmount = Math.min(paymentRemaining, itemTotalTagihan);
+            paymentRemaining = Math.max(0, paymentRemaining - paidAmount);
             remainingAmount = Math.max(0, itemTotalTagihan - paidAmount);
             if (remainingAmount <= 0) {
               finalStatus = 'paid';
@@ -1110,30 +1131,30 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
               customer_name: customerName,
               customer_id: customerId ?? undefined,
               amount: itemTotalTagihan,
-              subtotal: itemSubtotal,
+              subtotal: baseSubtotal,
               pph_percent: pphPercent.value,
               pph_amount: itemPphAmount,
               paid_amount: paidAmount,
-               remaining_amount: remainingAmount,
-               status: finalStatus,
-               payment_method: getCreatePaymentMethod(createPaymentType.value),
-               discount_amount: itemDiscountAmount || 0,
-               tax_percent: taxPercent.value || 0,
-               payment_notes: notes.value || undefined,
-               notes: notes.value || undefined,
-               items: [{
-                 shipment_id: item.shipment_id || null,
-               spb_number: item.spb_number || null,
-               description: item.description || 'Jasa pengiriman',
-              quantity: item.quantity || 1,
-              unit_price: item.unit_price || 0,
-              other_fee: item.other_fee || 0,
-              tax_type: item.tax_type || 'include',
-              item_discount: item.item_discount || 0,
-              sj_returned: Boolean(item.sj_returned),
-              customer_name: customerName || undefined,
-              customer_id: customerId ?? undefined
-              }]
+                remaining_amount: remainingAmount,
+                status: finalStatus,
+                payment_method: getCreatePaymentMethod(createPaymentType.value),
+                discount_amount: invoiceLevelDiscount,
+                tax_percent: taxPercent.value || 0,
+                payment_notes: notes.value || undefined,
+                notes: notes.value || undefined,
+                items: [{
+                  shipment_id: item.shipment_id || null,
+                spb_number: item.spb_number || null,
+                description: item.description || 'Jasa pengiriman',
+               quantity: item.quantity || 1,
+               unit_price: item.unit_price || 0,
+               other_fee: item.other_fee || 0,
+               tax_type: item.tax_type || 'include',
+               item_discount: item.item_discount || 0,
+               sj_returned: Boolean(item.sj_returned),
+               customer_name: customerName || undefined,
+               customer_id: customerId ?? undefined
+               }]
             })
           });
           

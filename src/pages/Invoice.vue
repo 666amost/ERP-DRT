@@ -2077,7 +2077,10 @@ watch(() => invoiceFilterType.value, () => {
               {{ inv.customer_name }}
             </td>
             <td class="px-4 py-3 text-sm text-right font-semibold dark:text-gray-100">
-              {{ formatRupiah(inv.amount) }}
+              {{ formatRupiah(inv.discount_amount && inv.discount_amount > 0 && inv.subtotal ? inv.subtotal : inv.amount) }}
+              <div v-if="inv.discount_amount && inv.discount_amount > 0" class="text-xs text-red-600 dark:text-red-400">
+                Diskon: -{{ formatRupiah(inv.discount_amount) }}
+              </div>
               <div v-if="inv.pph_percent && inv.pph_percent > 0" class="text-xs text-gray-500">
                 PPh {{ inv.pph_percent }}%: -{{ formatRupiah(inv.pph_amount || 0) }}
               </div>
@@ -2197,7 +2200,13 @@ watch(() => invoiceFilterType.value, () => {
               class="text-[18px] text-gray-500 dark:text-gray-400"
             />
             <div class="flex-1 text-right font-semibold dark:text-gray-100">
-              {{ formatRupiah(inv.amount) }}
+              {{ formatRupiah(inv.discount_amount && inv.discount_amount > 0 && inv.subtotal ? inv.subtotal : inv.amount) }}
+              <div v-if="inv.discount_amount && inv.discount_amount > 0" class="text-xs text-red-600 dark:text-red-400 font-normal">
+                Diskon: -{{ formatRupiah(inv.discount_amount) }}
+              </div>
+              <div v-if="inv.pph_percent && inv.pph_percent > 0" class="text-xs text-gray-500 font-normal">
+                PPh {{ inv.pph_percent }}%: -{{ formatRupiah(inv.pph_amount || 0) }}
+              </div>
             </div>
           </div>
           <div class="flex items-center gap-2 mt-1">

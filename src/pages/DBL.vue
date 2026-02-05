@@ -6,6 +6,7 @@ import DriverAutocomplete from '@/components/DriverAutocomplete.vue';
 import CityAutocomplete from '@/components/CityAutocomplete.vue';
 import { useFormatters } from '../composables/useFormatters';
 import { getCompany } from '../lib/company';
+import { exportToExcel } from '../lib/excelExport';
 import { useAuth } from '../composables/useAuth';
 
 const { fetchUser, permissions } = useAuth();
@@ -562,6 +563,71 @@ async function printDaftarMuat(dbl: DBL) {
   setTimeout(() => win.print(), 300);
 }
 
+function makeExcelFilename(dbl: DBL): string {
+  const datePart = dbl.dbl_date ? String(dbl.dbl_date).slice(0, 10) : new Date().toISOString().slice(0, 10);
+  const noPart = String(dbl.dbl_number || `DBL-${dbl.id}`)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+  return `daftar-muatan-${noPart || 'dbl'}-${datePart}`;
+}
+
+async function exportDaftarMuatExcel(dbl: DBL) {
+  try {
+    const itemsRes = await fetch(`/api/dbl?endpoint=items&id=${dbl.id}`);
+    if (!itemsRes.ok) throw new Error('Gagal mengambil data resi DBL');
+    const data = await itemsRes.json();
+    const items: Shipment[] = data.items || [];
+    if (items.length === 0) {
+      alert('Tidak ada resi dalam DBL ini');
+      return;
+    }
+
+    const dblDate = dbl.dbl_date ? formatDate(dbl.dbl_date) : '-';
+    const totalNom = items.reduce((sum, s) => sum + (Number(s.nominal) || 0), 0);
+    const totalColli = items.reduce((sum, s) => sum + (Number(s.total_colli) || 0), 0);
+
+    const exportData = items.map((s, idx) => ({
+      no: idx + 1,
+      resi: s.spb_number || s.public_code || '-',
+      pengirim: s.pengirim_name || '-',
+      penerima: s.penerima_name || '-',
+      tujuan: s.destination || '-',
+      barang: s.macam_barang || '-',
+      colli: Number(s.total_colli) || 0,
+      nominal: Number(s.nominal) || 0
+    }));
+
+    const company = await getCompany();
+    exportToExcel({
+      filename: makeExcelFilename(dbl),
+      sheetName: 'Daftar Muatan',
+      title: 'DAFTAR MUATAN',
+      subtitle: `No: ${dbl.dbl_number || '-'} | Tgl: ${dblDate} | Plat: ${dbl.vehicle_plate || '-'} | Supir: ${dbl.driver_name || '-'}`,
+      companyName: company?.name || undefined,
+      columns: [
+        { header: 'No', key: 'no', width: 5, type: 'number', align: 'center' },
+        { header: 'TTB/Resi', key: 'resi', width: 16, type: 'text' },
+        { header: 'Pengirim', key: 'pengirim', width: 18, type: 'text' },
+        { header: 'Penerima', key: 'penerima', width: 18, type: 'text' },
+        { header: 'Tujuan', key: 'tujuan', width: 18, type: 'text' },
+        { header: 'Barang', key: 'barang', width: 18, type: 'text' },
+        { header: 'Colli', key: 'colli', width: 8, type: 'number', align: 'center' },
+        { header: 'Nominal', key: 'nominal', width: 14, type: 'currency', align: 'right' }
+      ],
+      data: exportData,
+      totals: {
+        colli: totalColli,
+        nominal: totalNom
+      }
+    });
+  } catch (e) {
+    console.error('Export excel error:', e);
+    alert('Gagal export excel: ' + (e instanceof Error ? e.message : 'Unknown error'));
+  }
+}
+
 onMounted(async () => {
   await fetchUser();
   loadDBLList();
@@ -631,6 +697,7 @@ onMounted(async () => {
                 <td class="px-3 py-2 text-right space-x-1">
                   <Button variant="success" class="px-2 py-1 h-7 text-xs" @click="openShipmentModal(dbl)">Resi</Button>
                   <Button variant="warning" class="px-2 py-1 h-7 text-xs" @click="printDaftarMuat(dbl)">Print</Button>
+                  <Button variant="info" class="px-2 py-1 h-7 text-xs" @click="exportDaftarMuatExcel(dbl)">Excel</Button>
                   <Button v-if="permissions.canViewKeuangan" variant="info" class="px-2 py-1 h-7 text-xs" @click="openInvoiceModal(dbl)">Invoice</Button>
                   <Button variant="primary" class="px-2 py-1 h-7 text-xs" @click="openEditModal(dbl)">Edit</Button>
                   <Button 
@@ -685,6 +752,7 @@ onMounted(async () => {
           <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 grid grid-cols-2 gap-2">
             <Button block variant="success" @click="openShipmentModal(dbl)">Resi</Button>
             <Button block variant="warning" @click="printDaftarMuat(dbl)">Print</Button>
+            <Button block variant="info" @click="exportDaftarMuatExcel(dbl)">Excel</Button>
             <Button v-if="permissions.canViewKeuangan" block variant="info" @click="openInvoiceModal(dbl)">Invoice</Button>
             <Button block variant="primary" @click="openEditModal(dbl)">Edit</Button>
             <Button 

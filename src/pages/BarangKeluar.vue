@@ -306,7 +306,34 @@ async function printLabel() {
       }
     } catch { void 0; }
   }
-  const weightDisplay = totalWeight > 0 ? `${totalWeight.toFixed(2)} kg` : '-';
+  const formatNumberID = (value: number, opts: { maxDecimals?: number; minDecimals?: number } = {}) => {
+    const maxDecimals = opts.maxDecimals ?? 4;
+    const minDecimals = opts.minDecimals ?? 0;
+    if (!Number.isFinite(value)) return '';
+    const raw = String(value);
+    const parts = raw.split('.');
+    let intPart = parts[0] || '0';
+    let decPart = parts[1] || '';
+
+    intPart = intPart.replace(/[^\d-]/g, '');
+    const negative = intPart.startsWith('-');
+    if (negative) intPart = intPart.slice(1);
+
+    intPart = intPart.replace(/^0+(?=\d)/, '') || '0';
+    if (maxDecimals >= 0 && decPart.length > maxDecimals) decPart = decPart.slice(0, maxDecimals);
+    if (minDecimals > 0) decPart = decPart.padEnd(minDecimals, '0');
+    else decPart = decPart.replace(/0+$/, '');
+
+    intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    const out = decPart ? `${intPart},${decPart}` : intPart;
+    return negative ? `-${out}` : out;
+  };
+
+  const unit = String(selectedShipment.value.satuan || 'KG').toUpperCase();
+  const unitLabel = unit === 'M3' ? 'm3' : 'kg';
+  const weightDisplay = totalWeight > 0
+    ? `${formatNumberID(totalWeight, unit === 'KG' ? { maxDecimals: 4, minDecimals: 2 } : { maxDecimals: 4, minDecimals: 0 })} ${unitLabel}`
+    : '-';
 
   const company = await getCompany();
   const etaDisplay = selectedShipment.value?.eta ? formatDate(selectedShipment.value.eta) : '';

@@ -215,6 +215,8 @@ function exportExcel() {
     spb: item.spb_number || '-',
     dbl: item.dbl_number || '-',
     customer: item.customer_name || '-',
+    pengirim: item.pengirim_name || '-',
+    penerima: item.penerima_name || '-',
     rute: `${item.origin} → ${item.destination}`,
     colli: item.total_colli,
     kg: item.total_weight || 0,
@@ -235,6 +237,8 @@ function exportExcel() {
       { header: 'SPB', key: 'spb', width: 12, type: 'text' },
       { header: 'DBL', key: 'dbl', width: 14, type: 'text' },
       { header: 'Customer', key: 'customer', width: 20, type: 'text' },
+      { header: 'Pengirim', key: 'pengirim', width: 20, type: 'text' },
+      { header: 'Penerima', key: 'penerima', width: 20, type: 'text' },
       { header: 'Rute', key: 'rute', width: 28, type: 'text' },
       { header: 'Colli', key: 'colli', width: 8, type: 'number', align: 'center' },
       { header: 'Kg', key: 'kg', width: 10, type: 'number', align: 'right' },
@@ -380,37 +384,41 @@ onMounted(async () => {
       </div>
 
       <div v-else>
-        <div class="hidden lg:block overflow-x-auto">
-          <table class="w-full text-sm">
+        <div class="hidden lg:block">
+          <table class="w-full text-sm table-fixed">
             <thead class="bg-gray-50 dark:bg-gray-700 border-b dark:border-gray-600">
               <tr>
-                <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">No</th>
-                <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Kode</th>
-                <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">SPB</th>
-                <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">DBL</th>
-                <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Customer</th>
-                <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Rute</th>
-                <th class="px-2 py-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">Colli</th>
-                <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Kg</th>
-                <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Nominal</th>
-                <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Sisa</th>
-                <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">SJ Balik</th>
-                <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Tanggal</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300 w-10">No</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300 w-40">Shipment</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300 w-44">Pihak</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300 w-36">Rute</th>
+                <th class="px-2 py-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300 w-12">Colli</th>
+                <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300 w-14">Kg</th>
+                <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300 w-20">Nominal</th>
+                <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300 w-20">Sisa</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300 w-16">SJ</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300 w-20">Tanggal</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
               <tr v-for="(item, idx) in filteredItems" :key="item.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
                 <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ idx + 1 }}</td>
-                <td class="px-2 py-2 font-medium text-gray-900 dark:text-gray-100">{{ item.public_code || '-' }}</td>
-                <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ item.spb_number || '-' }}</td>
                 <td class="px-2 py-2 text-gray-700 dark:text-gray-300">
-                  <div class="text-xs">
-                    <div>{{ item.dbl_number || '-' }}</div>
-                    <div v-if="item.driver_name" class="text-gray-500">{{ item.driver_name }}</div>
+                  <div class="font-medium text-gray-900 dark:text-gray-100 truncate" :title="item.public_code || '-'">{{ item.public_code || '-' }}</div>
+                  <div class="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                    <span>SPB: {{ item.spb_number || '-' }}</span>
+                    <span class="mx-1">•</span>
+                    <span>DBL: {{ item.dbl_number || '-' }}</span>
+                    <span v-if="item.driver_name" class="ml-1">({{ item.driver_name }})</span>
                   </div>
                 </td>
-                <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ item.customer_name || '-' }}</td>
-                <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ item.origin }} → {{ item.destination }}</td>
+                <td class="px-2 py-2 text-gray-700 dark:text-gray-300">
+                  <div class="font-medium truncate" :title="item.customer_name || '-'">{{ item.customer_name || '-' }}</div>
+                  <div class="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                    {{ item.pengirim_name || '-' }} → {{ item.penerima_name || '-' }}
+                  </div>
+                </td>
+                <td class="px-2 py-2 text-gray-700 dark:text-gray-300 truncate" :title="`${item.origin} → ${item.destination}`">{{ item.origin }} → {{ item.destination }}</td>
                 <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ item.total_colli }}</td>
                 <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ (item.total_weight || 0).toFixed(1) }}</td>
                 <td class="px-2 py-2 text-right text-gray-600 dark:text-gray-400">{{ formatRupiah(item.nominal) }}</td>
@@ -428,11 +436,12 @@ onMounted(async () => {
             </tbody>
             <tfoot class="bg-gray-100 dark:bg-gray-700 font-semibold">
               <tr>
-                <td colspan="6" class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">Total:</td>
+                <td colspan="4" class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">Total:</td>
                 <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ totalColli }}</td>
                 <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ totalWeight.toFixed(1) }}</td>
                 <td class="px-2 py-2 text-right text-gray-500"></td>
                 <td class="px-2 py-2 text-right text-red-600">{{ formatRupiah(totalOutstanding) }}</td>
+                <td></td>
                 <td></td>
               </tr>
             </tfoot>
@@ -457,6 +466,9 @@ onMounted(async () => {
             </div>
             <div class="mt-2 text-xs text-gray-600 dark:text-gray-400">
               <div class="font-medium">{{ item.customer_name || '-' }}</div>
+              <div v-if="item.pengirim_name || item.penerima_name" class="text-[11px]">
+                {{ item.pengirim_name || '-' }} → {{ item.penerima_name || '-' }}
+              </div>
               <div>{{ item.origin }} → {{ item.destination }}</div>
             </div>
             <div class="mt-2 flex gap-2 flex-wrap">
@@ -498,18 +510,20 @@ onMounted(async () => {
       <table class="print-table">
         <thead>
           <tr>
-            <th class="text-center" style="width: 5%">No</th>
-            <th style="width: 12%">Kode</th>
-            <th style="width: 7%">SPB</th>
-            <th style="width: 10%">DBL</th>
-            <th style="width: 13%">Customer</th>
-            <th style="width: 16%">Rute</th>
-            <th class="text-center" style="width: 6%">Colli</th>
-            <th class="text-right" style="width: 7%">Kg</th>
-            <th class="text-right" style="width: 9%">Nominal</th>
-            <th class="text-right" style="width: 9%">Sisa</th>
-            <th class="text-center" style="width: 6%">SJ</th>
-            <th class="text-center" style="width: 6%">Tanggal</th>
+            <th class="text-center" style="width: 4%">No</th>
+            <th style="width: 10%">Kode</th>
+            <th style="width: 6%">SPB</th>
+            <th style="width: 8%">DBL</th>
+            <th style="width: 10%">Customer</th>
+            <th style="width: 10%">Pengirim</th>
+            <th style="width: 10%">Penerima</th>
+            <th style="width: 14%">Rute</th>
+            <th class="text-center" style="width: 5%">Colli</th>
+            <th class="text-right" style="width: 5%">Kg</th>
+            <th class="text-right" style="width: 6%">Nominal</th>
+            <th class="text-right" style="width: 6%">Sisa</th>
+            <th class="text-center" style="width: 3%">SJ</th>
+            <th class="text-center" style="width: 3%">Tanggal</th>
           </tr>
         </thead>
         <tbody>
@@ -522,6 +536,8 @@ onMounted(async () => {
               <span v-if="item.driver_name">({{ item.driver_name }})</span>
             </td>
             <td>{{ item.customer_name || '-' }}</td>
+            <td>{{ item.pengirim_name || '-' }}</td>
+            <td>{{ item.penerima_name || '-' }}</td>
             <td>{{ item.origin }} → {{ item.destination }}</td>
             <td class="text-center">{{ item.total_colli }}</td>
             <td class="text-right">{{ (item.total_weight || 0).toFixed(1) }}</td>
@@ -533,7 +549,7 @@ onMounted(async () => {
         </tbody>
         <tfoot>
           <tr class="total-row">
-            <td colspan="6" class="text-right">Total:</td>
+            <td colspan="8" class="text-right">Total:</td>
             <td class="text-center">{{ totalColli }}</td>
             <td class="text-right">{{ totalWeight.toFixed(1) }}</td>
             <td class="text-right"></td>

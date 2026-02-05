@@ -13,6 +13,7 @@ interface Shipment {
   tracking_code: string
   spb_number: string
   sender_name: string
+  eta?: string | null
   dbl_number?: string
   driver_name?: string
   vehicle_plate?: string
@@ -88,13 +89,14 @@ const loadShipments = async (opts: { search?: string } = {}): Promise<void> => {
         .filter((s: Shipment) => s.status !== 'DRAFT')
         .map((s: Record<string, unknown>) => ({
           id: String(s.id),
-          tracking_code: s.public_code as string || '',
-          spb_number: s.spb_number as string || '',
-          sender_name: s.pengirim_name as string || s.customer_name as string || '',
-          dbl_number: (s as Record<string, string>).dbl_number || (s as Record<string, string>).dbl,
-          driver_name: (s as Record<string, string>).driver_name || (s as Record<string, string>).driver || (s as Record<string, string>).supir,
-          vehicle_plate: (s as Record<string, string>).vehicle_plate || (s as Record<string, string>).plat || (s as Record<string, string>).license_plate,
-          dbl_date: (s as Record<string, string>).dbl_date || null,
+           tracking_code: s.public_code as string || '',
+           spb_number: s.spb_number as string || '',
+           sender_name: s.pengirim_name as string || s.customer_name as string || '',
+           eta: (s as Record<string, string>).eta || null,
+           dbl_number: (s as Record<string, string>).dbl_number || (s as Record<string, string>).dbl,
+           driver_name: (s as Record<string, string>).driver_name || (s as Record<string, string>).driver || (s as Record<string, string>).supir,
+           vehicle_plate: (s as Record<string, string>).vehicle_plate || (s as Record<string, string>).plat || (s as Record<string, string>).license_plate,
+           dbl_date: (s as Record<string, string>).dbl_date || null,
           recipient_name: s.penerima_name as string || '',
           recipient_address: s.shipping_address as string || '',
           recipient_phone: s.penerima_phone as string || '',
@@ -317,6 +319,7 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
   ` : ''
 
   const spbNumber = shipment.spb_number || '-'
+  const etaDate = formatDate(shipment.eta || '')
 
   const html = `
     <!DOCTYPE html>
@@ -337,8 +340,9 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         .brand-title { font-weight: bold; font-size: 16px; line-height: 1.2; }
         .brand-sub { font-size: 9px; margin-top: 1px; }
         .addr { font-size: 10px; margin-top: 3px; line-height: 1.3; font-weight: 500; }
-        .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
-        .right-box .spb { font-size: 16px; font-weight: bold; }
+         .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
+         .right-box .spb { font-size: 16px; font-weight: bold; }
+         .right-box .eta { font-size: 10px; margin-top: 2px; font-weight: bold; }
 
         .meta-row { display: grid; grid-template-columns: 1fr auto; align-items: stretch; gap: 6px; margin: 2px 0 4px 0; }
         .meta-fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
@@ -403,10 +407,11 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
             </div>
             <div class="addr">${company?.address ?? ''}</div>
           </div>
-          <div class="right-box">
-            <div class="spb">${spbNumber}</div>
-          </div>
-        </div>
+           <div class="right-box">
+             <div class="spb">${spbNumber}</div>
+             ${etaDate && etaDate !== '-' ? `<div class="eta">ETA: ${etaDate}</div>` : ''}
+           </div>
+         </div>
 
         <div class="meta-row">
             <div class="meta-fields">
@@ -527,6 +532,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
     data.items.forEach((s: Record<string, unknown>, index: number) => {
       const spbNumber = s.spb_number as string || '-'
       const publicCode = s.tracking_code as string || s.public_code as string || ''
+      const etaDate = formatDate((s as Record<string, string>).eta || '')
       const dblNumber = dbl.dbl_number || '-'
       const dblDate = formatDate(dbl.dbl_date)
       const driverName = dbl.driver_name || '-'
@@ -534,6 +540,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
         spb_number: spbNumber,
         tracking_code: publicCode,
         sender_name: s.sender_name as string || s.pengirim_name as string || s.customer_name as string || '',
+        eta: (s as Record<string, string>).eta || null,
         recipient_name: s.recipient_name as string || s.penerima_name as string || '',
         recipient_phone: s.recipient_phone as string || s.penerima_phone as string || '',
         origin_city: s.origin_city as string || s.origin as string || '',
@@ -568,6 +575,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
             </div>
           <div class="right-box">
             <div class="spb">${spbNumber}</div>
+            ${etaDate && etaDate !== '-' ? `<div class="eta">ETA: ${etaDate}</div>` : ''}
           </div>
         </div>
 
@@ -673,6 +681,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           .addr { font-size: 10px; margin-top: 3px; line-height: 1.3; font-weight: 500; }
           .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
           .right-box .spb { font-size: 16px; font-weight: bold; }
+          .right-box .eta { font-size: 10px; margin-top: 2px; font-weight: bold; }
 
           .meta-row { display: grid; grid-template-columns: 1fr auto; align-items: stretch; gap: 6px; margin: 2px 0 4px 0; }
           .meta-fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
@@ -778,6 +787,7 @@ const printSelectedShipments = async (): Promise<void> => {
   for (const shipment of selected) {
     const spbNumber = shipment.spb_number || '-'
     const publicCode = shipment.tracking_code || ''
+    const etaDate = formatDate(shipment.eta || '')
     const deliveredStamp = shipment.status === 'DELIVERED' ? `<div class="delivered-stamp">DELIVERED</div>` : ''
     const { dblNumber, driverName, dblDate } = await resolveShipmentDblMeta(shipment)
     
@@ -798,6 +808,7 @@ const printSelectedShipments = async (): Promise<void> => {
           </div>
           <div class="right-box">
             <div class="spb">${spbNumber}</div>
+            ${etaDate && etaDate !== '-' ? `<div class="eta">ETA: ${etaDate}</div>` : ''}
           </div>
         </div>
 
@@ -903,6 +914,7 @@ const printSelectedShipments = async (): Promise<void> => {
         .addr { font-size: 10px; margin-top: 3px; line-height: 1.3; font-weight: 500; }
         .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
         .right-box .spb { font-size: 16px; font-weight: bold; }
+        .right-box .eta { font-size: 10px; margin-top: 2px; font-weight: bold; }
 
         .meta-row { display: grid; grid-template-columns: 1fr auto; align-items: stretch; gap: 6px; margin: 2px 0 4px 0; }
         .meta-fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
@@ -1017,6 +1029,7 @@ const printSelectedDBLs = async (): Promise<void> => {
     const dbl = dblMap.get(s.dbl_id as string)
     const spbNumber = s.spb_number as string || '-'
     const publicCode = s.tracking_code as string || s.public_code as string || ''
+    const etaDate = formatDate((s as Record<string, string>).eta || '')
     const dblNumber = dbl?.dbl_number || (s.dbl_number as string) || '-'
     const dblDate = dbl?.dbl_date ? formatDate(dbl.dbl_date) : formatDate((s.dbl_date as string) || '')
     const driverName = dbl?.driver_name || (s.driver_name as string) || '-'
@@ -1024,6 +1037,7 @@ const printSelectedDBLs = async (): Promise<void> => {
       spb_number: spbNumber,
       tracking_code: publicCode,
       sender_name: s.sender_name as string || s.pengirim_name as string || s.customer_name as string || '',
+      eta: (s as Record<string, string>).eta || null,
       recipient_name: s.recipient_name as string || s.penerima_name as string || '',
       recipient_phone: s.recipient_phone as string || s.penerima_phone as string || '',
       origin_city: s.origin_city as string || s.origin as string || '',
@@ -1058,6 +1072,7 @@ const printSelectedDBLs = async (): Promise<void> => {
           </div>
         <div class="right-box">
           <div class="spb">${spbNumber}</div>
+          ${etaDate && etaDate !== '-' ? `<div class="eta">ETA: ${etaDate}</div>` : ''}
         </div>
       </div>
 
@@ -1163,6 +1178,7 @@ const printSelectedDBLs = async (): Promise<void> => {
           .addr { font-size: 10px; margin-top: 3px; line-height: 1.3; font-weight: 500; }
           .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
           .right-box .spb { font-size: 16px; font-weight: bold; }
+          .right-box .eta { font-size: 10px; margin-top: 2px; font-weight: bold; }
 
           .meta-row { display: grid; grid-template-columns: 1fr auto; align-items: stretch; gap: 6px; margin: 2px 0 4px 0; }
           .meta-fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }

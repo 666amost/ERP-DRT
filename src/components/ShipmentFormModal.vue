@@ -78,14 +78,86 @@ const isCreatingCustomer = ref(false);
 
 const isEdit = computed(() => !!props.shipment);
 
-function formatNumberID(value: number | string): string {
-  const num = typeof value === 'string' ? parseFloat(value.replace(/\./g, '').replace(',', '.')) : value;
-  if (isNaN(num)) return '';
-  const parts = num.toFixed(2).split('.');
-  if (parts[0]) {
-    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+type FormatNumberIDOptions = {
+  maxDecimals?: number;
+  minDecimals?: number;
+};
+
+function formatNumberID(value: number | string, opts: FormatNumberIDOptions = {}): string {
+  const maxDecimals = opts.maxDecimals ?? 4;
+  const minDecimals = opts.minDecimals ?? 0;
+
+  const raw = typeof value === 'number' ? String(value) : String(value || '');
+  if (!raw.trim()) return '';
+
+  let sign = '';
+  let cleaned = raw.trim();
+  if (cleaned.startsWith('-')) {
+    sign = '-';
+    cleaned = cleaned.slice(1);
   }
-  return parts.join(',');
+
+  cleaned = cleaned.replace(/\s+/g, '');
+
+  const hasComma = cleaned.includes(',');
+  const dotCount = (cleaned.match(/\./g) || []).length;
+
+  let integerPart = '';
+  let decimalPart = '';
+
+  if (hasComma) {
+    const parts = cleaned.split(',');
+    integerPart = (parts[0] || '').replace(/\./g, '');
+    decimalPart = parts.slice(1).join('');
+  } else if (dotCount === 1 && typeof value !== 'string') {
+    const parts = cleaned.split('.');
+    integerPart = parts[0] || '';
+    decimalPart = parts[1] || '';
+  } else if (dotCount === 1 && typeof value === 'string') {
+    const parts = cleaned.split('.');
+    const right = parts[1] || '';
+    const treatDotAsDecimal = right.length > 0 && right.length !== 3;
+    if (treatDotAsDecimal) {
+      integerPart = parts[0] || '';
+      decimalPart = right;
+    } else {
+      integerPart = cleaned.replace(/\./g, '');
+      decimalPart = '';
+    }
+  } else {
+    integerPart = cleaned.replace(/\./g, '');
+    decimalPart = '';
+  }
+
+  integerPart = integerPart.replace(/[^\d]/g, '');
+  decimalPart = decimalPart.replace(/[^\d]/g, '');
+
+  integerPart = integerPart.replace(/^0+(?=\d)/, '');
+  if (!integerPart) integerPart = '0';
+
+  if (maxDecimals >= 0 && decimalPart.length > maxDecimals) {
+    decimalPart = decimalPart.slice(0, maxDecimals);
+  }
+
+  if (minDecimals > 0) {
+    decimalPart = decimalPart.padEnd(minDecimals, '0');
+  } else {
+    decimalPart = decimalPart.replace(/0+$/, '');
+  }
+
+  integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return sign + (decimalPart ? `${integerPart},${decimalPart}` : integerPart);
+}
+
+function getBeratFormatOptions(satuan: string): FormatNumberIDOptions {
+  const unit = String(satuan || '').toUpperCase();
+  if (unit === 'KG') return { maxDecimals: 4, minDecimals: 2 };
+  if (unit === 'M3') return { maxDecimals: 4, minDecimals: 0 };
+  return { maxDecimals: 4, minDecimals: 0 };
+}
+
+function onBeratBlur() {
+  form.value.berat = formatNumberID(form.value.berat, getBeratFormatOptions(form.value.satuan));
 }
 
 function parseNumberID(value: string): number {
@@ -133,6 +205,7 @@ function resetForm(shipment: Shipment | null) {
   resetCustomerState();
 
   if (shipment) {
+    const satuan = shipment.satuan || 'KG';
     form.value = {
       spb_number: shipment.spb_number || '',
       pengirim_name: shipment.pengirim_name || '',
@@ -144,8 +217,8 @@ function resetForm(shipment: Shipment | null) {
       origin: shipment.origin,
       destination: shipment.destination,
       macam_barang: shipment.macam_barang || '',
-      satuan: shipment.satuan || 'KG',
-      berat: formatNumberID((shipment as unknown as { berat?: number }).berat || 0),
+      satuan,
+      berat: formatNumberID((shipment as unknown as { berat?: number }).berat || 0, getBeratFormatOptions(satuan)),
       nominal: String(shipment.nominal || 0),
       total_colli: String(shipment.total_colli || 1),
       keterangan: shipment.keterangan || '',
@@ -488,7 +561,7 @@ onMounted(() => {
             />
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">Berat (KG)</label>
+            <label class="block text-sm font-medium mb-1">Berat (KG/M3)</label>
             <input
               v-model="form.berat"
               type="text"
@@ -496,7 +569,7 @@ onMounted(() => {
               class="w-full px-3 py-2 border border-gray-300 rounded-lg"
               placeholder="0"
               @focus="($event.target as HTMLInputElement).select()"
-              @blur="form.berat = formatNumberID(form.berat)"
+              @blur="onBeratBlur"
             />
           </div>
           <div>

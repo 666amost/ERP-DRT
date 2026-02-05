@@ -33,6 +33,44 @@ function normalizeMethod(value?: string | null): string {
   return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+const methodColumns = ['CASH BALI', 'CASH JAKARTA', 'TF BALI', 'TF JAKARTA'] as const;
+type MethodColumn = (typeof methodColumns)[number];
+const methodColumnSet = new Set<string>(methodColumns);
+const methodColumnLabels: Record<MethodColumn, string> = {
+  'CASH BALI': 'Cash Bali',
+  'CASH JAKARTA': 'Cash Jakarta',
+  'TF BALI': 'TF Bali',
+  'TF JAKARTA': 'TF Jakarta'
+};
+
+function canonicalMethod(method: string | null): string {
+  const m = String(method || '').trim().toUpperCase();
+  if (!m) return '';
+  if (m === 'CASH') return 'CASH JAKARTA';
+  if (m === 'TF' || m === 'TRANSFER') return 'TF JAKARTA';
+  return m;
+}
+
+function getMethodAmount(payment: PaymentHistory, method: MethodColumn): number {
+  const canonical = canonicalMethod(payment.payment_method);
+  return canonical === method ? Number(payment.final_amount || 0) : 0;
+}
+
+function getMethodAmountDisplay(payment: PaymentHistory, method: MethodColumn): string {
+  const amount = getMethodAmount(payment, method);
+  return amount ? formatRupiah(amount) : '-';
+}
+
+function getMethodPillText(method: MethodColumn): string {
+  return methodColumnLabels[method] || method;
+}
+
+function getMethodPillClasses(method: MethodColumn): string {
+  return method.startsWith('CASH')
+    ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300'
+    : 'bg-primary-light dark:bg-gray-700 text-primary-dark dark:text-gray-200';
+}
+
 const customers = computed(() => {
   const names = payments.value.map(p => p.customer_name).filter(Boolean);
   return [...new Set(names)].sort();
@@ -80,6 +118,17 @@ const totalPaid = computed(() => {
 
 const totalDiscount = computed(() => {
   return filteredPayments.value.reduce((sum, p) => sum + (p.discount || 0), 0);
+});
+
+const methodTotals = computed<Record<MethodColumn, number>>(() => {
+  const totals = Object.fromEntries(methodColumns.map(m => [m, 0])) as Record<MethodColumn, number>;
+  for (const p of filteredPayments.value) {
+    const canonical = canonicalMethod(p.payment_method);
+    if (methodColumnSet.has(canonical)) {
+      totals[canonical as MethodColumn] += Number(p.final_amount || 0);
+    }
+  }
+  return totals;
 });
 
 async function loadPayments() {
@@ -155,7 +204,7 @@ function resetFilters() {
 }
 
 function exportExcel() {
-  const headers = ['No', 'Invoice', 'Customer', 'Original', 'Diskon', 'Bayar', 'Metode', 'No. Ref', 'Catatan', 'Tanggal'];
+  const headers = ['No', 'Invoice', 'Customer', 'Original', 'Diskon', 'Bayar', ...methodColumns, 'Tanggal'];
   const rows = filteredPayments.value.map((p, idx) => [
     idx + 1,
     p.invoice_number || '-',
@@ -163,9 +212,7 @@ function exportExcel() {
     p.original_amount,
     p.discount,
     p.final_amount,
-    p.payment_method || '-',
-    p.reference_no || '-',
-    p.notes || '-',
+    ...methodColumns.map(m => getMethodAmount(p, m)),
     formatDate(p.payment_date)
   ]);
 
@@ -179,14 +226,6 @@ function exportExcel() {
   link.href = URL.createObjectURL(blob);
   link.download = `pelunasan_${new Date().toISOString().slice(0, 10)}.csv`;
   link.click();
-}
-
-function getMethodVariant(method: string | null): 'default' | 'success' | 'info' {
-  if (!method) return 'default';
-  const m = method.toLowerCase();
-  if (m === 'cash' || m.startsWith('cash ')) return 'success';
-  if (m === 'transfer' || m.startsWith('transfer ') || m === 'tf' || m.startsWith('tf ')) return 'info';
-  return 'default';
 }
 
 onMounted(() => {
@@ -246,6 +285,14 @@ onMounted(() => {
         <Button variant="primary" size="sm" :disabled="loading" @click="applyFilters">Filter</Button>
         <Button variant="default" size="sm" :disabled="loading" @click="resetFilters">Reset</Button>
       </div>
+
+      <div class="flex flex-wrap gap-2 items-center text-xs text-gray-600 dark:text-gray-400">
+        <span class="font-medium">Filter aktif:</span>
+        <Badge v-if="selectedCustomer" variant="default">Customer: {{ selectedCustomer }}</Badge>
+        <Badge v-if="selectedMethod" variant="default">Metode: {{ selectedMethod }}</Badge>
+        <Badge v-if="dateFrom || dateTo" variant="default">Tanggal: {{ dateFrom || '-' }} s/d {{ dateTo || '-' }}</Badge>
+        <Badge v-if="searchQuery" variant="default">Cari: {{ searchQuery }}</Badge>
+      </div>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -272,46 +319,138 @@ onMounted(() => {
         Tidak ada riwayat pembayaran
       </div>
 
-      <div v-else class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead class="bg-gray-50 dark:bg-gray-700 border-b">
-            <tr>
-              <th class="px-3 py-2 text-left">No</th>
-              <th class="px-3 py-2 text-left">Invoice</th>
-              <th class="px-3 py-2 text-left">Customer</th>
-              <th class="px-3 py-2 text-right">Original</th>
-              <th class="px-3 py-2 text-right">Diskon</th>
-              <th class="px-3 py-2 text-right">Bayar</th>
-              <th class="px-3 py-2 text-center">Metode</th>
-              <th class="px-3 py-2 text-left">No. Ref</th>
-              <th class="px-3 py-2 text-left">Catatan</th>
-              <th class="px-3 py-2 text-left">Tanggal</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-            <tr v-for="(p, idx) in filteredPayments" :key="p.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
-              <td class="px-3 py-2">{{ idx + 1 }}</td>
-              <td class="px-3 py-2 font-medium">{{ p.invoice_number || '-' }}</td>
-              <td class="px-3 py-2">{{ p.customer_name || '-' }}</td>
-              <td class="px-3 py-2 text-right">{{ formatRupiah(p.original_amount) }}</td>
-              <td class="px-3 py-2 text-right text-orange-500">{{ p.discount ? formatRupiah(p.discount) : '-' }}</td>
-              <td class="px-3 py-2 text-right font-medium text-green-600">{{ formatRupiah(p.final_amount) }}</td>
-              <td class="px-3 py-2 text-center">
-                <Badge :variant="getMethodVariant(p.payment_method)">{{ p.payment_method || '-' }}</Badge>
-              </td>
-              <td class="px-3 py-2 text-gray-600 dark:text-gray-400">{{ p.reference_no || '-' }}</td>
-              <td class="px-3 py-2 text-gray-600 dark:text-gray-400 max-w-[200px] truncate" :title="p.notes || ''">{{ p.notes || '-' }}</td>
-              <td class="px-3 py-2">{{ formatDate(p.payment_date) }}</td>
-            </tr>
-          </tbody>
-          <tfoot class="bg-gray-100 dark:bg-gray-700 font-semibold">
-            <tr>
-              <td colspan="5" class="px-3 py-2 text-right">Total:</td>
-              <td class="px-3 py-2 text-right text-green-600">{{ formatRupiah(totalPaid) }}</td>
-              <td colspan="4"></td>
-            </tr>
-          </tfoot>
-        </table>
+      <div v-else>
+        <div class="hidden lg:block">
+          <table class="w-full text-sm table-fixed">
+            <thead class="bg-gray-50 dark:bg-gray-700 border-b">
+              <tr>
+                <th class="px-2 py-2 text-left w-10">No</th>
+                <th class="px-2 py-2 text-left">Invoice / Customer</th>
+                <th class="px-2 py-2 text-right w-28">
+                  <div class="font-medium">Bayar</div>
+                  <div class="text-[10px] leading-3 text-gray-500 dark:text-gray-400 font-normal">Total</div>
+                </th>
+                <th v-for="m in methodColumns" :key="m" class="px-1 py-2 text-right w-24 text-[11px] leading-4">
+                  {{ methodColumnLabels[m] }}
+                </th>
+                <th class="px-2 py-2 text-left w-24">Tanggal</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+              <tr v-for="(p, idx) in filteredPayments" :key="p.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ idx + 1 }}</td>
+                <td class="px-2 py-2 text-gray-700 dark:text-gray-300">
+                  <div class="font-medium text-gray-900 dark:text-gray-100 truncate" :title="p.invoice_number || '-'">
+                    {{ p.invoice_number || '-' }}
+                  </div>
+                  <div class="text-[11px] text-gray-600 dark:text-gray-400 truncate" :title="p.customer_name || '-'">
+                    {{ p.customer_name || '-' }}
+                  </div>
+                  <div class="text-[11px] text-gray-500 dark:text-gray-400">
+                    <span>Orig: {{ formatRupiah(p.original_amount) }}</span>
+                    <span class="mx-1">&middot;</span>
+                    <span>Disk: {{ p.discount ? formatRupiah(p.discount) : '-' }}</span>
+                  </div>
+                </td>
+                <td class="px-2 py-2 text-right tabular-nums text-[11px] font-medium text-gray-700 dark:text-gray-300">
+                  {{ formatRupiah(p.final_amount) }}
+                </td>
+                <td
+                  v-for="m in methodColumns"
+                  :key="m"
+                  class="px-1 py-2 text-center text-[11px]"
+                >
+                  <template v-if="canonicalMethod(p.payment_method) === m">
+                    <div class="flex justify-center">
+                      <span
+                        class="inline-flex items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-semibold leading-4 max-w-full truncate whitespace-nowrap"
+                        :class="getMethodPillClasses(m)"
+                        :title="getMethodPillText(m)"
+                      >
+                        {{ getMethodPillText(m) }}
+                      </span>
+                    </div>
+                  </template>
+                  <span v-else class="text-gray-400 dark:text-gray-500">-</span>
+                </td>
+                <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ formatDate(p.payment_date) }}</td>
+              </tr>
+            </tbody>
+            <tfoot class="bg-gray-100 dark:bg-gray-700 font-semibold">
+              <tr>
+                <td colspan="2" class="px-2 py-2 text-right text-gray-700 dark:text-gray-200 whitespace-nowrap">Total:</td>
+                <td class="px-2 py-2 text-right tabular-nums text-[11px] font-semibold text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                  {{ formatRupiah(totalPaid) }}
+                </td>
+                <td
+                  v-for="m in methodColumns"
+                  :key="m"
+                  class="px-2 py-2 text-center align-top border-l border-gray-200 dark:border-gray-600"
+                >
+                  <div class="text-[10px] leading-3 text-gray-500 dark:text-gray-300 font-medium whitespace-nowrap">
+                    {{ methodColumnLabels[m] }}
+                  </div>
+                  <div
+                    class="tabular-nums text-[11px] leading-4 font-semibold text-gray-900 dark:text-gray-100 whitespace-nowrap"
+                    :title="formatRupiah(methodTotals[m])"
+                  >
+                    {{ methodTotals[m] ? formatRupiah(methodTotals[m]) : '-' }}
+                  </div>
+                </td>
+                <td class="border-l border-gray-200 dark:border-gray-600"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <div class="lg:hidden space-y-3">
+          <div v-for="p in filteredPayments" :key="p.id" class="border border-gray-200 dark:border-gray-700 rounded-xl p-3 bg-white dark:bg-gray-800">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{{ p.invoice_number || '-' }}</div>
+                <div class="text-xs text-gray-600 dark:text-gray-400 truncate">{{ p.customer_name || '-' }}</div>
+              </div>
+              <div class="text-right">
+                <div class="text-sm font-bold text-green-600">{{ formatRupiah(p.final_amount) }}</div>
+                <div class="text-xs text-gray-500">{{ formatDate(p.payment_date) }}</div>
+              </div>
+            </div>
+
+            <div class="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
+              <span>Orig: {{ formatRupiah(p.original_amount) }}</span>
+              <span class="mx-1">&middot;</span>
+              <span>Disk: {{ p.discount ? formatRupiah(p.discount) : '-' }}</span>
+            </div>
+
+            <div class="mt-2 space-y-1 text-[11px] leading-4">
+              <div v-for="m in methodColumns" :key="m" class="grid grid-cols-[1fr_auto] gap-2">
+                <span class="text-gray-500 dark:text-gray-400">{{ methodColumnLabels[m] }}</span>
+                <template v-if="canonicalMethod(p.payment_method) === m">
+                  <span
+                    class="inline-flex items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-semibold leading-4 max-w-full truncate whitespace-nowrap"
+                    :class="getMethodPillClasses(m)"
+                    :title="getMethodPillText(m)"
+                  >
+                    {{ getMethodPillText(m) }}
+                  </span>
+                </template>
+                <span v-else class="text-right text-gray-400 dark:text-gray-500">-</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="border-t border-gray-200 dark:border-gray-700 pt-3 text-sm font-semibold space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-gray-700 dark:text-gray-300">Total Dibayar</span>
+              <span class="text-green-600">{{ formatRupiah(totalPaid) }}</span>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <Badge v-for="m in methodColumns" :key="m" variant="default">
+                {{ methodColumnLabels[m] }}: {{ formatRupiah(methodTotals[m]) }}
+              </Badge>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

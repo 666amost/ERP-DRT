@@ -5,8 +5,14 @@ import Invoice from '../src/pages/Invoice.vue';
 
 describe('Invoice.vue', () => {
   beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-      const url = typeof input === 'string' ? input : String(input);
+    vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : typeof (input as { url?: unknown }).url === 'string'
+            ? (input as { url?: unknown }).url as string
+            : String(input);
       if (url.includes('/api/invoices')) {
         return {
           ok: true,

@@ -2846,9 +2846,8 @@ watch(() => invoiceFilterType.value, () => {
               </table>
             </div>
           </div>
-
-            </div>
-            <div class="col-span-12 lg:col-span-4 space-y-4">
+        </div>
+        <div class="col-span-12 lg:col-span-4 space-y-4">
           <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3 bg-white dark:bg-gray-800">
             <div>
               <label class="block text-sm font-medium mb-1 dark:text-gray-200">PPh Rate (%)</label>

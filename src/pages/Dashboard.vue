@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import OverviewCard from '../components/dashboard/OverviewCard.vue';
 import Badge from '../components/ui/Badge.vue';
 import Button from '../components/ui/Button.vue';
@@ -12,6 +13,7 @@ import type { EChartsCoreOption } from 'echarts/core';
 
 const { fetchUser, permissions, user } = useAuth();
 const { formatRupiah } = useFormatters();
+const router = useRouter();
 
 type Stats = {
   outgoingToday: number;
@@ -156,6 +158,10 @@ onMounted(async () => {
   await fetchUser();
   loadData();
 });
+
+function go(routeName: string) {
+  router.push({ name: routeName });
+}
 </script>
 
 <template>
@@ -182,41 +188,83 @@ onMounted(async () => {
         title="Barang Keluar Hari Ini"
         :value="stats.outgoingToday"
         icon="mdi:package-variant"
+        role="button"
+        tabindex="0"
+        class="cursor-pointer hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900"
+        @click="go('barang-keluar')"
+        @keydown.enter="go('barang-keluar')"
+        @keydown.space.prevent="go('barang-keluar')"
       />
       <OverviewCard
         title="Pengiriman Aktif"
         :value="stats.activeShipments"
         icon="mdi:truck-delivery"
+        role="button"
+        tabindex="0"
+        class="cursor-pointer hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900"
+        @click="go('pelacakan')"
+        @keydown.enter="go('pelacakan')"
+        @keydown.space.prevent="go('pelacakan')"
       />
       <OverviewCard
         v-if="permissions.canViewDBL"
         title="DBL Aktif"
         :value="stats.dblCount || dblList.length"
         icon="mdi:file-document-multiple"
+        role="button"
+        tabindex="0"
+        class="cursor-pointer hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900"
+        @click="go('dbl')"
+        @keydown.enter="go('dbl')"
+        @keydown.space.prevent="go('dbl')"
       />
       <OverviewCard
         v-if="permissions.canViewKeuangan"
         title="Total Invoice"
         :value="stats.totalInvoices"
         icon="mdi:receipt-text-outline"
+        role="button"
+        tabindex="0"
+        class="cursor-pointer hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900"
+        @click="go('invoice')"
+        @keydown.enter="go('invoice')"
+        @keydown.space.prevent="go('invoice')"
       />
       <OverviewCard
         v-if="permissions.canViewKeuangan"
         title="Outstanding"
         :value="stats.outstandingCount"
         icon="mdi:alert-circle-outline"
+        role="button"
+        tabindex="0"
+        class="cursor-pointer hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900"
+        @click="go('outstanding')"
+        @keydown.enter="go('outstanding')"
+        @keydown.space.prevent="go('outstanding')"
       />
       <OverviewCard
         v-if="permissions.canPelunasan"
         title="Pelunasan"
         :value="stats.pelunasanCount"
         icon="mdi:cash-check"
+        role="button"
+        tabindex="0"
+        class="cursor-pointer hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900"
+        @click="go('pelunasan')"
+        @keydown.enter="go('pelunasan')"
+        @keydown.space.prevent="go('pelunasan')"
       />
       <OverviewCard
         v-if="permissions.canViewSuratJalan"
         title="Surat Jalan"
         :value="stats.deliveryNotes"
         icon="mdi:file-document-outline"
+        role="button"
+        tabindex="0"
+        class="cursor-pointer hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900"
+        @click="go('surat-jalan')"
+        @keydown.enter="go('surat-jalan')"
+        @keydown.space.prevent="go('surat-jalan')"
       />
     </div>
 

@@ -701,8 +701,8 @@ onMounted(async () => {
                   <Button v-if="permissions.canViewKeuangan" variant="info" class="px-2 py-1 h-7 text-xs" @click="openInvoiceModal(dbl)">Invoice</Button>
                   <Button variant="primary" class="px-2 py-1 h-7 text-xs" @click="openEditModal(dbl)">Edit</Button>
                   <Button 
-                    variant="default" 
-                    class="px-2 py-1 h-7 text-xs text-red-600" 
+                    variant="danger" 
+                    class="px-2 py-1 h-7 text-xs" 
                     @click="deleteDBL(dbl)"
                     :disabled="deletingId === dbl.id"
                   >
@@ -757,8 +757,8 @@ onMounted(async () => {
             <Button block variant="primary" @click="openEditModal(dbl)">Edit</Button>
             <Button 
               block 
-              variant="default" 
-              class="col-span-2 text-red-600" 
+              variant="danger" 
+              class="col-span-2" 
               @click="deleteDBL(dbl)"
               :disabled="deletingId === dbl.id"
             >
@@ -862,7 +862,7 @@ onMounted(async () => {
                     <div class="font-medium dark:text-gray-200">{{ s.spb_number || s.public_code }}</div>
                     <div class="text-gray-500 text-xs">{{ s.customer_name }} | {{ s.origin }} → {{ s.destination }} | {{ formatRupiah(s.nominal) }}</div>
                   </div>
-                  <Button variant="default" class="text-red-600 px-2 py-1 h-7 text-xs" @click="removeShipment(s.id)">Hapus</Button>
+                  <Button variant="danger" class="px-2 py-1 h-7 text-xs" @click="removeShipment(s.id)">Hapus</Button>
                 </div>
               </div>
               <div class="text-right mt-2 font-medium dark:text-gray-200">Total: {{ formatRupiah(totalNominal) }}</div>

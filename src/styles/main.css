@@ -15,6 +15,11 @@
   --text: #0f1724;
   --muted: #6b7280;
   --card-bg: #ffffff;
+  --surface: #ffffff;
+  --surface-muted: #f3f4f6;
+  --border: #e5e7eb;
+  --text-strong: #0f1724;
+  --text-muted: #6b7280;
 }
 
 /* dark mode variables */
@@ -23,6 +28,11 @@
   --text: #e6eef7;
   --muted: #9aa3b2;
   --card-bg: #0f1724;
+  --surface: #0f1724;
+  --surface-muted: #111827;
+  --border: #1f2937;
+  --text-strong: #e6eef7;
+  --text-muted: #9aa3b2;
 }
 
 /* smooth scroll for panels */
@@ -41,6 +51,42 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
   background: var(--bg);
   color: var(--text);
+}
+
+.dark .bg-white:not([class*="dark:bg-"]) {
+  background-color: var(--surface);
+}
+
+.dark .bg-gray-50:not([class*="dark:bg-"]),
+.dark .bg-gray-100:not([class*="dark:bg-"]) {
+  background-color: var(--surface-muted);
+}
+
+.dark .bg-white\/80:not([class*="dark:bg-"]) {
+  background-color: rgba(15, 23, 36, 0.8);
+}
+
+.dark .border-gray-200:not([class*="dark:border-"]),
+.dark .border-gray-100:not([class*="dark:border-"]),
+.dark .border-gray-300:not([class*="dark:border-"]) {
+  border-color: var(--border);
+}
+
+.dark .text-gray-900:not([class*="dark:text-"]),
+.dark .text-gray-800:not([class*="dark:text-"]),
+.dark .text-gray-700:not([class*="dark:text-"]) {
+  color: var(--text-strong);
+}
+
+.dark .text-gray-600:not([class*="dark:text-"]),
+.dark .text-gray-500:not([class*="dark:text-"]),
+.dark .text-gray-400:not([class*="dark:text-"]) {
+  color: var(--text-muted);
+}
+
+.dark .placeholder-gray-500:not([class*="dark:placeholder-"])::placeholder,
+.dark .placeholder-gray-400:not([class*="dark:placeholder-"])::placeholder {
+  color: var(--text-muted);
 }
 
 /* Ensure basic elements inherit the global text color in dark mode */

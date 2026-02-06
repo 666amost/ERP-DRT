@@ -56,11 +56,6 @@ function getMethodAmount(payment: PaymentHistory, method: MethodColumn): number 
   return canonical === method ? Number(payment.final_amount || 0) : 0;
 }
 
-function getMethodAmountDisplay(payment: PaymentHistory, method: MethodColumn): string {
-  const amount = getMethodAmount(payment, method);
-  return amount ? formatRupiah(amount) : '-';
-}
-
 function getMethodPillText(method: MethodColumn): string {
   return methodColumnLabels[method] || method;
 }

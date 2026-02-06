@@ -137,8 +137,11 @@ async function setSjReturned(shipmentId: number, value: boolean): Promise<void> 
       body: JSON.stringify({ id: shipmentId, sj_returned: value })
     });
     if (!res.ok) {
-      const data = await res.json().catch(() => ({} as any));
-      throw new Error(data?.error || 'Gagal menyimpan SJ');
+      const data = await res.json().catch(() => ({}));
+      const message = typeof (data as { error?: unknown }).error === 'string'
+        ? (data as { error?: unknown }).error
+        : 'Gagal menyimpan SJ';
+      throw new Error(message);
     }
     emitStats();
   } catch (e) {
@@ -182,7 +185,7 @@ onBeforeUnmount(() => {
   <div v-if="show" class="fixed inset-0 z-50 print:hidden">
     <div class="absolute inset-0 bg-black/30" @click="close"></div>
 
-    <div class="absolute inset-y-0 right-0 w-[95vw] max-w-5xl bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 shadow-xl flex flex-col">
+    <div class="absolute inset-y-0 right-0 w-[95vw] max-w-5xl bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 shadow-xl flex flex-col lg:left-64 lg:right-0 lg:w-auto lg:max-w-none">
       <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
         <div class="min-w-0">
           <div class="font-semibold text-gray-900 dark:text-gray-100 truncate">Checklist SJ Balik</div>

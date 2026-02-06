@@ -45,8 +45,6 @@ const currentUser = ref<MeUser | null>(null);
 
 const statusOptions = [
   { value: '', label: 'Semua Status' },
-  { value: 'DRAFT', label: 'Draft' },
-  { value: 'READY', label: 'Ready' },
   { value: 'LOADING', label: 'Loading' },
   { value: 'IN_TRANSIT', label: 'In Transit' },
   { value: 'DELIVERED', label: 'Delivered' }

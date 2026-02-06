@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import Button from '../components/ui/Button.vue';
 import Badge from '../components/ui/Badge.vue';
+import DblSjChecklistDrawer from '../components/DblSjChecklistDrawer.vue';
 import { useFormatters } from '../composables/useFormatters';
 import { Icon } from '@iconify/vue';
 import { exportToExcel } from '../lib/excelExport';
@@ -21,6 +22,7 @@ type DBLReportItem = {
   destination: string | null;
   status: string;
   total_shipments: number;
+  sj_returned_count: number;
   total_colli: number;
   total_weight: number;
   total_nominal: number;
@@ -133,6 +135,7 @@ const filteredItems = computed(() => {
 
 const totalDBL = computed(() => filteredItems.value.length);
 const totalShipments = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_shipments || 0), 0));
+const totalSjReturned = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.sj_returned_count || 0), 0));
 const totalColli = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_colli || 0), 0));
 const totalWeight = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_weight || 0), 0));
 const totalNominal = computed(() => filteredItems.value.reduce((sum, i) => sum + (i.total_nominal || 0), 0));
@@ -175,6 +178,7 @@ async function loadReport() {
       items.value = (data.items || []).map((x: Partial<DBLReportItem>) => ({
         ...x,
         total_shipments: Number(x.total_shipments || 0),
+        sj_returned_count: Number(x.sj_returned_count || 0),
         total_colli: Number(x.total_colli || 0),
         total_weight: Number(x.total_weight || 0),
         total_nominal: Number(x.total_nominal || 0),
@@ -189,6 +193,34 @@ async function loadReport() {
     console.error('Failed to load DBL report:', e);
   } finally {
     loading.value = false;
+  }
+}
+
+function getSjVariant(item: DBLReportItem): 'default' | 'warning' | 'success' {
+  const total = Number(item.total_shipments || 0);
+  const returned = Number(item.sj_returned_count || 0);
+  if (total <= 0) return 'default';
+  if (returned >= total) return 'success';
+  if (returned > 0) return 'warning';
+  return 'default';
+}
+
+const sjDrawerOpen = ref(false);
+const sjDrawerItem = ref<DBLReportItem | null>(null);
+
+function openSjChecklist(item: DBLReportItem): void {
+  sjDrawerItem.value = item;
+  sjDrawerOpen.value = true;
+}
+
+function onSjStats(payload: { dblId: number; sjReturned: number; totalShipments: number }): void {
+  const target = items.value.find(i => i.id === payload.dblId);
+  if (!target) return;
+  target.sj_returned_count = payload.sjReturned;
+  target.total_shipments = payload.totalShipments;
+  if (sjDrawerItem.value?.id === payload.dblId) {
+    sjDrawerItem.value.sj_returned_count = payload.sjReturned;
+    sjDrawerItem.value.total_shipments = payload.totalShipments;
   }
 }
 
@@ -251,6 +283,7 @@ function exportExcel() {
     driver: item.driver_name || '-',
     tujuan: item.destination || '-',
     spb: item.total_shipments,
+    sj: `${item.sj_returned_count || 0}/${item.total_shipments || 0}`,
     colli: item.total_colli,
     berat: item.total_weight || 0,
     nominal: item.total_nominal,
@@ -270,6 +303,7 @@ function exportExcel() {
       { header: 'Driver', key: 'driver', width: 15, type: 'text' },
       { header: 'Tujuan', key: 'tujuan', width: 15, type: 'text' },
       { header: 'SPB', key: 'spb', width: 8, type: 'number', align: 'center' },
+      { header: 'SJ Balik', key: 'sj', width: 10, type: 'text', align: 'center' },
       { header: 'Colli', key: 'colli', width: 8, type: 'number', align: 'center' },
       { header: 'Berat', key: 'berat', width: 10, type: 'number', align: 'right' },
       { header: 'Nominal', key: 'nominal', width: 15, type: 'currency', align: 'right' },
@@ -445,6 +479,7 @@ onMounted(async () => {
       </div>
 
       <div v-else>
+        <div class="mb-2 text-xs text-gray-500 dark:text-gray-400">Klik No. DBL untuk lihat list SPB & checklist SJ balik.</div>
         <!-- Desktop table -->
         <div class="hidden lg:block overflow-x-auto">
           <table class="w-full text-sm">
@@ -457,6 +492,7 @@ onMounted(async () => {
                 <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Driver</th>
                 <th class="px-2 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Tujuan</th>
                 <th class="px-2 py-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">SPB</th>
+                <th class="px-2 py-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">SJ</th>
                 <th class="px-2 py-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">Colli</th>
                 <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Berat</th>
                 <th class="px-2 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Nominal</th>
@@ -467,11 +503,20 @@ onMounted(async () => {
               <tr v-for="(item, idx) in filteredItems" :key="item.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
                 <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ idx + 1 }}</td>
                 <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ formatDate(item.departure_date || item.created_at) }}</td>
-                <td class="px-2 py-2 font-medium text-gray-900 dark:text-gray-100">{{ item.dbl_number || '-' }}</td>
+                <td class="px-2 py-2">
+                  <button class="font-medium text-gray-900 dark:text-gray-100 hover:underline text-left" @click="openSjChecklist(item)">
+                    {{ item.dbl_number || '-' }}
+                  </button>
+                </td>
                 <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ item.vehicle_plate || '-' }}</td>
                 <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ item.driver_name || '-' }}</td>
                 <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ item.destination || '-' }}</td>
                 <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ item.total_shipments }}</td>
+                <td class="px-2 py-2 text-center">
+                  <Badge :variant="getSjVariant(item)">
+                    {{ item.sj_returned_count || 0 }}/{{ item.total_shipments || 0 }}
+                  </Badge>
+                </td>
                 <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ item.total_colli }}</td>
                 <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ (item.total_weight || 0).toFixed(1) }}</td>
                 <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">
@@ -488,6 +533,7 @@ onMounted(async () => {
               <tr>
                 <td colspan="6" class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">Total:</td>
                 <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ totalShipments }}</td>
+                <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ totalSjReturned }}/{{ totalShipments }}</td>
                 <td class="px-2 py-2 text-center text-gray-700 dark:text-gray-300">{{ totalColli }}</td>
                 <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">{{ totalWeight.toFixed(1) }}</td>
                 <td class="px-2 py-2 text-right text-gray-700 dark:text-gray-300">
@@ -506,7 +552,9 @@ onMounted(async () => {
           <div v-for="item in filteredItems" :key="item.id" class="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-200 dark:border-gray-700">
             <div class="flex justify-between items-start gap-2">
               <div class="min-w-0 flex-1">
-                <div class="font-medium text-sm text-gray-900 dark:text-gray-100">{{ item.dbl_number || '-' }}</div>
+                <button class="font-medium text-sm text-gray-900 dark:text-gray-100 hover:underline text-left" @click="openSjChecklist(item)">
+                  {{ item.dbl_number || '-' }}
+                </button>
                 <div class="text-xs text-gray-500 dark:text-gray-400">{{ formatDate(item.departure_date || item.created_at) }}</div>
               </div>
               <Badge :variant="getStatusVariant(item.status)">{{ item.status }}</Badge>
@@ -520,6 +568,7 @@ onMounted(async () => {
             </div>
             <div class="mt-2 flex flex-wrap items-center gap-2">
               <span class="px-2 py-0.5 rounded-full bg-gray-900 dark:bg-gray-600 text-white text-xs">{{ item.total_shipments }} SPB</span>
+              <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs">SJ: {{ item.sj_returned_count || 0 }}/{{ item.total_shipments || 0 }}</span>
               <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs">{{ item.total_colli }} colli</span>
               <span class="px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300 text-xs">{{ (item.total_weight || 0).toFixed(1) }}</span>
               <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs">{{ formatRupiah(item.total_nominal) }}</span>
@@ -530,6 +579,18 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+
+    <DblSjChecklistDrawer
+      :show="sjDrawerOpen"
+      :dbl-id="sjDrawerItem?.id ?? null"
+      :dbl-number="sjDrawerItem?.dbl_number ?? null"
+      :driver-name="sjDrawerItem?.driver_name ?? null"
+      :vehicle-plate="sjDrawerItem?.vehicle_plate ?? null"
+      :destination="sjDrawerItem?.destination ?? null"
+      :departure-date="sjDrawerItem ? formatDate(sjDrawerItem.departure_date || sjDrawerItem.created_at) : null"
+      @close="sjDrawerOpen = false"
+      @stats="onSjStats"
+    />
 
     <!-- Print View -->
     <div class="hidden print:block">
@@ -552,16 +613,17 @@ onMounted(async () => {
         <thead>
           <tr>
             <th class="text-center" style="width: 4%">No</th>
-            <th class="text-center" style="width: 10%">Tanggal</th>
+            <th class="text-center" style="width: 9%">Tanggal</th>
             <th style="width: 12%">No. DBL</th>
-            <th style="width: 10%">Plat</th>
-            <th style="width: 12%">Driver</th>
-            <th style="width: 12%">Tujuan</th>
+            <th style="width: 9%">Plat</th>
+            <th style="width: 11%">Driver</th>
+            <th style="width: 11%">Tujuan</th>
             <th class="text-center" style="width: 6%">SPB</th>
+            <th class="text-center" style="width: 7%">SJ</th>
             <th class="text-center" style="width: 6%">Colli</th>
-            <th class="text-right" style="width: 8%">Berat</th>
-            <th class="text-right" style="width: 12%">Nominal</th>
-            <th class="text-center" style="width: 8%">Status</th>
+            <th class="text-right" style="width: 7%">Berat</th>
+            <th class="text-right" style="width: 11%">Nominal</th>
+            <th class="text-center" style="width: 7%">Status</th>
           </tr>
         </thead>
         <tbody>
@@ -573,6 +635,7 @@ onMounted(async () => {
             <td>{{ item.driver_name || '-' }}</td>
             <td>{{ item.destination || '-' }}</td>
             <td class="text-center">{{ item.total_shipments }}</td>
+            <td class="text-center">{{ item.sj_returned_count || 0 }}/{{ item.total_shipments || 0 }}</td>
             <td class="text-center">{{ item.total_colli }}</td>
             <td class="text-right">{{ (item.total_weight || 0).toFixed(1) }}</td>
             <td class="text-right">{{ formatRupiah(item.total_nominal) }}</td>
@@ -583,6 +646,7 @@ onMounted(async () => {
           <tr class="total-row">
             <td colspan="6" class="text-right">Total:</td>
             <td class="text-center">{{ totalShipments }}</td>
+            <td class="text-center">{{ totalSjReturned }}/{{ totalShipments }}</td>
             <td class="text-center">{{ totalColli }}</td>
             <td class="text-right">{{ totalWeight.toFixed(1) }}</td>
             <td class="text-right">{{ formatRupiah(totalNominal) }}</td>

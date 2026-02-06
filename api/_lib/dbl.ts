@@ -393,6 +393,7 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
         select di.shipment_id as id, di.urutan, di.dbl_id,
                s.spb_number, s.public_code, s.pengirim_name, s.penerima_name, s.penerima_phone, s.macam_barang,
                s.qty, s.satuan, s.berat, coalesce(s.nominal, 0)::float as nominal,
+               coalesce(s.sj_returned, false) as sj_returned, s.sj_returned_at,
                s.customer_id, s.customer_name, s.destination, s.origin, s.total_colli, s.status, s.created_at, s.invoice_generated
         from dbl_items di
         join shipments s on s.id = di.shipment_id
@@ -672,6 +673,7 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
           d.dbl_date as departure_date,
           d.created_at,
           (select count(*)::int from dbl_items where dbl_id = d.id) as total_shipments,
+          (select coalesce(sum(case when coalesce(s.sj_returned, false) then 1 else 0 end), 0)::int from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as sj_returned_count,
           (select coalesce(sum(s.total_colli), 0)::int from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_colli,
           (select coalesce(sum(s.berat), 0)::float from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_weight,
           (select coalesce(sum(s.nominal), 0)::float from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_nominal,
@@ -700,6 +702,7 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
         departure_date: string | null;
         created_at: string;
         total_shipments: number;
+        sj_returned_count: number;
         total_colli: number;
         total_weight: number;
         total_nominal: number;

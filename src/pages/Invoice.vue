@@ -513,24 +513,6 @@ function deselectAll(): void {
   updateItemsFromSelection();
 }
 
-function setShipmentReturnStatus(shipmentId: number, value: boolean): void {
-  allUnpaidShipments.value = allUnpaidShipments.value.map(s => {
-    if (!s.shipment_id || s.shipment_id !== shipmentId) return s;
-    return { ...s, sj_returned: value };
-  });
-  items.value = items.value.map(it => {
-    if (!it.shipment_id || it.shipment_id !== shipmentId) return it;
-    return { ...it, sj_returned: value };
-  });
-}
-
-function toggleSjReturned(shipmentId?: number | null): void {
-  if (!shipmentId) return;
-  const target = allUnpaidShipments.value.find(s => s.shipment_id === shipmentId) || items.value.find(i => i.shipment_id === shipmentId);
-  const current = target?.sj_returned || false;
-  setShipmentReturnStatus(shipmentId, !current);
-}
-
 function updateItemsFromSelection(): void {
   items.value = allUnpaidShipments.value.filter(s => s.shipment_id && selectedShipmentIds.value.has(s.shipment_id));
 }
@@ -2705,13 +2687,9 @@ watch(() => invoiceFilterType.value, () => {
                       </div>
                     </td>
                     <td class="px-2 py-2 text-center">
-                      <input
-                        type="checkbox"
-                        :checked="!!it.sj_returned"
-                        @click.stop="toggleSjReturned(it.shipment_id)"
-                        class="h-4 w-4"
-                        :title="it.sj_returned ? 'Dokumen SJ sudah balik' : 'Tandai SJ sudah balik'"
-                      />
+                      <Badge :variant="it.sj_returned ? 'success' : 'warning'">
+                        {{ it.sj_returned ? 'Sudah' : 'Belum' }}
+                      </Badge>
                     </td>
                     <td class="px-2 py-2 text-right text-xs font-semibold">
                       {{ formatRupiah(it.unit_price || 0) }}
@@ -2770,12 +2748,9 @@ watch(() => invoiceFilterType.value, () => {
                       </div>
                     </td>
                     <td class="px-2 py-2 text-center">
-                      <input
-                        type="checkbox"
-                        :checked="!!it.sj_returned"
-                        class="h-4 w-4"
-                        @change="toggleSjReturned(it.shipment_id)"
-                      />
+                      <Badge :variant="it.sj_returned ? 'success' : 'warning'">
+                        {{ it.sj_returned ? 'Sudah' : 'Belum' }}
+                      </Badge>
                     </td>
                     <td class="px-2 py-2 text-right text-xs font-semibold">
                       {{ formatRupiah(it.unit_price || 0) }}
@@ -2845,12 +2820,9 @@ watch(() => invoiceFilterType.value, () => {
                       </div>
                     </td>
                     <td class="px-2 py-2 text-center">
-                      <input
-                        type="checkbox"
-                        :checked="!!it.sj_returned"
-                        class="h-4 w-4"
-                        @change="toggleSjReturned(it.shipment_id)"
-                      />
+                      <Badge :variant="it.sj_returned ? 'success' : 'warning'">
+                        {{ it.sj_returned ? 'Sudah' : 'Belum' }}
+                      </Badge>
                     </td>
                     <td class="px-2 py-2 text-right text-xs font-semibold">
                       {{ formatRupiah(it.unit_price || 0) }}

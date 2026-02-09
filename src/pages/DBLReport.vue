@@ -377,7 +377,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="space-y-4 pb-24 lg:pb-0">
+  <div class="space-y-4 pb-24 lg:pb-0 dark:text-gray-100">
     <div class="flex items-center justify-between flex-wrap gap-3 print:hidden">
       <div class="text-xl font-semibold dark:text-gray-100">DBL Report</div>
       <div class="flex gap-2">
@@ -407,35 +407,35 @@ onMounted(async () => {
       </div>
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div>
-          <label class="block text-sm font-medium mb-1">No. DBL</label>
-          <select v-model="selectedDbl" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+          <label class="block text-sm font-medium mb-1 dark:text-gray-200">No. DBL</label>
+          <select v-model="selectedDbl" class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100">
             <option value="">Semua DBL</option>
             <option v-for="dbl in dblOptions" :key="dbl" :value="dbl">{{ dbl }}</option>
           </select>
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Metode</label>
-          <select v-model="selectedMethod" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+          <label class="block text-sm font-medium mb-1 dark:text-gray-200">Metode</label>
+          <select v-model="selectedMethod" class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100">
             <option v-for="opt in methodOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Dari Tanggal</label>
-          <input v-model="dateFrom" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+          <label class="block text-sm font-medium mb-1 dark:text-gray-200">Dari Tanggal</label>
+          <input v-model="dateFrom" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Sampai Tanggal</label>
-          <input v-model="dateTo" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+          <label class="block text-sm font-medium mb-1 dark:text-gray-200">Sampai Tanggal</label>
+          <input v-model="dateTo" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Status</label>
-          <select v-model="selectedStatus" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+          <label class="block text-sm font-medium mb-1 dark:text-gray-200">Status</label>
+          <select v-model="selectedStatus" class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100">
             <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Wilayah</label>
-          <select v-model="selectedRegion" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+          <label class="block text-sm font-medium mb-1 dark:text-gray-200">Wilayah</label>
+          <select v-model="selectedRegion" class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100">
             <option v-for="opt in regionOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
         </div>
@@ -471,10 +471,10 @@ onMounted(async () => {
 
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 print:hidden">
       <div v-if="loading" class="flex items-center justify-center h-32">
-        <div class="text-gray-500">Loading...</div>
+        <div class="text-gray-500 dark:text-gray-400">Loading...</div>
       </div>
 
-      <div v-else-if="filteredItems.length === 0" class="text-center py-8 text-gray-500">
+      <div v-else-if="filteredItems.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
         Tidak ada data DBL untuk periode ini
       </div>
 

@@ -165,7 +165,7 @@ const paymentForm = ref({
 const showPphModal = ref(false);
 const pphFormPercent = ref<string>('0');
 
-type CreatePaymentType = 'CICILAN' | 'CASH_BALI' | 'CASH_JAKARTA' | 'TF_BALI' | 'TF_JAKARTA';
+type CreatePaymentType = 'CICILAN' | 'CASH_BALI' | 'CASH_JAKARTA' | 'TF_BALI' | 'TF_JAKARTA' | 'TRANSFER_ALI';
 const createPaymentType = ref<CreatePaymentType>('TF_JAKARTA');
 
 function getCreatePaymentMethod(type: CreatePaymentType): string | undefined {
@@ -173,6 +173,7 @@ function getCreatePaymentMethod(type: CreatePaymentType): string | undefined {
   if (type === 'CASH_BALI') return 'CASH BALI';
   if (type === 'CASH_JAKARTA') return 'CASH JAKARTA';
   if (type === 'TF_BALI') return 'TF BALI';
+  if (type === 'TRANSFER_ALI') return 'TRANSFER ALI';
   return 'TF JAKARTA';
 }
 
@@ -2295,6 +2296,7 @@ watch(() => invoiceFilterType.value, () => {
               <option value="CASH_JAKARTA">Cash Jakarta</option>
               <option value="TF_BALI">Tf Bali</option>
               <option value="TF_JAKARTA">Tf Jakarta</option>
+              <option value="TRANSFER_ALI">Transfer Ali</option>
             </select>
           </div>
           <div>
@@ -2412,7 +2414,7 @@ watch(() => invoiceFilterType.value, () => {
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
       @click.self="showModal = false"
     >
-      <div class="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-7xl h-[90vh] flex flex-col overflow-hidden card">
+      <div class="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-7xl h-[90vh] flex flex-col overflow-hidden card dark:text-gray-100">
         <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex items-start justify-between gap-3">
           <div class="min-w-0">
             <div class="text-lg font-semibold dark:text-gray-100">
@@ -2470,10 +2472,10 @@ watch(() => invoiceFilterType.value, () => {
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
             <div class="sm:col-span-2 space-y-2">
               <div>
-                <label class="block text-sm font-medium mb-1">Customer</label>
+                <label class="block text-sm font-medium mb-1 dark:text-gray-200">Customer</label>
                 <select
                   v-model="form.customer_name"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
                   @change="onCustomerChange"
                   :disabled="loadingUnpaidShipments"
                 >
@@ -2484,10 +2486,10 @@ watch(() => invoiceFilterType.value, () => {
                 </select>
               </div>
               <div v-if="!editingId">
-                <label class="block text-sm font-medium mb-1">Filter DBL (opsional)</label>
+                <label class="block text-sm font-medium mb-1 dark:text-gray-200">Filter DBL (opsional)</label>
                 <select
                   v-model="selectedDblNumber"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
                   @change="onCustomerChange"
                   :disabled="loadingUnpaidShipments"
                 >
@@ -2498,14 +2500,14 @@ watch(() => invoiceFilterType.value, () => {
                   </option>
                 </select>
               </div>
-              <div v-if="loadingUnpaidShipments" class="text-xs text-gray-500 mt-1">
+              <div v-if="loadingUnpaidShipments" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 Memuat SPB yang belum dibayar...
               </div>
             </div>
             <div class="flex flex-col gap-3">
               <div v-if="!editingId">
                 <div class="flex items-center justify-between mb-1">
-                  <label class="block text-sm font-medium">Pembayaran Awal (Rp)</label>
+                  <label class="block text-sm font-medium dark:text-gray-200">Pembayaran Awal (Rp)</label>
                   <label class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300 select-none">
                     <input
                       type="checkbox"
@@ -2520,13 +2522,13 @@ watch(() => invoiceFilterType.value, () => {
                   v-model="form.amount"
                   type="number"
                   min="0"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg disabled:opacity-70 disabled:cursor-not-allowed"
-                  :class="{ 'bg-gray-50': !manualAmountMode, 'bg-white': manualAmountMode }"
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-70 disabled:cursor-not-allowed dark:text-gray-100"
+                  :class="{ 'bg-gray-50': !manualAmountMode, 'bg-white': manualAmountMode, 'dark:bg-gray-700': !manualAmountMode, 'dark:bg-gray-800': manualAmountMode }"
                   inputmode="numeric"
                   placeholder="0"
                   :disabled="!manualAmountMode"
                 >
-                <div class="text-xs text-gray-500 mt-1">Opsional. Centang "Isi manual" jika ada pembayaran awal.</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Opsional. Centang "Isi manual" jika ada pembayaran awal.</div>
               </div>
               <div v-else class="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
                 <div class="text-xs text-gray-600 dark:text-gray-400">Info Pembayaran (gunakan tombol Bayar)</div>
@@ -2534,15 +2536,16 @@ watch(() => invoiceFilterType.value, () => {
                 <div class="text-sm font-medium text-orange-600">Sisa: {{ formatRupiah(Math.max(0, calcTotal() - existingPaidAmount)) }}</div>
               </div>
               <div v-if="!editingId">
-                <label class="block text-sm font-medium mb-1">Status</label>
+                <label class="block text-sm font-medium mb-1 dark:text-gray-200">Status</label>
                 <select
                   v-model="createPaymentType"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
                 >
                   <option value="CASH_BALI">Cash Bali</option>
                   <option value="CASH_JAKARTA">Cash Jakarta</option>
                   <option value="TF_BALI">Tf Bali</option>
                   <option value="TF_JAKARTA">Tf Jakarta</option>
+                  <option value="TRANSFER_ALI">Transfer Ali</option>
                   <option value="CICILAN">Cicilan</option>
                 </select>
               </div>
@@ -2578,7 +2581,7 @@ watch(() => invoiceFilterType.value, () => {
           <div v-if="!editingId && addInvoiceTab === 'unpaid'">
             <div class="flex flex-wrap items-start justify-between gap-3 mb-2">
               <div class="space-y-1">
-                <label class="block text-sm font-medium">Daftar SPB yang belum dibayar</label>
+                <label class="block text-sm font-medium dark:text-gray-200">Daftar SPB yang belum dibayar</label>
                 <div v-if="!editingId && allUnpaidShipments.length > 0" class="text-xs text-gray-500 mt-1 space-x-1">
                   <span>Total {{ allUnpaidShipments.length }} SPB belum dibayar.</span>
                   <span v-if="form.customer_name">Filter: {{ getFilteredUnpaidShipments().length }} SPB untuk "{{ form.customer_name }}"</span>
@@ -2591,14 +2594,14 @@ watch(() => invoiceFilterType.value, () => {
                 <input
                   v-model="spbSearch"
                   type="text"
-                  class="w-full sm:w-64 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  class="w-full sm:w-64 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
                   placeholder="Cari: SPB, AWB, Kota, Penerima, Pengirim"
                   :disabled="loadingUnpaidShipments"
                 >
               </div>
             </div>
             <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
-              <div class="flex items-center gap-3 text-xs text-gray-600">
+              <div class="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-300">
                 <label class="flex items-center gap-2">
                   <input type="checkbox" v-model="showUnreturnedOnly" class="h-3 w-3" />
                   Hanya tampilkan SJ belum balik
@@ -2607,7 +2610,7 @@ watch(() => invoiceFilterType.value, () => {
               <div class="flex gap-2">
                 <button
                   type="button"
-                  class="px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded text-xs"
+                  class="px-3 py-1 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded text-xs"
                   @click="selectAllFiltered"
                   :disabled="getFilteredUnpaidShipments().length === 0"
                 >
@@ -2615,7 +2618,7 @@ watch(() => invoiceFilterType.value, () => {
                 </button>
                 <button
                   type="button"
-                  class="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-xs"
+                  class="px-3 py-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded text-xs"
                   @click="deselectAll"
                   :disabled="selectedShipmentIds.size === 0"
                 >
@@ -2623,21 +2626,21 @@ watch(() => invoiceFilterType.value, () => {
                 </button>
               </div>
             </div>
-            <div v-if="loadingUnpaidShipments" class="text-center py-4 text-gray-500">
+            <div v-if="loadingUnpaidShipments" class="text-center py-4 text-gray-500 dark:text-gray-400">
               <span class="animate-pulse">Memuat SPB yang belum dibayar...</span>
             </div>
-            <div v-else-if="allUnpaidShipments.length === 0" class="text-center py-4 text-gray-400">
+            <div v-else-if="allUnpaidShipments.length === 0" class="text-center py-4 text-gray-400 dark:text-gray-500">
               Tidak ada SPB yang belum dibayar
             </div>
-            <div v-else-if="form.customer_name && getFilteredUnpaidShipments().length === 0" class="text-center py-4 text-gray-400">
+            <div v-else-if="form.customer_name && getFilteredUnpaidShipments().length === 0" class="text-center py-4 text-gray-400 dark:text-gray-500">
               Tidak ada SPB belum dibayar untuk customer ini
             </div>
-            <div v-else-if="selectedDblNumber && getFilteredUnpaidShipments().length === 0" class="text-center py-4 text-gray-400">
+            <div v-else-if="selectedDblNumber && getFilteredUnpaidShipments().length === 0" class="text-center py-4 text-gray-400 dark:text-gray-500">
               Tidak ada SPB untuk DBL ini
             </div>
             <div v-else class="overflow-x-auto max-h-[45vh] overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
-              <table class="w-full text-sm">
-                <thead class="bg-gray-50 sticky top-0">
+              <table class="w-full text-sm dark:text-gray-100">
+                <thead class="bg-gray-50 dark:bg-gray-700 sticky top-0">
                   <tr>
                     <th class="px-2 py-2 text-center text-xs font-medium w-10"></th>
                     <th class="px-2 py-2 text-left text-xs font-medium">No. SPB / RESI</th>
@@ -2653,8 +2656,8 @@ watch(() => invoiceFilterType.value, () => {
                   <tr
                     v-for="(it, idx) in getFilteredUnpaidShipments()"
                     :key="`shipment-${it.id}-${idx}`"
-                    class="border-t hover:bg-gray-50 cursor-pointer"
-                    :class="{ 'bg-blue-50': selectedShipmentIds.has(it.shipment_id!) }"
+                    class="border-t dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+                    :class="{ 'bg-blue-50 dark:bg-blue-900/20': selectedShipmentIds.has(it.shipment_id!) }"
                     @click="toggleShipmentSelection(it.shipment_id!)"
                   >
                     <td class="px-2 py-2 text-center">
@@ -2668,8 +2671,8 @@ watch(() => invoiceFilterType.value, () => {
                     <td class="px-2 py-2">
                       <div class="text-xs font-mono">
                         <div>{{ it.spb_number || '-' }}</div>
-                        <div class="text-gray-500">{{ it.tracking_code || '-' }}</div>
-                    <div v-if="it.dbl_number" class="text-gray-500">
+                        <div class="text-gray-500 dark:text-gray-400">{{ it.tracking_code || '-' }}</div>
+                    <div v-if="it.dbl_number" class="text-gray-500 dark:text-gray-400">
                           DBL: {{ it.dbl_number.startsWith('DBL') ? it.dbl_number : `DBL ${it.dbl_number}` }}
                           <span v-if="it.driver_name" class="font-normal">| {{ it.driver_name }}</span>
                         </div>
@@ -2683,7 +2686,7 @@ watch(() => invoiceFilterType.value, () => {
                     <td class="px-2 py-2">
                       <div class="text-xs">
                         <div>{{ it.recipient_name || '-' }}</div>
-                        <div class="text-gray-500">{{ it.destination_city || '-' }}</div>
+                        <div class="text-gray-500 dark:text-gray-400">{{ it.destination_city || '-' }}</div>
                       </div>
                     </td>
                     <td class="px-2 py-2 text-center">
@@ -2700,13 +2703,13 @@ watch(() => invoiceFilterType.value, () => {
             </div>
           </div>
           <div v-if="!editingId && addInvoiceTab === 'selected'">
-            <label class="block text-sm font-medium mb-2">SPB Terpilih ({{ items.length }})</label>
-            <div v-if="items.length === 0" class="text-center py-6 text-sm text-gray-400">
+            <label class="block text-sm font-medium mb-2 dark:text-gray-200">SPB Terpilih ({{ items.length }})</label>
+            <div v-if="items.length === 0" class="text-center py-6 text-sm text-gray-400 dark:text-gray-500">
               Belum ada SPB terpilih. Pilih dari tab "SPB Belum Dibayar".
             </div>
             <div v-else class="overflow-x-auto max-h-[45vh] overflow-y-auto">
-              <table class="w-full text-sm">
-                <thead class="bg-green-50">
+              <table class="w-full text-sm dark:text-gray-100">
+                <thead class="bg-green-50 dark:bg-green-900/20">
                   <tr>
                     <th class="px-2 py-2 text-left text-xs font-medium">No. SPB / RESI</th>
                     <th class="px-2 py-2 text-left text-xs font-medium">Customer</th>
@@ -2730,8 +2733,8 @@ watch(() => invoiceFilterType.value, () => {
                     <td class="px-2 py-2">
                       <div class="text-xs font-mono">
                         <div>{{ it.spb_number || '-' }}</div>
-                        <div class="text-gray-500">{{ it.tracking_code || '-' }}</div>
-                    <div v-if="it.dbl_number" class="text-gray-500">
+                        <div class="text-gray-500 dark:text-gray-400">{{ it.tracking_code || '-' }}</div>
+                    <div v-if="it.dbl_number" class="text-gray-500 dark:text-gray-400">
                           DBL: {{ it.dbl_number.startsWith('DBL') ? it.dbl_number : `DBL ${it.dbl_number}` }}
                           <span v-if="it.driver_name" class="font-normal">| {{ it.driver_name }}</span>
                         </div>
@@ -2744,7 +2747,7 @@ watch(() => invoiceFilterType.value, () => {
                     <td class="px-2 py-2">
                       <div class="text-xs">
                         <div>{{ it.recipient_name || '-' }}</div>
-                        <div class="text-gray-500">{{ it.destination_city || '-' }}</div>
+                        <div class="text-gray-500 dark:text-gray-400">{{ it.destination_city || '-' }}</div>
                       </div>
                     </td>
                     <td class="px-2 py-2 text-center">
@@ -2760,7 +2763,7 @@ watch(() => invoiceFilterType.value, () => {
                         v-model.number="it.other_fee"
                         type="number"
                         min="0"
-                        class="w-24 px-2 py-1 border border-gray-300 rounded"
+                        class="w-24 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-gray-100"
                       />
                     </td>
                     <td class="px-2 py-2 text-right text-xs text-red-600">
@@ -2775,10 +2778,10 @@ watch(() => invoiceFilterType.value, () => {
             </div>
           </div>
           <div v-if="editingId">
-            <label class="block text-sm font-medium mb-2">Daftar SPB</label>
+            <label class="block text-sm font-medium mb-2 dark:text-gray-200">Daftar SPB</label>
             <div class="overflow-x-auto">
-              <table class="w-full text-sm">
-                <thead class="bg-gray-50">
+              <table class="w-full text-sm dark:text-gray-100">
+                <thead class="bg-gray-50 dark:bg-gray-700">
                   <tr>
                     <th class="px-2 py-2 text-left text-xs font-medium">No. SPB / RESI</th>
                     <th class="px-2 py-2 text-left text-xs font-medium">Customer</th>
@@ -2802,8 +2805,8 @@ watch(() => invoiceFilterType.value, () => {
                     <td class="px-2 py-2">
                       <div class="text-xs font-mono">
                         <div>{{ it.spb_number || '-' }}</div>
-                        <div class="text-gray-500">{{ it.tracking_code || '-' }}</div>
-                    <div v-if="it.dbl_number" class="text-gray-500">
+                        <div class="text-gray-500 dark:text-gray-400">{{ it.tracking_code || '-' }}</div>
+                    <div v-if="it.dbl_number" class="text-gray-500 dark:text-gray-400">
                           DBL: {{ it.dbl_number.startsWith('DBL') ? it.dbl_number : `DBL ${it.dbl_number}` }}
                           <span v-if="it.driver_name" class="font-normal">| {{ it.driver_name }}</span>
                         </div>
@@ -2816,7 +2819,7 @@ watch(() => invoiceFilterType.value, () => {
                     <td class="px-2 py-2">
                       <div class="text-xs">
                         <div>{{ it.recipient_name || '-' }}</div>
-                        <div class="text-gray-500">{{ it.destination_city || '-' }}</div>
+                        <div class="text-gray-500 dark:text-gray-400">{{ it.destination_city || '-' }}</div>
                       </div>
                     </td>
                     <td class="px-2 py-2 text-center">
@@ -2832,7 +2835,7 @@ watch(() => invoiceFilterType.value, () => {
                         v-model.number="it.other_fee"
                         type="number"
                         min="0"
-                        class="w-24 px-2 py-1 border border-gray-300 rounded"
+                        class="w-24 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-gray-100"
                       />
                     </td>
                     <td class="px-2 py-2 text-right text-xs text-red-600">
@@ -3001,6 +3004,7 @@ watch(() => invoiceFilterType.value, () => {
                     <label class="block text-sm font-medium mb-1 dark:text-gray-300">Metode</label>
                     <select v-model="paymentForm.payment_method" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100">
                       <option value="TRANSFER">Transfer</option>
+                      <option value="TRANSFER ALI">Transfer Ali</option>
                       <option value="CASH">Cash</option>
                       <option value="GIRO">Giro</option>
                       <option value="CHEQUE">Cheque</option>

@@ -1249,7 +1249,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="p-4 md:p-6 max-w-7xl mx-auto">
+  <div class="p-4 md:p-6 max-w-7xl mx-auto dark:text-gray-100">
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 mb-6">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
@@ -1296,7 +1296,7 @@ onMounted(() => {
               v-model="searchQuery"
               type="text"
               placeholder="Cari SPB, Resi, Pengirim, Penerima, Tujuan..."
-              class="w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-gray-700 dark:border-gray-600"
+              class="w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-400"
             />
           </div>
           <div v-if="filteredShipments.length > 0" class="flex gap-3 items-center">
@@ -1429,7 +1429,7 @@ onMounted(() => {
               v-model="dblSearchQuery"
               type="text"
               placeholder="Cari No. DBL, Plat Kendaraan, Sopir, Tujuan..."
-              class="w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-gray-700 dark:border-gray-600"
+              class="w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-400"
             />
           </div>
           <div v-if="filteredDBL.length > 0" class="flex gap-3 items-center">

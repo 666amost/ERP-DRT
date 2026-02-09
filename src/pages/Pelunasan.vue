@@ -33,19 +33,21 @@ function normalizeMethod(value?: string | null): string {
   return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-const methodColumns = ['CASH BALI', 'CASH JAKARTA', 'TF BALI', 'TF JAKARTA'] as const;
+const methodColumns = ['CASH BALI', 'CASH JAKARTA', 'TF BALI', 'TF JAKARTA', 'TRANSFER ALI'] as const;
 type MethodColumn = (typeof methodColumns)[number];
 const methodColumnSet = new Set<string>(methodColumns);
 const methodColumnLabels: Record<MethodColumn, string> = {
   'CASH BALI': 'Cash Bali',
   'CASH JAKARTA': 'Cash Jakarta',
   'TF BALI': 'TF Bali',
-  'TF JAKARTA': 'TF Jakarta'
+  'TF JAKARTA': 'TF Jakarta',
+  'TRANSFER ALI': 'TF Ali'
 };
 
 function canonicalMethod(method: string | null): string {
   const m = String(method || '').trim().toUpperCase();
   if (!m) return '';
+  if (m === 'TRANSFER ALI') return 'TRANSFER ALI';
   if (m === 'CASH') return 'CASH JAKARTA';
   if (m === 'TF' || m === 'TRANSFER') return 'TF JAKARTA';
   return m;
@@ -76,6 +78,7 @@ const methodOptions = computed(() => [
   'CASH JAKARTA',
   'TF BALI',
   'TF JAKARTA',
+  'TRANSFER ALI',
   'CICILAN'
 ]);
 
@@ -320,12 +323,12 @@ onMounted(() => {
             <thead class="bg-gray-50 dark:bg-gray-700 border-b">
               <tr>
                 <th class="px-2 py-2 text-left w-10">No</th>
-                <th class="px-2 py-2 text-left">Invoice / Customer</th>
-                <th class="px-2 py-2 text-right w-28">
+                <th class="px-2 py-2 text-left w-40">Invoice / Customer</th>
+                <th class="px-2 py-2 text-right w-24">
                   <div class="font-medium">Bayar</div>
                   <div class="text-[10px] leading-3 text-gray-500 dark:text-gray-400 font-normal">Total</div>
                 </th>
-                <th v-for="m in methodColumns" :key="m" class="px-1 py-2 text-right w-24 text-[11px] leading-4">
+                <th v-for="m in methodColumns" :key="m" class="px-1 py-2 text-center w-20 text-[11px] leading-4">
                   {{ methodColumnLabels[m] }}
                 </th>
                 <th class="px-2 py-2 text-left w-24">Tanggal</th>

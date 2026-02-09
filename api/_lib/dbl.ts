@@ -190,7 +190,7 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
       const items = await sql`
         select di.*, s.spb_number, s.pengirim_name, s.penerima_name, s.macam_barang, 
                s.qty, s.satuan, coalesce(s.nominal, 0)::float as nominal,
-               s.customer_name, s.destination
+               s.customer_name, s.destination, s.eta
         from dbl_items di
         join shipments s on s.id = di.shipment_id
         where di.dbl_id = ${parseInt(id)}
@@ -394,7 +394,7 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
                s.spb_number, s.public_code, s.pengirim_name, s.penerima_name, s.penerima_phone, s.macam_barang,
                s.qty, s.satuan, s.berat, coalesce(s.nominal, 0)::float as nominal,
                coalesce(s.sj_returned, false) as sj_returned, s.sj_returned_at,
-               s.customer_id, s.customer_name, s.destination, s.origin, s.total_colli, s.status, s.created_at, s.invoice_generated
+               s.customer_id, s.customer_name, s.destination, s.origin, s.total_colli, s.status, s.created_at, s.invoice_generated, s.eta
         from dbl_items di
         join shipments s on s.id = di.shipment_id
         where di.dbl_id = ${parseInt(dblId)}
@@ -435,7 +435,7 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
         select di.shipment_id as id, di.urutan, di.dbl_id,
                s.spb_number, s.public_code as tracking_code, s.pengirim_name as sender_name, s.penerima_name as recipient_name, s.penerima_phone as recipient_phone, s.macam_barang as description,
                s.qty, s.satuan, s.berat as total_weight, coalesce(s.nominal, 0)::float as nominal,
-               s.customer_name, s.destination as destination_city, s.origin as origin_city, s.total_colli, s.status, s.created_at
+               s.customer_name, s.destination as destination_city, s.origin as origin_city, s.total_colli, s.status, s.created_at, s.eta
         from dbl_items di
         join shipments s on s.id = di.shipment_id
         where di.dbl_id = ${body.dbl_id}

@@ -779,7 +779,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             'CASH BALI',
             'CASH JAKARTA',
             'TF BALI',
-            'TF JAKARTA'
+            'TF JAKARTA',
+            'TRANSFER ALI'
           ]);
           const paymentMethod = allowedMethods.has(methodRaw) ? methodRaw : 'TRANSFER';
           const paymentNotes =

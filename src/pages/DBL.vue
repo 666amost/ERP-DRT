@@ -670,7 +670,7 @@ onMounted(async () => {
                 <th class="px-3 py-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">Jumlah Resi</th>
                 <th class="px-3 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Total Nominal</th>
                 <th class="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Status</th>
-                <th class="px-3 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Actions</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-600 dark:text-gray-300">Aksi</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
@@ -694,20 +694,27 @@ onMounted(async () => {
                     {{ statusOptions.find(o => o.value === dbl.status)?.label || dbl.status }}
                   </Badge>
                 </td>
-                <td class="px-3 py-2 text-right space-x-1">
-                  <Button variant="success" class="px-2 py-1 h-7 text-xs" @click="openShipmentModal(dbl)">Resi</Button>
-                  <Button variant="warning" class="px-2 py-1 h-7 text-xs" @click="printDaftarMuat(dbl)">Print</Button>
-                  <Button variant="info" class="px-2 py-1 h-7 text-xs" @click="exportDaftarMuatExcel(dbl)">Excel</Button>
-                  <Button v-if="permissions.canViewKeuangan" variant="info" class="px-2 py-1 h-7 text-xs" @click="openInvoiceModal(dbl)">Invoice</Button>
-                  <Button variant="primary" class="px-2 py-1 h-7 text-xs" @click="openEditModal(dbl)">Edit</Button>
-                  <Button 
-                    variant="danger" 
-                    class="px-2 py-1 h-7 text-xs" 
-                    @click="deleteDBL(dbl)"
-                    :disabled="deletingId === dbl.id"
-                  >
-                    {{ deletingId === dbl.id ? '...' : 'Hapus' }}
-                  </Button>
+                <td class="px-3 py-2">
+                  <div class="flex flex-col items-end gap-1">
+                    <div class="flex flex-wrap justify-end gap-1">
+                      <Button variant="success" class="px-2 py-1 h-7 text-xs" title="Kelola resi DBL" @click="openShipmentModal(dbl)">Resi</Button>
+                      <Button variant="warning" class="px-2 py-1 h-7 text-xs" title="Print daftar muatan" @click="printDaftarMuat(dbl)">Print</Button>
+                      <Button variant="info" class="px-2 py-1 h-7 text-xs" title="Export Excel daftar muatan" @click="exportDaftarMuatExcel(dbl)">Excel</Button>
+                    </div>
+                    <div class="flex flex-wrap justify-end gap-1">
+                      <Button v-if="permissions.canViewKeuangan" variant="secondary" class="px-2 py-1 h-7 text-xs" title="Generate invoice dari DBL" @click="openInvoiceModal(dbl)">Invoice</Button>
+                      <Button variant="primary" class="px-2 py-1 h-7 text-xs" title="Edit data DBL" @click="openEditModal(dbl)">Edit</Button>
+                      <Button 
+                        variant="danger" 
+                        class="px-2 py-1 h-7 text-xs" 
+                        title="Hapus DBL"
+                        @click="deleteDBL(dbl)"
+                        :disabled="deletingId === dbl.id"
+                      >
+                        {{ deletingId === dbl.id ? '...' : 'Hapus' }}
+                      </Button>
+                    </div>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -749,21 +756,24 @@ onMounted(async () => {
               <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">{{ formatRupiah(dbl.total_nominal || 0) }}</span>
             </div>
           </div>
-          <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 grid grid-cols-2 gap-2">
-            <Button block variant="success" @click="openShipmentModal(dbl)">Resi</Button>
-            <Button block variant="warning" @click="printDaftarMuat(dbl)">Print</Button>
-            <Button block variant="info" @click="exportDaftarMuatExcel(dbl)">Excel</Button>
-            <Button v-if="permissions.canViewKeuangan" block variant="info" @click="openInvoiceModal(dbl)">Invoice</Button>
-            <Button block variant="primary" @click="openEditModal(dbl)">Edit</Button>
-            <Button 
-              block 
-              variant="danger" 
-              class="col-span-2" 
-              @click="deleteDBL(dbl)"
-              :disabled="deletingId === dbl.id"
-            >
-              {{ deletingId === dbl.id ? 'Menghapus...' : 'Hapus' }}
-            </Button>
+          <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 space-y-2">
+            <div class="grid grid-cols-3 gap-2">
+              <Button block variant="success" @click="openShipmentModal(dbl)">Resi</Button>
+              <Button block variant="warning" @click="printDaftarMuat(dbl)">Print</Button>
+              <Button block variant="info" @click="exportDaftarMuatExcel(dbl)">Excel</Button>
+            </div>
+            <div :class="['grid gap-2', permissions.canViewKeuangan ? 'grid-cols-3' : 'grid-cols-2']">
+              <Button v-if="permissions.canViewKeuangan" block variant="secondary" @click="openInvoiceModal(dbl)">Invoice</Button>
+              <Button block variant="primary" @click="openEditModal(dbl)">Edit</Button>
+              <Button 
+                block 
+                variant="danger" 
+                @click="deleteDBL(dbl)"
+                :disabled="deletingId === dbl.id"
+              >
+                {{ deletingId === dbl.id ? 'Menghapus...' : 'Hapus' }}
+              </Button>
+            </div>
           </div>
         </div>
       </div>

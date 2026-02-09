@@ -6,12 +6,13 @@ import { readJsonNode, writeJson } from './_lib/http.js';
 
 type Customer = { id: number; name: string; pengirim_name?: string | null; phone: string | null; address?: string | null };
 type CreateCustomerBody = { name: string; pengirim_name?: string; phone?: string; address?: string };
+type UpdateCustomerBody = { id: number; name: string; pengirim_name?: string; phone?: string; address?: string };
 
 const ErrorCode = { Validation: 'validation', Duplicate: 'duplicate' } as const;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
   'Access-Control-Allow-Credentials': 'true'
 };
@@ -64,6 +65,44 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     } catch (e: any) {
       if (e.code === '23505') { writeJson(res, { error: 'Customer sudah ada', code: ErrorCode.Duplicate }, 409); return; }
       writeJson(res, { error: 'Gagal create customer' }, 500);
+      return;
+    }
+  } else if (endpoint === 'update' && req.method === 'PUT') {
+    let body: UpdateCustomerBody;
+    try { body = (await readJsonNode(req)) as UpdateCustomerBody; } catch { body = null as any; }
+    if (!body) { writeJson(res, { error: 'Invalid JSON' }, 400); return; }
+    if (!body.id) { writeJson(res, { error: 'ID customer wajib', code: ErrorCode.Validation }, 400); return; }
+    if (!body.name || body.name.trim().length < 2) { writeJson(res, { error: 'Nama customer wajib', code: ErrorCode.Validation }, 400); return; }
+    const name = body.name.trim();
+    try {
+      const rows = await sql`
+        update customers 
+        set name = ${name}, 
+            pengirim_name = ${body.pengirim_name || null}, 
+            phone = ${body.phone || null}, 
+            address = ${body.address || null}
+        where id = ${body.id}
+        returning id, name, pengirim_name, phone, address
+      ` as [Customer];
+      if (!rows.length) { writeJson(res, { error: 'Customer tidak ditemukan' }, 404); return; }
+      writeJson(res, rows[0]);
+      return;
+    } catch (e: any) {
+      if (e.code === '23505') { writeJson(res, { error: 'Customer sudah ada', code: ErrorCode.Duplicate }, 409); return; }
+      writeJson(res, { error: 'Gagal update customer' }, 500);
+      return;
+    }
+  } else if (endpoint === 'delete' && req.method === 'DELETE') {
+    const id = url.searchParams.get('id');
+    if (!id || isNaN(parseInt(id))) { writeJson(res, { error: 'ID customer tidak valid' }, 400); return; }
+    try {
+      const rows = await sql`delete from customers where id = ${parseInt(id)} returning id` as [{ id: number }];
+      if (!rows.length) { writeJson(res, { error: 'Customer tidak ditemukan' }, 404); return; }
+      writeJson(res, { success: true });
+      return;
+    } catch (e: any) {
+      if (e.code === '23503') { writeJson(res, { error: 'Customer tidak bisa dihapus, masih digunakan di shipment' }, 409); return; }
+      writeJson(res, { error: 'Gagal hapus customer' }, 500);
       return;
     }
   } else {

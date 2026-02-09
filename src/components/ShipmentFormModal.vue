@@ -65,16 +65,18 @@ const saving = ref(false);
 
 const showCustomerPicker = ref(false);
 const showAddCustomerForm = ref(false);
-const customerList = ref<{ id: number; name: string; phone: string | null; address: string | null }[]>([]);
-const frequentCustomers = ref<{ id: number; name: string; phone: string | null; address: string | null }[]>([]);
+const customerList = ref<{ id: number; name: string; pengirim_name?: string | null; phone?: string | null; address?: string | null }[]>([]);
+const frequentCustomers = ref<{ id: number; name: string; pengirim_name?: string | null; phone?: string | null; address?: string | null }[]>([]);
 const customerSearch = ref('');
 const newCustomerForm = ref({
+  id: null as number | null,
   name: '',
   pengirim_name: '',
   phone: '',
   address: ''
 });
 const isCreatingCustomer = ref(false);
+const isEditingCustomer = computed(() => newCustomerForm.value.id !== null);
 
 const isEdit = computed(() => !!props.shipment);
 
@@ -197,7 +199,7 @@ function resetCustomerState() {
   customerSearch.value = '';
   showAddCustomerForm.value = false;
   showCustomerPicker.value = false;
-  newCustomerForm.value = { name: '', pengirim_name: '', phone: '', address: '' };
+  newCustomerForm.value = { id: null, name: '', pengirim_name: '', phone: '', address: '' };
 }
 
 function resetForm(shipment: Shipment | null) {
@@ -317,10 +319,12 @@ async function createNewCustomer() {
 
   isCreatingCustomer.value = true;
   try {
-    const res = await fetch('/api/customers?endpoint=create', {
-      method: 'POST',
+    const isEdit = newCustomerForm.value.id !== null;
+    const res = await fetch(`/api/customers?endpoint=${isEdit ? 'update' : 'create'}`, {
+      method: isEdit ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        ...(isEdit && { id: newCustomerForm.value.id }),
         name: newCustomerForm.value.name.trim(),
         pengirim_name: newCustomerForm.value.pengirim_name.trim() || undefined,
         phone: newCustomerForm.value.phone.trim() || undefined,
@@ -330,34 +334,69 @@ async function createNewCustomer() {
 
     if (!res.ok) {
       const error = await res.json();
-      alert(error.error || 'Gagal membuat customer');
+      alert(error.error || `Gagal ${isEdit ? 'update' : 'membuat'} customer`);
       return;
     }
 
-    const newCustomer = await res.json();
-    newCustomerForm.value = { name: '', pengirim_name: '', phone: '', address: '' };
+    const savedCustomer = await res.json();
+    newCustomerForm.value = { id: null, name: '', pengirim_name: '', phone: '', address: '' };
     showAddCustomerForm.value = false;
 
     await loadCustomerList();
     await loadFrequentCustomers();
 
-    importCustomer(newCustomer);
+    if (!isEdit) {
+      importCustomer(savedCustomer);
+    }
   } catch (e) {
-    console.error('Error creating customer:', e);
-    alert('Gagal membuat customer');
+    console.error('Error saving customer:', e);
+    alert('Gagal menyimpan customer');
   } finally {
     isCreatingCustomer.value = false;
   }
 }
 
-function importCustomer(c: { id: number; name: string; pengirim_name?: string | null; phone: string | null; address: string | null }) {
+function importCustomer(c: { id: number; name: string; pengirim_name?: string | null; phone?: string | null; address?: string | null }) {
   form.value.customer_id = c.id;
   form.value.customer_name = c.name;
-  form.value.customer_address = c.address || '';
   form.value.pengirim_name = c.pengirim_name || '';
   form.value.penerima_name = c.name;
   form.value.penerima_phone = c.phone || '';
+  form.value.customer_address = c.address || '';
+  
+  delete validationErrors.value.customer_name;
+  delete validationErrors.value.penerima_name;
+  
   showCustomerPicker.value = false;
+}
+
+function editCustomer(c: { id: number; name: string; pengirim_name?: string | null; phone?: string | null; address?: string | null }) {
+  newCustomerForm.value = {
+    id: c.id,
+    name: c.name,
+    pengirim_name: c.pengirim_name || '',
+    phone: c.phone || '',
+    address: c.address || ''
+  };
+  showAddCustomerForm.value = true;
+}
+
+async function deleteCustomer(c: { id: number; name: string }) {
+  if (!confirm(`Yakin ingin menghapus customer "${c.name}"?`)) return;
+  
+  try {
+    const res = await fetch(`/api/customers?endpoint=delete&id=${c.id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const error = await res.json();
+      alert(error.error || 'Gagal menghapus customer');
+      return;
+    }
+    await loadCustomerList();
+    await loadFrequentCustomers();
+  } catch (e) {
+    console.error('Error deleting customer:', e);
+    alert('Gagal menghapus customer');
+  }
 }
 
 function closeModal() {
@@ -471,17 +510,17 @@ onMounted(() => {
     class="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center z-50 pt-4 px-4 pb-[60px] lg:p-4"
     @click.self="closeModal"
   >
-    <div class="bg-white rounded-xl w-full max-w-2xl card flex flex-col h-[calc(100vh-60px)] lg:max-h-[90vh]">
-      <div class="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 z-10">
+    <div class="bg-white dark:bg-gray-900 rounded-xl w-full max-w-2xl card flex flex-col h-[calc(100vh-60px)] lg:max-h-[90vh] dark:text-gray-100">
+      <div class="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-4 py-3 z-10">
         <h3 class="text-base font-semibold">{{ isEdit ? 'Edit SPB' : 'Tambah SPB Baru' }}</h3>
       </div>
       <div class="px-4 py-3 overflow-auto flex-1 space-y-1.5">
         <div>
-          <label class="block text-sm font-medium mb-1">No. SPB / Resi</label>
+          <label class="block text-sm font-medium mb-1 dark:text-gray-200">No. SPB / Resi</label>
           <input
             v-model="form.spb_number"
             type="text"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-400"
             placeholder="Nomor SPB/Resi (input manual)"
           />
         </div>
@@ -495,51 +534,51 @@ onMounted(() => {
           Pilih / Tambah Customer
         </button>
 
-        <div class="bg-gray-50 rounded-lg p-2.5 space-y-1.5">
-          <div class="text-xs font-medium text-gray-700">Data Penerima & Penagihan</div>
+        <div class="bg-gray-50 dark:bg-gray-800/60 rounded-lg p-2.5 space-y-1.5">
+          <div class="text-xs font-medium text-gray-700 dark:text-gray-300">Data Penerima & Penagihan</div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
             <div>
-              <label class="block text-xs font-medium mb-0.5">Nama Pengirim</label>
+              <label class="block text-xs font-medium mb-0.5 dark:text-gray-300">Nama Pengirim</label>
               <input
                 v-model="form.pengirim_name"
                 type="text"
-                class="w-full px-2 py-1 border border-gray-300 rounded-lg bg-white text-xs"
+                class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-xs dark:text-gray-100 dark:placeholder-gray-400"
                 placeholder="Nama pengirim"
               />
             </div>
             <div>
-              <label class="block text-xs font-medium mb-0.5">Nama Penerima / Customer</label>
+              <label class="block text-xs font-medium mb-0.5 dark:text-gray-300">Nama Penerima / Customer</label>
               <input
                 v-model="form.penerima_name"
                 type="text"
-                class="w-full px-2 py-1 border border-gray-300 rounded-lg bg-white text-xs"
+                class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-xs dark:text-gray-100 dark:placeholder-gray-400"
                 placeholder="Nama penerima (juga untuk penagihan)"
               />
             </div>
           </div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
             <div>
-              <label class="block text-xs font-medium mb-0.5">No. Telepon Penerima</label>
+              <label class="block text-xs font-medium mb-0.5 dark:text-gray-300">No. Telepon Penerima</label>
               <input
                 v-model="form.penerima_phone"
                 type="text"
-                class="w-full px-2 py-1 border border-gray-300 rounded-lg bg-white text-xs"
+                class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-xs dark:text-gray-100 dark:placeholder-gray-400"
                 placeholder="Nomor telepon penerima"
               />
             </div>
             <div>
-              <label class="block text-xs font-medium mb-0.5">Alamat Penerima</label>
+              <label class="block text-xs font-medium mb-0.5 dark:text-gray-300">Alamat Penerima</label>
               <input
                 v-model="form.customer_address"
                 type="text"
-                class="w-full px-2 py-1 border border-gray-300 rounded-lg bg-white text-xs"
+                class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-xs dark:text-gray-100 dark:placeholder-gray-400"
                 placeholder="Alamat lengkap penerima"
               />
             </div>
           </div>
         </div>
 
-        <h3 class="text-xs font-semibold uppercase text-gray-600 mt-2 mb-1.5">Rute & Detail Barang</h3>
+        <h3 class="text-xs font-semibold uppercase text-gray-600 dark:text-gray-400 mt-2 mb-1.5">Rute & Detail Barang</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
           <div>
             <CityAutocomplete v-model="form.origin" label="Kota Asal" placeholder="Kota asal" />
@@ -552,31 +591,31 @@ onMounted(() => {
         </div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
           <div>
-            <label class="block text-sm font-medium mb-1">Macam Barang</label>
+            <label class="block text-sm font-medium mb-1 dark:text-gray-200">Macam Barang</label>
             <input
               v-model="form.macam_barang"
               type="text"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-400"
               placeholder="Jenis barang"
             />
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">Berat (KG/M3)</label>
+            <label class="block text-sm font-medium mb-1 dark:text-gray-200">Berat (KG/M3)</label>
             <input
               v-model="form.berat"
               type="text"
               inputmode="decimal"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-400"
               placeholder="0"
               @focus="($event.target as HTMLInputElement).select()"
               @blur="onBeratBlur"
             />
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">Satuan</label>
+            <label class="block text-sm font-medium mb-1 dark:text-gray-200">Satuan</label>
             <select
               v-model="form.satuan"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-gray-100"
             >
               <option value="KG">KG</option>
               <option value="M3">M3</option>
@@ -586,53 +625,53 @@ onMounted(() => {
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">Nominal (Rp)</label>
+            <label class="block text-sm font-medium mb-1 dark:text-gray-200">Nominal (Rp)</label>
             <input
               v-model="form.nominal"
               type="number"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-400"
               placeholder="0"
               @focus="($event.target as HTMLInputElement).select()"
             />
           </div>
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Total Colli</label>
+          <label class="block text-sm font-medium mb-1 dark:text-gray-200">Total Colli</label>
           <input
             v-model="form.total_colli"
             type="number"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-400"
             placeholder="10"
             @focus="($event.target as HTMLInputElement).select()"
           />
           <p v-if="validationErrors.total_colli" class="text-red-600 text-xs mt-1">{{ validationErrors.total_colli }}</p>
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Keterangan</label>
+          <label class="block text-sm font-medium mb-1 dark:text-gray-200">Keterangan</label>
           <textarea
             v-model="form.keterangan"
             rows="2"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-400"
             placeholder="Catatan tambahan"
           ></textarea>
         </div>
 
-        <h3 class="text-lg font-semibold border-b pb-2 mb-4 mt-6">Info Pengiriman</h3>
+        <h3 class="text-lg font-semibold border-b border-gray-200 dark:border-gray-700 pb-2 mb-4 mt-6 dark:text-gray-100">Info Pengiriman</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label class="block text-sm font-medium mb-1">ETA</label>
+            <label class="block text-sm font-medium mb-1 dark:text-gray-200">ETA</label>
             <input
               v-model="form.eta"
               type="date"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-gray-100"
             >
             <p v-if="validationErrors.eta" class="text-red-600 text-xs mt-1">{{ validationErrors.eta }}</p>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">Jenis Layanan</label>
+            <label class="block text-sm font-medium mb-1 dark:text-gray-200">Jenis Layanan</label>
             <select
               v-model="form.service_type"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-gray-100"
             >
               <option value="REG">REG</option>
               <option value="CARGO">CARGO</option>
@@ -641,10 +680,10 @@ onMounted(() => {
           </div>
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Status</label>
+          <label class="block text-sm font-medium mb-1 dark:text-gray-200">Status</label>
           <select
             v-model="form.status"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-gray-100"
           >
             <option
               v-for="opt in statusOptions"
@@ -657,10 +696,10 @@ onMounted(() => {
           <p v-if="validationErrors.status" class="text-red-600 text-xs mt-1">{{ validationErrors.status }}</p>
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Jenis</label>
+          <label class="block text-sm font-medium mb-1 dark:text-gray-200">Jenis</label>
           <select
             v-model="form.jenis"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-gray-100"
           >
             <option
               v-for="opt in jenisOptions"
@@ -681,11 +720,11 @@ onMounted(() => {
           >
           <label
             for="regen"
-            class="text-xs text-gray-600 select-none"
+            class="text-xs text-gray-600 dark:text-gray-400 select-none"
           >Regenerate kode tracking jika origin/dest/plat berubah</label>
         </div>
       </div>
-      <div class="flex gap-2 justify-end border-t border-gray-100 dark:border-gray-800 p-4 bg-white">
+      <div class="flex gap-2 justify-end border-t border-gray-100 dark:border-gray-800 p-4 bg-white dark:bg-gray-900">
         <Button
           variant="default"
           @click="closeModal"
@@ -709,13 +748,13 @@ onMounted(() => {
     class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4"
     @click.self="showCustomerPicker = false"
   >
-    <div class="bg-white rounded-xl w-full max-w-lg max-h-[85vh] flex flex-col card">
-      <div v-if="!showAddCustomerForm" class="p-4 border-b border-gray-200 space-y-3">
+    <div class="bg-white dark:bg-gray-900 rounded-xl w-full max-w-lg max-h-[85vh] flex flex-col card dark:text-gray-100">
+      <div v-if="!showAddCustomerForm" class="p-4 border-b border-gray-200 dark:border-gray-700 space-y-3">
         <div class="flex items-center justify-between">
           <h3 class="text-lg font-semibold">Pilih Customer</h3>
           <button
             type="button"
-            class="text-gray-400 hover:text-gray-600"
+            class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
             @click="showCustomerPicker = false"
           >
             <Icon icon="mdi:close" class="text-xl" />
@@ -724,12 +763,12 @@ onMounted(() => {
         <input
           v-model="customerSearch"
           type="text"
-          class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-400"
           placeholder="Cari nama, telepon, atau alamat..."
         />
         <button
           type="button"
-          class="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors"
+          class="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium rounded-lg transition-colors"
           @click="showAddCustomerForm = true"
         >
           <Icon icon="mdi:plus" class="text-lg" />
@@ -737,51 +776,51 @@ onMounted(() => {
         </button>
       </div>
 
-      <div v-else class="p-4 border-b border-gray-200">
+      <div v-else class="p-4 border-b border-gray-200 dark:border-gray-700">
         <div class="flex items-center justify-between mb-3">
-          <h3 class="text-lg font-semibold">Tambah Customer Baru</h3>
+          <h3 class="text-lg font-semibold">{{ isEditingCustomer ? 'Edit Customer' : 'Tambah Customer Baru' }}</h3>
           <button
             type="button"
-            class="text-gray-400 hover:text-gray-600"
-            @click="showAddCustomerForm = false"
+            class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+            @click="showAddCustomerForm = false; newCustomerForm = { id: null, name: '', pengirim_name: '', phone: '', address: '' }"
           >
             <Icon icon="mdi:close" class="text-xl" />
           </button>
         </div>
         <div class="space-y-3">
           <div>
-            <label class="block text-sm font-medium mb-1">Nama Pengirim</label>
+            <label class="block text-sm font-medium mb-1 dark:text-gray-200">Nama Pengirim</label>
             <input
               v-model="newCustomerForm.pengirim_name"
               type="text"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-400"
               placeholder="Nama pengirim"
             />
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">Nama Penerima / Customer *</label>
+            <label class="block text-sm font-medium mb-1 dark:text-gray-200">Nama Penerima / Customer *</label>
             <input
               v-model="newCustomerForm.name"
               type="text"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-400"
               placeholder="Nama penerima (juga untuk penagihan)"
             />
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">No. Telepon Penerima</label>
+            <label class="block text-sm font-medium mb-1 dark:text-gray-200">No. Telepon Penerima</label>
             <input
               v-model="newCustomerForm.phone"
               type="text"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-400"
               placeholder="08xx xxxx xxxx"
             />
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">Alamat Penerima</label>
+            <label class="block text-sm font-medium mb-1 dark:text-gray-200">Alamat Penerima</label>
             <textarea
               v-model="newCustomerForm.address"
               rows="2"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-400"
               placeholder="Alamat lengkap"
             ></textarea>
           </div>
@@ -790,48 +829,94 @@ onMounted(() => {
 
       <div v-if="!showAddCustomerForm" class="flex-1 overflow-y-auto p-2">
         <div v-if="!customerSearch && frequentCustomers.length > 0" class="mb-4">
-          <div class="text-xs font-semibold text-gray-600 px-2 py-1 uppercase">
+          <div class="text-xs font-semibold text-gray-600 dark:text-gray-300 px-2 py-1 uppercase">
             <Icon icon="mdi:fire" class="text-sm inline mr-1" />
             Sering Mengirim
           </div>
-          <button
+          <div
             v-for="c in frequentCustomers"
             :key="c.id"
-            type="button"
-            class="w-full text-left p-3 hover:bg-amber-50 rounded-lg transition-colors mb-1 bg-amber-50/50"
-            @click="importCustomer(c)"
+            class="w-full p-3 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg transition-colors mb-1 bg-amber-50/50 dark:bg-amber-900/10 flex items-start gap-2"
           >
-            <div class="font-medium text-gray-900">{{ c.name }}</div>
-            <div v-if="c.phone" class="text-sm text-gray-500">{{ c.phone }}</div>
-            <div v-if="c.address" class="text-sm text-gray-400 truncate">{{ c.address }}</div>
-          </button>
+            <button
+              type="button"
+              class="flex-1 text-left"
+              @click="importCustomer(c)"
+            >
+              <div class="font-medium text-gray-900 dark:text-gray-100">{{ c.name }}</div>
+              <div v-if="c.pengirim_name" class="text-xs text-gray-600 dark:text-gray-300">Pengirim: {{ c.pengirim_name }}</div>
+              <div v-if="c.phone" class="text-sm text-gray-500 dark:text-gray-400">{{ c.phone }}</div>
+              <div v-if="c.address" class="text-sm text-gray-400 dark:text-gray-500 truncate">{{ c.address }}</div>
+            </button>
+            <div class="flex gap-1">
+              <button
+                type="button"
+                class="p-1.5 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/20 rounded transition-colors"
+                title="Edit customer"
+                @click="editCustomer(c)"
+              >
+                <Icon icon="mdi:pencil" class="text-lg" />
+              </button>
+              <button
+                type="button"
+                class="p-1.5 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/20 rounded transition-colors"
+                title="Hapus customer"
+                @click="deleteCustomer(c)"
+              >
+                <Icon icon="mdi:delete" class="text-lg" />
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div v-if="filteredCustomerList.length === 0 && customerSearch" class="text-center text-gray-500 py-8">
+        <div v-if="filteredCustomerList.length === 0 && customerSearch" class="text-center text-gray-500 dark:text-gray-400 py-8">
           <Icon icon="mdi:account-off" class="text-4xl mb-2" />
           <div>Tidak ada customer</div>
         </div>
         <div v-else-if="customerSearch">
-          <div class="text-xs font-semibold text-gray-600 px-2 py-1 uppercase mb-2">Hasil Pencarian</div>
+          <div class="text-xs font-semibold text-gray-600 dark:text-gray-300 px-2 py-1 uppercase mb-2">Hasil Pencarian</div>
         </div>
-        <button
+        <div
           v-for="c in filteredCustomerList"
           :key="c.id"
-          type="button"
-          class="w-full text-left p-3 hover:bg-blue-50 rounded-lg transition-colors mb-1"
-          @click="importCustomer(c)"
+          class="w-full p-3 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors mb-1 flex items-start gap-2"
         >
-          <div class="font-medium text-gray-900">{{ c.name }}</div>
-          <div v-if="c.phone" class="text-sm text-gray-500">{{ c.phone }}</div>
-          <div v-if="c.address" class="text-sm text-gray-400 truncate">{{ c.address }}</div>
-        </button>
+          <button
+            type="button"
+            class="flex-1 text-left"
+            @click="importCustomer(c)"
+          >
+            <div class="font-medium text-gray-900 dark:text-gray-100">{{ c.name }}</div>
+            <div v-if="c.pengirim_name" class="text-xs text-gray-600 dark:text-gray-300">Pengirim: {{ c.pengirim_name }}</div>
+            <div v-if="c.phone" class="text-sm text-gray-500 dark:text-gray-400">{{ c.phone }}</div>
+            <div v-if="c.address" class="text-sm text-gray-400 dark:text-gray-500 truncate">{{ c.address }}</div>
+          </button>
+          <div class="flex gap-1">
+            <button
+              type="button"
+              class="p-1.5 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/20 rounded transition-colors"
+              title="Edit customer"
+              @click="editCustomer(c)"
+            >
+              <Icon icon="mdi:pencil" class="text-lg" />
+            </button>
+            <button
+              type="button"
+              class="p-1.5 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/20 rounded transition-colors"
+              title="Hapus customer"
+              @click="deleteCustomer(c)"
+            >
+              <Icon icon="mdi:delete" class="text-lg" />
+            </button>
+          </div>
+        </div>
       </div>
 
-      <div v-if="showAddCustomerForm" class="p-4 border-t border-gray-200 flex gap-2 justify-end bg-gray-50">
+      <div v-if="showAddCustomerForm" class="p-4 border-t border-gray-200 dark:border-gray-700 flex gap-2 justify-end bg-gray-50 dark:bg-gray-800/60">
         <button
           type="button"
-          class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 font-medium transition-colors"
-          @click="showAddCustomerForm = false"
+          class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 font-medium transition-colors"
+          @click="showAddCustomerForm = false; newCustomerForm = { id: null, name: '', pengirim_name: '', phone: '', address: '' }"
         >
           Batal
         </button>
@@ -841,7 +926,7 @@ onMounted(() => {
           class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
           @click="createNewCustomer"
         >
-          {{ isCreatingCustomer ? 'Menyimpan...' : 'Simpan' }}
+          {{ isCreatingCustomer ? 'Menyimpan...' : (isEditingCustomer ? 'Update' : 'Simpan') }}
         </button>
       </div>
     </div>

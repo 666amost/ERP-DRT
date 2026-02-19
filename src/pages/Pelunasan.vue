@@ -244,35 +244,35 @@ onMounted(() => {
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-4">
       <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
         <div>
-          <label class="block text-sm font-medium mb-1">Cari</label>
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">Cari</label>
           <input
             v-model="searchQuery"
             type="text"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-400"
             placeholder="Invoice, Customer..."
           />
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Customer</label>
-          <select v-model="selectedCustomer" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">Customer</label>
+          <select v-model="selectedCustomer" class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100">
             <option value="">Semua Customer</option>
             <option v-for="c in customers" :key="c || 'unknown'" :value="c">{{ c || '-' }}</option>
           </select>
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Metode</label>
-          <select v-model="selectedMethod" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">Metode</label>
+          <select v-model="selectedMethod" class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100">
             <option value="">Semua Metode</option>
             <option v-for="m in methodOptions" :key="m" :value="m">{{ m }}</option>
           </select>
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Dari Tanggal</label>
-          <input v-model="dateFrom" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">Dari Tanggal</label>
+          <input v-model="dateFrom" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Sampai Tanggal</label>
-          <input v-model="dateTo" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">Sampai Tanggal</label>
+          <input v-model="dateTo" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
         </div>
       </div>
       <div class="flex flex-wrap gap-2 items-center">

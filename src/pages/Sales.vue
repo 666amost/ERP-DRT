@@ -271,25 +271,25 @@ onMounted(async () => {
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-4 print:hidden">
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div>
-          <label class="block text-sm font-medium mb-1">Cari Customer</label>
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">Cari Customer</label>
           <input
             v-model="searchQuery"
             type="text"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-400"
             placeholder="Nama customer..."
           />
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Dari Tanggal</label>
-          <input v-model="dateFrom" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">Dari Tanggal</label>
+          <input v-model="dateFrom" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Sampai Tanggal</label>
-          <input v-model="dateTo" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">Sampai Tanggal</label>
+          <input v-model="dateTo" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Wilayah</label>
-          <select v-model="selectedRegion" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">Wilayah</label>
+          <select v-model="selectedRegion" class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100">
             <option v-for="opt in regionOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
         </div>

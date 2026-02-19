@@ -1524,6 +1524,75 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const items = await sql(query as never);
     writeJson(res, { items });
     return;
+  } else if (endpoint === 'tagihan' && req.method === 'GET') {
+    const isValidDate = (val?: string | null): val is string => Boolean(val && /^\d{4}-\d{2}-\d{2}$/.test(val));
+    const fromDateRaw = url.searchParams.get('from') || url.searchParams.get('start_date');
+    const toDateRaw = url.searchParams.get('to') || url.searchParams.get('end_date');
+    const fromDate = isValidDate(fromDateRaw) ? fromDateRaw : null;
+    const toDate = isValidDate(toDateRaw) ? toDateRaw : null;
+
+    const dateConditions: string[] = [];
+    if (fromDate) dateConditions.push(`s.created_at >= '${fromDate}'::date`);
+    if (toDate) dateConditions.push(`s.created_at < ('${toDate}'::date + interval '1 day')`);
+    const dateClause = dateConditions.length ? ` and ${dateConditions.join(' and ')}` : '';
+
+    const query = `
+      select 
+        s.id, s.spb_number, s.public_code, s.customer_id, s.customer_name,
+        s.pengirim_name, s.penerima_name,
+        s.origin, s.destination, s.total_colli, 
+        coalesce(s.berat, 0)::float as total_weight,
+        coalesce(s.nominal, 0)::float as nominal,
+        s.created_at,
+        s.dbl_id, d.dbl_number, d.driver_name, d.driver_phone,
+        d.vehicle_plate, d.dbl_date,
+        coalesce(s.sj_returned, false) as sj_returned,
+        upper(coalesce(s.jenis, '')) as jenis,
+        case
+          when upper(coalesce(s.jenis, '')) = 'FRANCO' then 'BALI'
+          when upper(coalesce(s.jenis, '')) in ('TJ', 'TAGIHAN JAKARTA', 'TAGIHAN_JAKARTA') then 'JAKARTA'
+          else null
+        end as billing_area,
+        coalesce(ii_inv.id, spb_inv.id) as invoice_id, 
+        coalesce(ii_inv.invoice_number, spb_inv.invoice_number) as invoice_number,
+        case 
+          when ii_inv.id is null and spb_inv.id is null then coalesce(s.nominal, 0)
+          when ii_inv.id is not null then
+            case 
+              when coalesce(ii_inv.subtotal, 0) > 0 then 
+                round((coalesce(s.nominal, 0)::numeric / coalesce(ii_inv.subtotal, 1)::numeric) * coalesce(ii_inv.remaining_amount, ii_inv.amount, 0)::numeric, 2)
+              else coalesce(ii_inv.remaining_amount, s.nominal, 0)
+            end
+          else coalesce(spb_inv.remaining_amount, s.nominal, 0)
+        end::float as remaining_amount,
+        coalesce(
+          case when ii_inv.id is not null then ii_inv.status else spb_inv.status end,
+          'no_invoice'
+        ) as invoice_status
+      from shipments s
+      left join dbl d on d.id = s.dbl_id
+      left join invoice_items ii on ii.shipment_id = s.id
+      left join invoices ii_inv on ii_inv.id = ii.invoice_id
+      left join invoices spb_inv on spb_inv.spb_number = s.spb_number and ii.id is null
+      where s.nominal > 0${dateClause}
+        and upper(coalesce(s.jenis, '')) in ('FRANCO', 'TJ', 'TAGIHAN JAKARTA', 'TAGIHAN_JAKARTA')
+        and (
+          (ii_inv.id is not null and coalesce(ii_inv.remaining_amount, 0) > 0)
+          or (spb_inv.id is not null and coalesce(spb_inv.remaining_amount, 0) > 0)
+          or (ii_inv.id is null and spb_inv.id is null)
+        )
+      group by s.id, s.spb_number, s.public_code, s.customer_id, s.customer_name,
+               s.pengirim_name, s.penerima_name,
+               s.origin, s.destination, s.total_colli, s.berat, s.nominal, s.created_at, s.jenis,
+               s.dbl_id, d.dbl_number, d.driver_name, d.driver_phone, d.vehicle_plate, d.dbl_date, s.sj_returned,
+               ii_inv.id, ii_inv.invoice_number, ii_inv.remaining_amount, ii_inv.amount, ii_inv.subtotal, ii_inv.status,
+               spb_inv.id, spb_inv.invoice_number, spb_inv.remaining_amount, spb_inv.status
+      order by billing_area asc, s.created_at desc
+    ` as string;
+
+    const items = await sql(query as never);
+    writeJson(res, { items });
+    return;
   } else if (endpoint === 'payment-history' && req.method === 'GET') {
     const isValidDate = (val?: string | null): val is string => Boolean(val && /^\d{4}-\d{2}-\d{2}$/.test(val));
     const fromRaw = url.searchParams.get('from') || url.searchParams.get('start_date');

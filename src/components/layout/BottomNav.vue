@@ -124,6 +124,7 @@ const allMoreMenuGroups: MoreMenuGroup[] = [
     requirePermission: 'canViewKeuangan',
     items: [
       { to: '/outstanding', label: 'Outstanding', icon: 'mdi:clock-alert-outline' },
+      { to: '/tagihan', label: 'Tagihan B/J', icon: 'mdi:view-column-outline' },
       { to: '/pelunasan', label: 'Pelunasan', icon: 'mdi:cash-check', requirePermission: 'canPelunasan' },
       { to: '/report/operational', label: 'Biaya Ops', icon: 'mdi:calculator-variant-outline', requirePermission: 'canViewOperationalCost' },
     ]

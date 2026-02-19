@@ -684,11 +684,11 @@ onMounted(async () => {
                 <td class="px-3 py-2 text-sm dark:text-gray-300">{{ dbl.dbl_date ? formatDate(dbl.dbl_date) : '-' }}</td>
                 <td class="px-3 py-2 text-sm dark:text-gray-300">
                   <div>{{ dbl.vehicle_plate || '-' }}</div>
-                  <div class="text-xs text-gray-500">{{ dbl.driver_name || '' }}</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">{{ dbl.driver_name || '' }}</div>
                 </td>
                 <td class="px-3 py-2 text-sm dark:text-gray-300">{{ dbl.origin || '-' }} → {{ dbl.destination || '-' }}</td>
-                <td class="px-3 py-2 text-sm text-center">{{ dbl.shipment_count || 0 }}</td>
-                <td class="px-3 py-2 text-sm text-right">{{ formatRupiah(dbl.total_nominal || 0) }}</td>
+                <td class="px-3 py-2 text-sm text-center text-gray-700 dark:text-gray-200">{{ dbl.shipment_count || 0 }}</td>
+                <td class="px-3 py-2 text-sm text-right text-gray-700 dark:text-gray-200">{{ formatRupiah(dbl.total_nominal || 0) }}</td>
                 <td class="px-3 py-2">
                   <Badge :variant="getStatusVariant(dbl.status)">
                     {{ statusOptions.find(o => o.value === dbl.status)?.label || dbl.status }}

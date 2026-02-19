@@ -13,6 +13,7 @@ const Invoice = () => import('./pages/Invoice.vue');
 const SuratJalan = () => import('./pages/SuratJalan.vue');
 const DBL = () => import('./pages/DBL.vue');
 const Outstanding = () => import('./pages/Outstanding.vue');
+const Tagihan = () => import('./pages/Tagihan.vue');
 const Pelunasan = () => import('./pages/Pelunasan.vue');
 const DailyReport = () => import('./pages/DailyReport.vue');
 const DBLReport = () => import('./pages/DBLReport.vue');
@@ -40,6 +41,7 @@ export const router = createRouter({
         { path: 'invoice', name: 'invoice', component: Invoice, meta: { requiresAuth: true, permission: 'canViewKeuangan' as PermissionKey } },
         { path: 'surat-jalan', name: 'surat-jalan', component: SuratJalan, meta: { requiresAuth: true, permission: 'canViewSuratJalan' as PermissionKey } },
         { path: 'outstanding', name: 'outstanding', component: Outstanding, meta: { requiresAuth: true, permission: 'canViewKeuangan' as PermissionKey } },
+        { path: 'tagihan', name: 'tagihan', component: Tagihan, meta: { requiresAuth: true, permission: 'canViewKeuangan' as PermissionKey } },
         { path: 'pelunasan', name: 'pelunasan', component: Pelunasan, meta: { requiresAuth: true, permission: 'canPelunasan' as PermissionKey } },
         { path: 'report/daily', name: 'daily-report', component: DailyReport },
         { path: 'report/dbl', name: 'dbl-report', component: DBLReport },

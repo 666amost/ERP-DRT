@@ -83,13 +83,13 @@ loadCustomers();
 </script>
 <template>
   <div class="relative">
-    <label class="block text-sm font-medium mb-1">{{ label }}</label>
+    <label class="block text-sm font-medium mb-1 dark:text-gray-300">{{ label }}</label>
     <div class="relative">
       <input
         v-model="query"
         type="text"
         :placeholder="placeholder||'Pilih atau ketik customer...'"
-        class="w-full px-3 py-2 border border-gray-300 rounded-lg pr-20"
+        class="w-full px-3 py-2 border border-gray-300 rounded-lg pr-20 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-400"
         @focus="show=true"
         @blur="closeDropdownDelayed"
       >
@@ -103,20 +103,20 @@ loadCustomers();
     </div>
     <div
       v-if="show && filtered.length>0"
-      class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+      class="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto"
     >
       <button
         v-for="c in filtered"
         :key="c.id"
         type="button"
-        class="w-full px-3 py-2 text-left hover:bg-gray-100 text-sm"
+        class="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-900 dark:text-gray-100"
         @click="pick(c)"
       >
         <div class="font-medium">
           {{ c.name }}
         </div>
-        <div v-if="c.phone" class="text-xs text-gray-500">{{ c.phone }}</div>
-        <div v-if="c.address" class="text-xs text-gray-500 truncate">{{ c.address }}</div>
+        <div v-if="c.phone" class="text-xs text-gray-500 dark:text-gray-400">{{ c.phone }}</div>
+        <div v-if="c.address" class="text-xs text-gray-500 dark:text-gray-400 truncate">{{ c.address }}</div>
       </button>
     </div>
     <div
@@ -124,41 +124,41 @@ loadCustomers();
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
       @click.self="showModal=false"
     >
-      <div class="bg-white rounded-xl p-6 w-full max-w-sm space-y-4 card">
+      <div class="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-sm space-y-4 card dark:text-gray-100">
         <div class="text-lg font-semibold">
           Tambah Customer Baru
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Nama</label>
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">Nama</label>
           <input
             v-model="newName"
             type="text"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-400"
             placeholder="Nama customer"
           >
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Telepon (opsional)</label>
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">Telepon (opsional)</label>
           <input
             v-model="newPhone"
             type="text"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-400"
             placeholder="0812xxxxx"
           >
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Alamat (opsional)</label>
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">Alamat (opsional)</label>
           <input
             v-model="newAddress"
             type="text"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-400"
             placeholder="Alamat lengkap"
           >
         </div>
         <div class="flex gap-2 justify-end">
           <button
             type="button"
-            class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-100"
             @click="showModal=false"
           >
             Batal

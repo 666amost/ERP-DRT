@@ -78,6 +78,13 @@ body {
   color: var(--text-strong);
 }
 
+.dark .text-black:not([class*="dark:text-"]),
+.dark .text-slate-900:not([class*="dark:text-"]),
+.dark .text-zinc-900:not([class*="dark:text-"]),
+.dark .text-neutral-900:not([class*="dark:text-"]) {
+  color: var(--text-strong);
+}
+
 .dark .text-gray-600:not([class*="dark:text-"]),
 .dark .text-gray-500:not([class*="dark:text-"]),
 .dark .text-gray-400:not([class*="dark:text-"]) {
@@ -90,7 +97,7 @@ body {
 }
 
 /* Ensure basic elements inherit the global text color in dark mode */
-body, p, a, span, input, button, th, td, label, div {
+body, p, a, span, input, button, th, td, label, div, h1, h2, h3, h4, h5, h6 {
   color: inherit;
 }
 

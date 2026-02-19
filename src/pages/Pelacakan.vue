@@ -99,7 +99,7 @@ watch(statusFilter, () => {
 
 <template>
   <div class="space-y-4 pb-20 lg:pb-0 overflow-x-hidden">
-    <div class="text-xl font-semibold">
+    <div class="text-xl font-semibold dark:text-gray-100">
       Pelacakan Pengiriman
     </div>
 
@@ -152,7 +152,7 @@ watch(statusFilter, () => {
       >
         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <div class="flex-1 min-w-0">
-            <div class="font-semibold text-base lg:text-lg truncate min-w-0">
+            <div class="font-semibold text-base lg:text-lg truncate min-w-0 text-gray-900 dark:text-gray-100">
               {{ ship.public_code }}
             </div>
             <div v-if="ship.spb_number" class="mt-0.5">
@@ -188,10 +188,10 @@ watch(statusFilter, () => {
 
         <div class="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-sm flex-wrap">
           <div class="flex-1 min-w-0">
-            <div class="text-gray-500 text-xs">
+            <div class="text-gray-500 dark:text-gray-400 text-xs">
               Origin
             </div>
-            <div class="font-medium truncate min-w-0">
+            <div class="font-medium truncate min-w-0 text-gray-900 dark:text-gray-100">
               {{ ship.origin }}
             </div>
           </div>
@@ -199,10 +199,10 @@ watch(statusFilter, () => {
             ->
           </div>
           <div class="flex-1 min-w-0">
-            <div class="text-gray-500 text-xs">
+            <div class="text-gray-500 dark:text-gray-400 text-xs">
               Destination
             </div>
-            <div class="font-medium truncate min-w-0">
+            <div class="font-medium truncate min-w-0 text-gray-900 dark:text-gray-100">
               {{ ship.destination }}
             </div>
           </div>
@@ -221,8 +221,8 @@ watch(statusFilter, () => {
             <span class="font-medium ml-1 dark:text-gray-100">{{ ship.customer_name || '-' }}</span>
           </div>
           <div v-if="ship.eta" class="flex-shrink-0">
-            <span class="text-gray-500 text-xs">ETA:</span>
-            <span class="font-medium ml-1">{{ formatDate(ship.eta) }}</span>
+            <span class="text-gray-500 dark:text-gray-400 text-xs">ETA:</span>
+            <span class="font-medium ml-1 text-gray-900 dark:text-gray-100">{{ formatDate(ship.eta) }}</span>
           </div>
         </div>
       </div>

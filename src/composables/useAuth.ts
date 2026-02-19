@@ -107,7 +107,7 @@ export function useAuth() {
   function canAccessRoute(routePath: string): boolean {
     const p = permissions.value;
     
-    const keuanganRoutes = ['/invoice', '/outstanding', '/pelunasan'];
+    const keuanganRoutes = ['/invoice', '/outstanding', '/tagihan', '/pelunasan'];
     if (keuanganRoutes.some(r => routePath.startsWith(r))) {
       if (routePath.startsWith('/pelunasan')) {
         return p.canPelunasan;

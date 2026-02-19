@@ -122,13 +122,13 @@ loadCities();
 
 <template>
   <div class="relative">
-    <label class="block text-sm font-medium mb-1">{{ label }}</label>
+    <label class="block text-sm font-medium mb-1 dark:text-gray-300">{{ label }}</label>
     <div class="relative">
       <input
         v-model="searchQuery"
         type="text"
         :placeholder="placeholder || 'Pilih atau ketik kota...'"
-        class="w-full px-3 py-2 border border-gray-300 rounded-lg pr-20"
+        class="w-full px-3 py-2 border border-gray-300 rounded-lg pr-20 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-400"
         @focus="showDropdown = true"
         @blur="closeDropdownDelayed"
       >
@@ -143,13 +143,13 @@ loadCities();
     
     <div
       v-if="showDropdown && filteredCities.length > 0"
-      class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+      class="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto"
     >
       <button
         v-for="city in filteredCities"
         :key="city.id"
         type="button"
-        class="w-full px-3 py-2 text-left hover:bg-gray-100 text-sm"
+        class="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-900 dark:text-gray-100"
         @click="selectCity(city.name)"
       >
         <div class="font-medium">
@@ -157,7 +157,7 @@ loadCities();
         </div>
         <div
           v-if="city.province"
-          class="text-xs text-gray-500"
+          class="text-xs text-gray-500 dark:text-gray-400"
         >
           {{ city.province }}
         </div>
@@ -169,42 +169,42 @@ loadCities();
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
       @click.self="showAddModal = false"
     >
-      <div class="bg-white rounded-xl p-6 w-full max-w-sm space-y-4 card">
+      <div class="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-sm space-y-4 card dark:text-gray-100">
         <div class="text-lg font-semibold">
           Tambah Kota Baru
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Nama Kota</label>
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">Nama Kota</label>
           <input
             v-model="newCityName"
             type="text"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-400"
             placeholder="Nama kota"
           >
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Kode (3 huruf)</label>
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">Kode (3 huruf)</label>
           <input
             v-model="newCityCode"
             type="text"
             maxlength="3"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-400"
             placeholder="JKT, SBY, BTM"
           >
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Provinsi (optional)</label>
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">Provinsi (optional)</label>
           <input
             v-model="newCityProvince"
             type="text"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-400"
             placeholder="Provinsi"
           >
         </div>
         <div class="flex gap-2 justify-end">
           <button
             type="button"
-            class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-100"
             @click="showAddModal = false"
           >
             Batal

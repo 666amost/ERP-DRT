@@ -166,6 +166,7 @@ const showPphModal = ref(false);
 const pphFormPercent = ref<string>('0');
 
 type CreatePaymentType = 'CICILAN' | 'CASH_BALI' | 'CASH_JAKARTA' | 'TF_BALI' | 'TF_JAKARTA' | 'TRANSFER_ALI';
+type SjBulkInputStatus = '' | 'returned' | 'not_returned';
 const createPaymentType = ref<CreatePaymentType>('TF_JAKARTA');
 
 function getCreatePaymentMethod(type: CreatePaymentType): string | undefined {
@@ -208,6 +209,7 @@ const existingPaidAmount = ref<number>(0);
 const editingCustomerName = ref<string>('');
 const invoiceFilterType = ref<'pengirim' | 'penerima'>('penerima');
 const addInvoiceTab = ref<'unpaid' | 'selected'>('unpaid');
+const sjBulkInputStatus = ref<SjBulkInputStatus>('');
 
 const showCicilanModal = ref(false);
 const loadingCicilan = ref(false);
@@ -392,6 +394,31 @@ const uniqueDblNumbers = computed(() => {
 });
 
 const hasUnassignedDbl = computed(() => allUnpaidShipments.value.some(s => !s.dbl_number));
+
+const sjSaveSummary = computed(() => {
+  const total = items.value.length;
+  if (total === 0) {
+    return { total: 0, returned: 0, pending: 0 };
+  }
+  if (sjBulkInputStatus.value === 'returned') {
+    return { total, returned: total, pending: 0 };
+  }
+  if (sjBulkInputStatus.value === 'not_returned') {
+    return { total, returned: 0, pending: total };
+  }
+  const returned = items.value.reduce((sum, it) => sum + (Boolean(it.sj_returned) ? 1 : 0), 0);
+  return {
+    total,
+    returned,
+    pending: Math.max(0, total - returned)
+  };
+});
+
+function resolveSjReturnedForSave(item: Item): boolean {
+  if (sjBulkInputStatus.value === 'returned') return true;
+  if (sjBulkInputStatus.value === 'not_returned') return false;
+  return Boolean(item.sj_returned);
+}
 
 async function loadAllUnpaidShipments(): Promise<void> {
   loadingUnpaidShipments.value = true;
@@ -682,6 +709,7 @@ function openCreateModal(): void {
   editingId.value = null;
   form.value = { customer_name: '', customer_id: null, amount: '', status: 'paid' };
   createPaymentType.value = 'TF_JAKARTA';
+  sjBulkInputStatus.value = '';
   addInvoiceTab.value = 'unpaid';
   items.value = [];
   allUnpaidShipments.value = [];
@@ -865,6 +893,7 @@ async function bulkSettleCicilanAllInvoices(): Promise<void> {
 
 async function openEditModal(invoice: Invoice) {
   editingId.value = invoice.id;
+  sjBulkInputStatus.value = '';
   manualAmountMode.value = true;
   existingPaidAmount.value = invoice.paid_amount || 0;
   editingCustomerName.value = invoice.customer_name || '';
@@ -915,6 +944,11 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
     return;
   }
 
+  if (!editingId.value && !sjBulkInputStatus.value) {
+    alert('Pilih status SJ (Sudah balik / Belum balik) sebelum menyimpan invoice');
+    return;
+  }
+
   const subtotal = calcSubtotal();
   const subtotalAfterDiscount = calcDiscountedSubtotal();
   const pphAmount = subtotalAfterDiscount * (pphPercent.value / 100);
@@ -925,7 +959,10 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
     return;
   }
   
-  const itemsSnapshot = items.value.map(it => ({ ...it }));
+  const itemsSnapshot = items.value.map(it => ({
+    ...it,
+    sj_returned: resolveSjReturnedForSave(it)
+  }));
   const resolvedCustomerName = form.value.customer_name || itemsSnapshot.find((it) => it.customer_name)?.customer_name || '';
   const resolvedCustomerId = form.value.customer_id ?? itemsSnapshot.find((it) => typeof it.customer_id === 'number')?.customer_id ?? null;
 
@@ -1933,6 +1970,7 @@ watch([items, pphPercent, discountAmount], () => {
 watch(() => invoiceFilterType.value, () => {
   selectedShipmentIds.value.clear();
   items.value = [];
+  sjBulkInputStatus.value = '';
   addInvoiceTab.value = 'unpaid';
   form.value.customer_name = '';
   form.value.customer_id = null;
@@ -2469,7 +2507,7 @@ watch(() => invoiceFilterType.value, () => {
             </div>
           </div>
           
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-start">
             <div class="sm:col-span-2 space-y-2">
               <div>
                 <label class="block text-sm font-medium mb-1 dark:text-gray-200">Customer</label>
@@ -2548,6 +2586,33 @@ watch(() => invoiceFilterType.value, () => {
                   <option value="TRANSFER_ALI">Transfer Ali</option>
                   <option value="CICILAN">Cicilan</option>
                 </select>
+              </div>
+              <div v-if="!editingId" class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 space-y-2">
+                <label class="block text-sm font-medium dark:text-gray-200">Status SJ saat simpan</label>
+                <select
+                  v-model="sjBulkInputStatus"
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="" disabled>-- Pilih Status SJ --</option>
+                  <option value="returned">Sudah balik</option>
+                  <option value="not_returned">Belum balik</option>
+                </select>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                  Berlaku ke semua SPB terpilih saat simpan invoice.
+                </p>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                  <div class="rounded-md border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/40 px-2 py-1.5">
+                    <div class="text-gray-500 dark:text-gray-400">Sudah balik</div>
+                    <div class="font-semibold text-green-600 dark:text-green-400">{{ sjSaveSummary.returned }}</div>
+                  </div>
+                  <div class="rounded-md border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/40 px-2 py-1.5">
+                    <div class="text-gray-500 dark:text-gray-400">Belum balik</div>
+                    <div class="font-semibold text-amber-600 dark:text-amber-400">{{ sjSaveSummary.pending }}</div>
+                  </div>
+                </div>
+                <p v-if="!sjBulkInputStatus" class="text-xs text-gray-500 dark:text-gray-400">
+                  Pilih status SJ untuk mengaktifkan tombol simpan.
+                </p>
               </div>
             </div>
           </div>
@@ -2935,12 +3000,16 @@ watch(() => invoiceFilterType.value, () => {
       <Button
         v-if="!editingId"
         variant="success"
-        :disabled="items.length === 0"
+        :disabled="items.length === 0 || !sjBulkInputStatus"
         @click="saveInvoice('bulk')"
       >
         Simpan Bulk
       </Button>
-      <Button variant="primary" @click="saveInvoice">
+      <Button
+        variant="primary"
+        :disabled="!editingId && (items.length === 0 || !sjBulkInputStatus)"
+        @click="saveInvoice"
+      >
         {{ editingId ? 'Update' : 'Simpan' }} Invoice
       </Button>
     </div>

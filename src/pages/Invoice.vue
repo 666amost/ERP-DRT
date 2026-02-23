@@ -157,7 +157,7 @@ const loadingPayments = ref(false);
 const paymentForm = ref({
   amount: '',
   payment_date: new Date().toISOString().split('T')[0]!,
-  payment_method: 'TRANSFER',
+  payment_method: 'TF JAKARTA',
   reference_number: '',
   notes: ''
 });
@@ -1237,7 +1237,7 @@ async function openPaymentModal(inv: Invoice) {
   paymentForm.value = {
     amount: '',
     payment_date: new Date().toISOString().split('T')[0]!,
-    payment_method: 'TRANSFER',
+    payment_method: 'TF JAKARTA',
     reference_number: '',
     notes: ''
   };
@@ -1291,7 +1291,8 @@ async function addPayment() {
       throw new Error(data.error || 'Add payment failed');
     }
     
-    await openPaymentModal(selectedInvoice.value);
+    showPaymentModal.value = false;
+    selectedInvoice.value = null;
     loadInvoices();
   } catch (e) {
     console.error('Add payment error:', e);
@@ -1978,6 +1979,10 @@ watch(() => invoiceFilterType.value, () => {
   spbSearch.value = '';
   showUnreturnedOnly.value = false;
 });
+
+watch(() => createPaymentType.value, (val) => {
+  if (val === 'CICILAN') manualAmountMode.value = true;
+});
 </script>
 
 <template>
@@ -2294,16 +2299,16 @@ watch(() => invoiceFilterType.value, () => {
       data-testid="cicilan-modal"
       @click.self="showCicilanModal = false"
     >
-      <div class="bg-white rounded-xl p-6 w-full max-w-7xl space-y-4 card overflow-auto max-h-[85vh]">
+      <div class="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-7xl space-y-4 card overflow-auto max-h-[85vh]">
         <div class="flex items-center justify-between gap-3 flex-wrap">
-          <div class="text-lg font-semibold">Cicilan / Pelunasan Invoice</div>
+          <div class="text-lg font-semibold dark:text-gray-100">Cicilan / Pelunasan Invoice</div>
           <Button variant="default" @click="showCicilanModal = false">Tutup</Button>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
           <div class="sm:col-span-2">
-            <label class="block text-sm font-medium mb-1">Customer</label>
-            <select v-model="cicilanCustomerKey" class="w-full px-3 py-2 border border-gray-300 rounded-lg" :disabled="cicilanBusy">
+            <label class="block text-sm font-medium mb-1 dark:text-gray-300">Customer</label>
+            <select v-model="cicilanCustomerKey" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100" :disabled="cicilanBusy">
               <option value="">-- Pilih Customer --</option>
               <option v-for="c in cicilanCustomerOptions" :key="c.key" :value="c.key">
                 {{ c.customer_name }} ({{ c.invoice_count }} inv / {{ formatRupiah(c.total_remaining) }})
@@ -2311,11 +2316,11 @@ watch(() => invoiceFilterType.value, () => {
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">Cari (opsional)</label>
+            <label class="block text-sm font-medium mb-1 dark:text-gray-300">Cari (opsional)</label>
             <input
               v-model="cicilanSearch"
               type="text"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100 text-sm"
               placeholder="Invoice/SPB/catatan..."
               :disabled="cicilanBusy"
             >
@@ -2324,12 +2329,12 @@ watch(() => invoiceFilterType.value, () => {
 
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
           <div>
-            <label class="block text-sm font-medium mb-1">Tanggal</label>
-            <input v-model="cicilanPaymentDate" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+            <label class="block text-sm font-medium mb-1 dark:text-gray-300">Tanggal</label>
+            <input v-model="cicilanPaymentDate" type="date" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100" />
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">Metode</label>
-            <select v-model="cicilanPaymentType" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            <label class="block text-sm font-medium mb-1 dark:text-gray-300">Metode</label>
+            <select v-model="cicilanPaymentType" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100">
               <option value="CASH_BALI">Cash Bali</option>
               <option value="CASH_JAKARTA">Cash Jakarta</option>
               <option value="TF_BALI">Tf Bali</option>
@@ -2338,24 +2343,24 @@ watch(() => invoiceFilterType.value, () => {
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">No. Referensi (opsional)</label>
-            <input v-model="cicilanReferenceNo" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="No. transfer/giro" />
+            <label class="block text-sm font-medium mb-1 dark:text-gray-300">No. Referensi (opsional)</label>
+            <input v-model="cicilanReferenceNo" type="text" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100" placeholder="No. transfer/giro" />
           </div>
         </div>
 
         <div>
-          <label class="block text-sm font-medium mb-1">Catatan (opsional)</label>
-          <input v-model="cicilanNotes" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Catatan pembayaran" />
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">Catatan (opsional)</label>
+          <input v-model="cicilanNotes" type="text" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100" placeholder="Catatan pembayaran" />
         </div>
 
-        <div class="flex items-center justify-between gap-3 flex-wrap bg-gray-50 p-3 rounded-lg">
-          <div class="text-sm text-gray-700">
+        <div class="flex items-center justify-between gap-3 flex-wrap bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg">
+          <div class="text-sm text-gray-700 dark:text-gray-200">
             <span class="font-medium">Total sisa:</span> {{ formatRupiah(cicilanCustomerOutstandingTotal) }}
-            <span class="text-gray-500">({{ cicilanCustomerInvoices.length }} invoice / {{ cicilanCustomerSpbCount }} SPB)</span>
-            <div v-if="cicilanHasSearch" class="text-xs text-gray-500 mt-1">
+            <span class="text-gray-500 dark:text-gray-400">({{ cicilanCustomerInvoices.length }} invoice / {{ cicilanCustomerSpbCount }} SPB)</span>
+            <div v-if="cicilanHasSearch" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
               Filter: {{ formatRupiah(cicilanTotalOutstanding) }} ({{ filteredCicilanInvoices.length }} invoice / {{ cicilanFilteredSpbCount }} SPB)
             </div>
-            <div v-if="cicilanSelectedInvoices.length" class="text-xs text-gray-500 mt-1">
+            <div v-if="cicilanSelectedInvoices.length" class="text-xs text-gray-500 dark:text-gray-400 mt-1">
               Dipilih: {{ cicilanSelectedInvoices.length }} invoice / {{ cicilanSelectedSpbCount }} SPB ({{ formatRupiah(cicilanSelectedOutstandingTotal) }})
             </div>
           </div>
@@ -2386,20 +2391,20 @@ watch(() => invoiceFilterType.value, () => {
           </div>
         </div>
 
-        <div v-if="loadingCicilan" class="text-center py-4 text-gray-500">
+        <div v-if="loadingCicilan" class="text-center py-4 text-gray-500 dark:text-gray-400">
           <span class="animate-pulse">Memuat invoice yang belum lunas...</span>
         </div>
-        <div v-else-if="allUnpaidInvoices.length === 0" class="text-center py-4 text-gray-400">
+        <div v-else-if="allUnpaidInvoices.length === 0" class="text-center py-4 text-gray-400 dark:text-gray-500">
           Tidak ada invoice yang belum lunas
         </div>
-        <div v-else-if="selectedCicilanCustomer && filteredCicilanInvoices.length === 0" class="text-center py-4 text-gray-400">
+        <div v-else-if="selectedCicilanCustomer && filteredCicilanInvoices.length === 0" class="text-center py-4 text-gray-400 dark:text-gray-500">
           Tidak ada invoice yang belum lunas untuk customer ini
         </div>
         <div v-else class="overflow-x-auto max-h-72 overflow-y-auto">
           <table class="w-full text-sm">
-            <thead class="bg-gray-50 sticky top-0">
+            <thead class="bg-gray-50 dark:bg-gray-700 sticky top-0">
               <tr>
-                <th class="px-2 py-2 text-left text-xs font-medium w-8">
+                <th class="px-2 py-2 text-left text-xs font-medium dark:text-gray-300 w-8">
                   <input
                     type="checkbox"
                     :checked="cicilanAllEligibleSelected"
@@ -2407,16 +2412,16 @@ watch(() => invoiceFilterType.value, () => {
                     @change="onCicilanSelectAllChange"
                   >
                 </th>
-                <th class="px-2 py-2 text-left text-xs font-medium">No. Invoice</th>
-                <th class="px-2 py-2 text-left text-xs font-medium">No. SPB</th>
-                <th class="px-2 py-2 text-right text-xs font-medium">Sisa</th>
-                <th class="px-2 py-2 text-left text-xs font-medium">Status</th>
-                <th class="px-2 py-2 text-left text-xs font-medium">Tanggal</th>
-                <th class="px-2 py-2 text-right text-xs font-medium">Aksi</th>
+                <th class="px-2 py-2 text-left text-xs font-medium dark:text-gray-300">No. Invoice</th>
+                <th class="px-2 py-2 text-left text-xs font-medium dark:text-gray-300">No. SPB</th>
+                <th class="px-2 py-2 text-right text-xs font-medium dark:text-gray-300">Sisa</th>
+                <th class="px-2 py-2 text-left text-xs font-medium dark:text-gray-300">Status</th>
+                <th class="px-2 py-2 text-left text-xs font-medium dark:text-gray-300">Tanggal</th>
+                <th class="px-2 py-2 text-right text-xs font-medium dark:text-gray-300">Aksi</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="inv in filteredCicilanInvoices" :key="`unpaid-${inv.id}`" class="border-t hover:bg-gray-50">
+              <tr v-for="inv in filteredCicilanInvoices" :key="`unpaid-${inv.id}`" class="border-t dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
                 <td class="px-2 py-2">
                   <input
                     type="checkbox"
@@ -2425,13 +2430,13 @@ watch(() => invoiceFilterType.value, () => {
                     @change="(e) => onCicilanInvoiceSelectionChange(inv.id, e)"
                   >
                 </td>
-                <td class="px-2 py-2 font-medium">{{ inv.invoice_number }}</td>
-                <td class="px-2 py-2 text-xs">{{ inv.spb_number || '-' }}</td>
-                <td class="px-2 py-2 text-right text-orange-600">{{ formatRupiah(inv.remaining_amount ?? inv.amount) }}</td>
+                <td class="px-2 py-2 font-medium dark:text-gray-100">{{ inv.invoice_number }}</td>
+                <td class="px-2 py-2 text-xs dark:text-gray-300">{{ inv.spb_number || '-' }}</td>
+                <td class="px-2 py-2 text-right text-orange-600 dark:text-orange-400">{{ formatRupiah(inv.remaining_amount ?? inv.amount) }}</td>
                 <td class="px-2 py-2">
                   <Badge :variant="getPaymentStatus(inv).variant">{{ getPaymentStatus(inv).label }}</Badge>
                 </td>
-                <td class="px-2 py-2 text-xs text-gray-600">{{ formatDate(inv.issued_at) }}</td>
+                <td class="px-2 py-2 text-xs text-gray-600 dark:text-gray-400">{{ formatDate(inv.issued_at) }}</td>
                 <td class="px-2 py-2 text-right">
                   <button
                     class="px-2 py-1 text-xs font-medium text-white bg-blue-500 hover:bg-blue-600 rounded transition-colors"
@@ -3072,11 +3077,11 @@ watch(() => invoiceFilterType.value, () => {
                   <div>
                     <label class="block text-sm font-medium mb-1 dark:text-gray-300">Metode</label>
                     <select v-model="paymentForm.payment_method" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100">
-                      <option value="TRANSFER">Transfer</option>
+                      <option value="CASH BALI">Cash Bali</option>
+                      <option value="CASH JAKARTA">Cash Jakarta</option>
+                      <option value="TF BALI">Tf Bali</option>
+                      <option value="TF JAKARTA">Tf Jakarta</option>
                       <option value="TRANSFER ALI">Transfer Ali</option>
-                      <option value="CASH">Cash</option>
-                      <option value="GIRO">Giro</option>
-                      <option value="CHEQUE">Cheque</option>
                     </select>
                   </div>
                 </div>

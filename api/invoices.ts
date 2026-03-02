@@ -53,6 +53,7 @@ type PaymentHistory = {
   invoice_id: number;
   invoice_number: string | null;
   customer_name: string | null;
+  customer_id: number | null;
   original_amount: number;
   discount: number;
   final_amount: number;
@@ -1604,7 +1605,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     if (fromDate && toDate) {
       payments = await sql`
         select 
-          ip.id, ip.invoice_id, i.invoice_number, i.customer_name,
+          ip.id, ip.invoice_id, i.invoice_number, i.customer_name, i.customer_id,
           coalesce(i.amount, 0)::float as original_amount,
           coalesce(i.discount_amount, 0)::float as discount,
           coalesce(ip.amount, 0)::float as final_amount,
@@ -1619,7 +1620,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     } else if (fromDate) {
       payments = await sql`
         select 
-          ip.id, ip.invoice_id, i.invoice_number, i.customer_name,
+          ip.id, ip.invoice_id, i.invoice_number, i.customer_name, i.customer_id,
           coalesce(i.amount, 0)::float as original_amount,
           coalesce(i.discount_amount, 0)::float as discount,
           coalesce(ip.amount, 0)::float as final_amount,
@@ -1633,7 +1634,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     } else if (toDate) {
       payments = await sql`
         select 
-          ip.id, ip.invoice_id, i.invoice_number, i.customer_name,
+          ip.id, ip.invoice_id, i.invoice_number, i.customer_name, i.customer_id,
           coalesce(i.amount, 0)::float as original_amount,
           coalesce(i.discount_amount, 0)::float as discount,
           coalesce(ip.amount, 0)::float as final_amount,
@@ -1647,7 +1648,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     } else {
       payments = await sql`
         select 
-          ip.id, ip.invoice_id, i.invoice_number, i.customer_name,
+          ip.id, ip.invoice_id, i.invoice_number, i.customer_name, i.customer_id,
           coalesce(i.amount, 0)::float as original_amount,
           coalesce(i.discount_amount, 0)::float as discount,
           coalesce(ip.amount, 0)::float as final_amount,

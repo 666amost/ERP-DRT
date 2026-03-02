@@ -277,32 +277,30 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
       }
 
       let customerId = body.customer_id || null;
-      let customerName = body.customer_name || null;
+      let customerName: string | null = null;
       let customerAddress = body.customer_address || null;
       let shippingAddress = body.shipping_address || null;
       
       try {
-        if (!customerName && customerId) {
-          const c = await sql`select name from customers where id = ${customerId}` as [{ name: string }];
+        if (customerId) {
+          const c = await sql`select name, address from customers where id = ${customerId}` as { name: string; address: string | null }[];
           if (!c.length) { 
             console.error('[shipments/create] Customer not found:', customerId);
             writeJson(res, { error: 'Invalid customer_id' }, 400); 
             return 
           }
-          customerName = c[0].name;
-        }
-        if (!customerAddress && customerId) {
-          const ca = await sql`select address from customers where id = ${customerId}` as [{ address: string }];
-          customerAddress = ca[0]?.address || null;
-        }
-        
-        if (customerName) {
-          const existingCust = await sql`select id from customers where lower(name) = lower(${customerName}) limit 1` as { id: number }[];
+          customerName = c[0]!.name;
+          if (!customerAddress) customerAddress = c[0]!.address || null;
+        } else if (body.customer_name) {
+          const trimmedName = body.customer_name.trim();
+          const existingCust = await sql`select id, name, address from customers where lower(name) = lower(${trimmedName}) limit 1` as { id: number; name: string; address: string | null }[];
           if (existingCust.length > 0) {
             customerId = existingCust[0]!.id;
+            customerName = existingCust[0]!.name;
+            if (!customerAddress) customerAddress = existingCust[0]!.address || null;
           } else {
-            const inserted = await sql`insert into customers (name, address) values (${customerName}, ${customerAddress}) returning id` as { id: number }[];
-            customerId = inserted[0]!.id;
+            writeJson(res, { error: `Customer "${trimmedName}" tidak ditemukan. Silakan pilih dari daftar customer atau tambah baru terlebih dahulu.` }, 400);
+            return;
           }
         }
 
@@ -395,16 +393,26 @@ export async function shipmentsHandler(req: IncomingMessage, res: ServerResponse
 
         const spbNumber = body.spb_number !== undefined ? body.spb_number : existing.spb_number;
         let customerId = body.customer_id !== undefined ? body.customer_id : existing.customer_id;
-        let customerName = body.customer_name !== undefined ? body.customer_name : existing.customer_name;
+        let customerName: string | null = existing.customer_name;
         let customerAddress = body.customer_address !== undefined ? body.customer_address : existing.customer_address;
         
-        if (customerName) {
-          const existingCust = await sql`select id, name from customers where lower(name) = lower(${customerName}) limit 1` as { id: number; name: string }[];
+        if (body.customer_id !== undefined && body.customer_id) {
+          const existingCust = await sql`select name, address from customers where id = ${body.customer_id}` as { name: string; address: string | null }[];
           if (existingCust.length > 0) {
-            customerId = existingCust[0]!.id;
+            customerName = existingCust[0]!.name;
+            if (!customerAddress) customerAddress = existingCust[0]!.address || null;
           } else {
-            const inserted = await sql`insert into customers (name, address) values (${customerName}, ${customerAddress}) returning id` as { id: number }[];
-            customerId = inserted[0]!.id;
+            writeJson(res, { error: 'Customer tidak ditemukan' }, 400);
+            return;
+          }
+        } else if (body.customer_name !== undefined && body.customer_name) {
+          const trimmedName = body.customer_name.trim();
+          const matchedCust = await sql`select id, name, address from customers where lower(name) = lower(${trimmedName}) limit 1` as { id: number; name: string; address: string | null }[];
+          if (matchedCust.length > 0) {
+            customerId = matchedCust[0]!.id;
+            customerName = matchedCust[0]!.name;
+          } else {
+            customerName = trimmedName;
           }
         }
         

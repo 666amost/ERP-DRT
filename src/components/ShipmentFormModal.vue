@@ -283,9 +283,24 @@ const filteredCustomerList = computed(() => {
   );
 });
 
-async function loadCustomerList() {
+let customerSearchTimer: ReturnType<typeof setTimeout> | null = null;
+watch(customerSearch, (val) => {
+  if (customerSearchTimer) clearTimeout(customerSearchTimer);
+  customerSearchTimer = setTimeout(() => {
+    const q = val.trim();
+    if (q.length >= 2) {
+      loadCustomerList(q);
+    } else if (q.length === 0) {
+      loadCustomerList();
+    }
+  }, 300);
+});
+
+async function loadCustomerList(search?: string) {
   try {
-    const res = await fetch('/api/customers?endpoint=list');
+    const params = new URLSearchParams({ endpoint: 'list' });
+    if (search) params.set('search', search);
+    const res = await fetch(`/api/customers?${params.toString()}`);
     const data = await res.json();
     customerList.value = data.items || [];
   } catch (e) {
@@ -403,12 +418,17 @@ function closeModal() {
   emit('close');
 }
 
+const customerSelected = computed(() => Boolean(form.value.customer_id));
+
 async function saveShipment() {
   const totalColli = parseInt(form.value.total_colli) || 1;
   const beratVal = parseNumberID(form.value.berat);
   const nominalVal = parseFloat(form.value.nominal) || 0;
 
-  const customerName = form.value.customer_name?.trim() || form.value.penerima_name?.trim() || null;
+  if (!form.value.customer_id) {
+    alert('Customer wajib dipilih dari daftar. Gunakan tombol "Pilih / Tambah Customer".');
+    return;
+  }
 
   const validation = validateForm();
   if (!validation.ok) {
@@ -419,32 +439,35 @@ async function saveShipment() {
 
   saving.value = true;
   try {
+    const payload = {
+      spb_number: form.value.spb_number || null,
+      pengirim_name: form.value.pengirim_name || null,
+      penerima_name: form.value.penerima_name || null,
+      penerima_phone: form.value.penerima_phone || null,
+      customer_id: form.value.customer_id,
+      customer_address: form.value.customer_address || undefined,
+      origin: form.value.origin,
+      destination: form.value.destination,
+      macam_barang: form.value.macam_barang || null,
+      satuan: form.value.satuan || 'KG',
+      berat: beratVal,
+      nominal: nominalVal,
+      total_colli: totalColli,
+      keterangan: form.value.keterangan || null,
+      vehicle_plate_region: form.value.vehicle_plate_region.trim().toUpperCase() || undefined,
+      eta: form.value.eta || null,
+      status: form.value.status,
+      service_type: form.value.service_type || 'CARGO',
+      jenis: form.value.jenis || 'FRANCO'
+    };
+
     if (props.shipment?.id) {
       const res = await fetch('/api/shipments?endpoint=update', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          ...payload,
           id: props.shipment.id,
-          spb_number: form.value.spb_number || null,
-          pengirim_name: form.value.pengirim_name || null,
-          penerima_name: form.value.penerima_name || null,
-          penerima_phone: form.value.penerima_phone || null,
-          customer_id: customerName ? undefined : form.value.customer_id,
-          customer_name: customerName,
-          customer_address: form.value.customer_address || undefined,
-          origin: form.value.origin,
-          destination: form.value.destination,
-          macam_barang: form.value.macam_barang || null,
-          satuan: form.value.satuan || 'KG',
-          berat: beratVal,
-          nominal: nominalVal,
-          total_colli: totalColli,
-          keterangan: form.value.keterangan || null,
-          vehicle_plate_region: form.value.vehicle_plate_region.trim().toUpperCase() || undefined,
-          eta: form.value.eta || null,
-          status: form.value.status,
-          service_type: form.value.service_type || 'CARGO',
-          jenis: form.value.jenis || 'FRANCO',
           regenerate_code: form.value.regenerate_code
         })
       });
@@ -457,28 +480,7 @@ async function saveShipment() {
       const res = await fetch('/api/shipments?endpoint=create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          spb_number: form.value.spb_number || null,
-          pengirim_name: form.value.pengirim_name || null,
-          penerima_name: form.value.penerima_name || null,
-          penerima_phone: form.value.penerima_phone || null,
-          customer_id: customerName ? undefined : form.value.customer_id,
-          customer_name: customerName,
-          customer_address: form.value.customer_address || undefined,
-          origin: form.value.origin,
-          destination: form.value.destination,
-          macam_barang: form.value.macam_barang || null,
-          satuan: form.value.satuan || 'KG',
-          berat: beratVal,
-          nominal: nominalVal,
-          total_colli: totalColli,
-          keterangan: form.value.keterangan || null,
-          vehicle_plate_region: form.value.vehicle_plate_region.trim().toUpperCase() || 'XX',
-          eta: form.value.eta || null,
-          status: form.value.status,
-          service_type: form.value.service_type || 'CARGO',
-          jenis: form.value.jenis || 'FRANCO'
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!res.ok) {
@@ -525,14 +527,34 @@ onMounted(() => {
           />
         </div>
 
-        <button
-          type="button"
-          class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
-          @click="openCustomerPicker"
-        >
-          <Icon icon="mdi:account-search" class="text-lg" />
-          Pilih / Tambah Customer
-        </button>
+        <div v-if="!customerSelected" class="space-y-1.5">
+          <button
+            type="button"
+            class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+            @click="openCustomerPicker"
+          >
+            <Icon icon="mdi:account-search" class="text-lg" />
+            Pilih / Tambah Customer
+          </button>
+          <p class="text-xs text-red-500 text-center">* Customer wajib dipilih dari daftar</p>
+        </div>
+
+        <div v-else class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-2.5 space-y-1.5">
+          <div class="flex items-center justify-between">
+            <div class="text-xs font-medium text-blue-700 dark:text-blue-300">
+              <Icon icon="mdi:check-circle" class="inline text-sm mr-1" />
+              Customer Terpilih: <span class="font-semibold">{{ form.customer_name }}</span>
+            </div>
+            <button
+              type="button"
+              class="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 font-medium flex items-center gap-1"
+              @click="openCustomerPicker"
+            >
+              <Icon icon="mdi:swap-horizontal" class="text-sm" />
+              Ganti
+            </button>
+          </div>
+        </div>
 
         <div class="bg-gray-50 dark:bg-gray-800/60 rounded-lg p-2.5 space-y-1.5">
           <div class="text-xs font-medium text-gray-700 dark:text-gray-300">Data Penerima & Penagihan</div>
@@ -547,12 +569,12 @@ onMounted(() => {
               />
             </div>
             <div>
-              <label class="block text-xs font-medium mb-0.5 dark:text-gray-300">Nama Penerima / Customer</label>
+              <label class="block text-xs font-medium mb-0.5 dark:text-gray-300">Nama Penerima</label>
               <input
                 v-model="form.penerima_name"
                 type="text"
                 class="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-xs dark:text-gray-100 dark:placeholder-gray-400"
-                placeholder="Nama penerima (juga untuk penagihan)"
+                placeholder="Nama penerima barang"
               />
             </div>
           </div>

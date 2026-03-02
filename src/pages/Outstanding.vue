@@ -52,9 +52,18 @@ const sjFilter = ref('');
 const company = ref<CompanyProfile | null>(null);
 const currentUser = ref<MeUser | null>(null);
 
-const customers = computed(() => {
-  const names = items.value.map(i => i.customer_name).filter(Boolean);
-  return [...new Set(names)].sort();
+type CustomerOption = { id: number | null; name: string };
+const customers = computed<CustomerOption[]>(() => {
+  const map = new Map<string, CustomerOption>();
+  for (const i of items.value) {
+    const name = (i.customer_name || '').trim();
+    if (!name) continue;
+    const key = i.customer_id ? `id:${i.customer_id}` : `name:${name.toLowerCase()}`;
+    if (!map.has(key)) {
+      map.set(key, { id: i.customer_id, name });
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
 });
 
 const pengirimList = computed(() => {
@@ -99,7 +108,13 @@ const filteredItems = computed(() => {
     );
   }
   if (selectedCustomer.value) {
-    result = result.filter(i => i.customer_name === selectedCustomer.value);
+    const selectedKey = selectedCustomer.value;
+    if (selectedKey.startsWith('id:')) {
+      const custId = parseInt(selectedKey.slice(3), 10);
+      result = result.filter(i => i.customer_id === custId);
+    } else {
+      result = result.filter(i => (i.customer_name || '').toLowerCase() === selectedKey.slice(5));
+    }
   }
   if (selectedPengirim.value) {
     result = result.filter(i => (i.pengirim_name || '') === selectedPengirim.value);
@@ -313,7 +328,7 @@ onMounted(async () => {
           <label class="block text-sm font-medium mb-1 dark:text-gray-300">Customer</label>
           <select v-model="selectedCustomer" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg text-sm">
             <option value="">Semua Customer</option>
-            <option v-for="c in customers" :key="c || 'unknown'" :value="c">{{ c || '-' }}</option>
+            <option v-for="c in customers" :key="c.id ?? c.name" :value="c.id ? `id:${c.id}` : `name:${c.name.toLowerCase()}`">{{ c.name || '-' }}</option>
           </select>
         </div>
         <div>

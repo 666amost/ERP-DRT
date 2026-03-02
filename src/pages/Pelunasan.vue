@@ -12,6 +12,7 @@ type PaymentHistory = {
   invoice_id: number;
   invoice_number: string | null;
   customer_name: string | null;
+  customer_id: number | null;
   original_amount: number;
   discount: number;
   final_amount: number;
@@ -68,9 +69,19 @@ function getMethodPillClasses(method: MethodColumn): string {
     : 'bg-primary-light dark:bg-gray-700 text-primary-dark dark:text-gray-200';
 }
 
-const customers = computed(() => {
-  const names = payments.value.map(p => p.customer_name).filter(Boolean);
-  return [...new Set(names)].sort();
+type PelunasanCustomerOption = { key: string; id: number | null; name: string };
+
+const customers = computed<PelunasanCustomerOption[]>(() => {
+  const map = new Map<string, PelunasanCustomerOption>();
+  payments.value.forEach(p => {
+    if (!p.customer_name) return;
+    const id = typeof p.customer_id === 'number' ? p.customer_id : null;
+    const key = id !== null ? `id:${id}` : `name:${p.customer_name.toLowerCase()}`;
+    if (!map.has(key)) {
+      map.set(key, { key, id, name: p.customer_name });
+    }
+  });
+  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
 });
 
 const methodOptions = computed(() => [
@@ -95,7 +106,14 @@ const filteredPayments = computed(() => {
     );
   }
   if (selectedCustomer.value) {
-    result = result.filter(p => p.customer_name === selectedCustomer.value);
+    const key = selectedCustomer.value;
+    if (key.startsWith('id:')) {
+      const id = Number(key.slice(3));
+      result = result.filter(p => p.customer_id === id);
+    } else {
+      const name = key.slice(5);
+      result = result.filter(p => (p.customer_name || '').toLowerCase() === name);
+    }
   }
   if (selectedMethod.value) {
     const target = normalizeMethod(selectedMethod.value);
@@ -256,7 +274,7 @@ onMounted(() => {
           <label class="block text-sm font-medium mb-1 dark:text-gray-300">Customer</label>
           <select v-model="selectedCustomer" class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100">
             <option value="">Semua Customer</option>
-            <option v-for="c in customers" :key="c || 'unknown'" :value="c">{{ c || '-' }}</option>
+            <option v-for="c in customers" :key="c.key" :value="c.key">{{ c.name }}</option>
           </select>
         </div>
         <div>
@@ -286,7 +304,7 @@ onMounted(() => {
 
       <div class="flex flex-wrap gap-2 items-center text-xs text-gray-600 dark:text-gray-400">
         <span class="font-medium">Filter aktif:</span>
-        <Badge v-if="selectedCustomer" variant="default">Customer: {{ selectedCustomer }}</Badge>
+        <Badge v-if="selectedCustomer" variant="default">Customer: {{ customers.find(c => c.key === selectedCustomer)?.name || selectedCustomer }}</Badge>
         <Badge v-if="selectedMethod" variant="default">Metode: {{ selectedMethod }}</Badge>
         <Badge v-if="dateFrom || dateTo" variant="default">Tanggal: {{ dateFrom || '-' }} s/d {{ dateTo || '-' }}</Badge>
         <Badge v-if="searchQuery" variant="default">Cari: {{ searchQuery }}</Badge>

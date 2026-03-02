@@ -46,9 +46,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         order by (select count(*) from shipments where customer_id = c.id) desc
       ` as Customer[];
     } else if (search) {
-      rows = await sql`select id, name, pengirim_name, phone, address from customers where lower(name) like ${'%' + search.toLowerCase() + '%'} order by name limit 50` as Customer[];
+      rows = await sql`select id, name, pengirim_name, phone, address from customers where lower(name) like ${'%' + search.toLowerCase() + '%'} order by name limit 200` as Customer[];
     } else {
-      rows = await sql`select id, name, pengirim_name, phone, address from customers order by name limit 200` as Customer[];
+      rows = await sql`select id, name, pengirim_name, phone, address from customers order by name limit 2000` as Customer[];
     }
     writeJson(res, { items: rows });
     return;

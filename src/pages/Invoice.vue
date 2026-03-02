@@ -207,6 +207,7 @@ const loadingUnpaidShipments = ref(false);
 const manualAmountMode = ref(false);
 const existingPaidAmount = ref<number>(0);
 const editingCustomerName = ref<string>('');
+const selectedCustomerKey = ref<string>('');
 const invoiceFilterType = ref<'pengirim' | 'penerima'>('penerima');
 const addInvoiceTab = ref<'unpaid' | 'selected'>('unpaid');
 const sjBulkInputStatus = ref<SjBulkInputStatus>('');
@@ -370,17 +371,24 @@ function onCicilanInvoiceSelectionChange(invoiceId: number, e: Event): void {
   toggleCicilanInvoiceSelection(invoiceId, Boolean(target?.checked));
 }
 
-const uniqueCustomerNames = computed(() => {
-  const names = new Set<string>();
+type InvoiceCustomerOption = { key: string; id: number | null; name: string };
+
+const uniqueCustomers = computed<InvoiceCustomerOption[]>(() => {
+  const map = new Map<string, InvoiceCustomerOption>();
   if (editingCustomerName.value) {
-    names.add(editingCustomerName.value);
+    const id = form.value.customer_id;
+    const key = typeof id === 'number' ? `id:${id}` : `name:${editingCustomerName.value.toLowerCase()}`;
+    map.set(key, { key, id: id ?? null, name: editingCustomerName.value });
   }
   allUnpaidShipments.value.forEach(s => {
-    if (s.customer_name && s.customer_name !== '-') {
-      names.add(s.customer_name);
+    if (!s.customer_name || s.customer_name === '-') return;
+    const id = typeof s.customer_id === 'number' ? s.customer_id : null;
+    const key = id !== null ? `id:${id}` : `name:${s.customer_name.toLowerCase()}`;
+    if (!map.has(key)) {
+      map.set(key, { key, id, name: s.customer_name });
     }
   });
-  return Array.from(names).sort();
+  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
 });
 
 const uniqueDblNumbers = computed(() => {
@@ -406,7 +414,7 @@ const sjSaveSummary = computed(() => {
   if (sjBulkInputStatus.value === 'not_returned') {
     return { total, returned: 0, pending: total };
   }
-  const returned = items.value.reduce((sum, it) => sum + (Boolean(it.sj_returned) ? 1 : 0), 0);
+  const returned = items.value.reduce((sum, it) => sum + (it.sj_returned ? 1 : 0), 0);
   return {
     total,
     returned,
@@ -484,7 +492,9 @@ async function loadAllUnpaidInvoices(): Promise<void> {
 function getFilteredUnpaidShipments(): Item[] {
   let result = allUnpaidShipments.value;
   
-  if (form.value.customer_name) {
+  if (typeof form.value.customer_id === 'number') {
+    result = result.filter(s => s.customer_id === form.value.customer_id);
+  } else if (form.value.customer_name) {
     const customerName = form.value.customer_name.toLowerCase();
     result = result.filter(s => {
       const shipmentCustomerName = (s.customer_name || '').toLowerCase();
@@ -546,6 +556,17 @@ function updateItemsFromSelection(): void {
 }
 
 function onCustomerChange(): void {
+  const key = selectedCustomerKey.value;
+  if (key) {
+    const opt = uniqueCustomers.value.find(c => c.key === key);
+    if (opt) {
+      form.value.customer_name = opt.name;
+      form.value.customer_id = opt.id;
+    }
+  } else {
+    form.value.customer_name = '';
+    form.value.customer_id = null;
+  }
   selectedShipmentIds.value.clear();
   selectedShipmentIds.value = new Set(selectedShipmentIds.value);
   updateItemsFromSelection();
@@ -722,6 +743,7 @@ function openCreateModal(): void {
   manualAmountMode.value = false;
   existingPaidAmount.value = 0;
   editingCustomerName.value = '';
+  selectedCustomerKey.value = '';
   spbSearch.value = '';
   showUnreturnedOnly.value = false;
   invoiceFilterType.value = 'penerima';
@@ -897,6 +919,9 @@ async function openEditModal(invoice: Invoice) {
   manualAmountMode.value = true;
   existingPaidAmount.value = invoice.paid_amount || 0;
   editingCustomerName.value = invoice.customer_name || '';
+  selectedCustomerKey.value = typeof invoice.customer_id === 'number'
+    ? `id:${invoice.customer_id}`
+    : `name:${(invoice.customer_name || '').toLowerCase()}`;
   addInvoiceTab.value = 'selected';
   spbSearch.value = '';
   showUnreturnedOnly.value = false;
@@ -2517,14 +2542,14 @@ watch(() => createPaymentType.value, (val) => {
               <div>
                 <label class="block text-sm font-medium mb-1 dark:text-gray-200">Customer</label>
                 <select
-                  v-model="form.customer_name"
+                  v-model="selectedCustomerKey"
                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
                   @change="onCustomerChange"
                   :disabled="loadingUnpaidShipments"
                 >
                   <option value="">-- Pilih Customer --</option>
-                  <option v-for="name in uniqueCustomerNames" :key="name" :value="name">
-                    {{ name }}
+                  <option v-for="c in uniqueCustomers" :key="c.key" :value="c.key">
+                    {{ c.name }}
                   </option>
                 </select>
               </div>

@@ -423,8 +423,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             when stats.shipment_count is null or stats.shipment_count = 0 then null
             when coalesce(stats.pending_count, 0) = 0 then true
             else false
-          end as sj_all_returned
+          end as sj_all_returned,
+          case
+            when c.pengirim_name is not null
+              and lower(trim(i.customer_name)) = lower(trim(c.pengirim_name))
+              then 'pengirim'
+            else 'penerima'
+          end as billing_type
         from invoices i
+        left join customers c on c.id = i.customer_id
         left join lateral (
           select 
             count(s.id)::int as shipment_count,
@@ -468,8 +475,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             when stats.shipment_count is null or stats.shipment_count = 0 then null
             when coalesce(stats.pending_count, 0) = 0 then true
             else false
-          end as sj_all_returned
+          end as sj_all_returned,
+          case
+            when c.pengirim_name is not null
+              and lower(trim(i.customer_name)) = lower(trim(c.pengirim_name))
+              then 'pengirim'
+            else 'penerima'
+          end as billing_type
         from invoices i
+        left join customers c on c.id = i.customer_id
         left join lateral (
           select 
             count(s.id)::int as shipment_count,
@@ -513,8 +527,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             when stats.shipment_count is null or stats.shipment_count = 0 then null
             when coalesce(stats.pending_count, 0) = 0 then true
             else false
-          end as sj_all_returned
+          end as sj_all_returned,
+          case
+            when c.pengirim_name is not null
+              and lower(trim(i.customer_name)) = lower(trim(c.pengirim_name))
+              then 'pengirim'
+            else 'penerima'
+          end as billing_type
         from invoices i
+        left join customers c on c.id = i.customer_id
         left join lateral (
           select 
             count(s.id)::int as shipment_count,

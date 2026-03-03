@@ -35,6 +35,7 @@ type Invoice = {
   sj_returned_count?: number;
   sj_pending_count?: number;
   sj_all_returned?: boolean | null;
+  billing_type?: 'pengirim' | 'penerima';
 };
 
 type InvoicePayment = {
@@ -223,13 +224,19 @@ const cicilanPaymentDate = ref<string>(new Date().toISOString().split('T')[0]!);
 const cicilanReferenceNo = ref<string>('');
 const cicilanNotes = ref<string>('');
 const cicilanSelectedInvoiceIds = ref<Set<number>>(new Set());
+const cicilanFilterType = ref<'semua' | 'penerima' | 'pengirim'>('semua');
+
+const cicilanFilteredByType = computed<Invoice[]>(() => {
+  if (cicilanFilterType.value === 'semua') return allUnpaidInvoices.value;
+  return allUnpaidInvoices.value.filter((inv) => (inv.billing_type || 'penerima') === cicilanFilterType.value);
+});
 
 const cicilanCustomerOptions = computed<CicilanCustomerOption[]>(() => {
   const map = new Map<string, CicilanCustomerOption>();
-  for (const inv of allUnpaidInvoices.value) {
+  for (const inv of cicilanFilteredByType.value) {
     const name = (inv.customer_name || '').trim() || 'Tanpa Customer';
     const id = typeof inv.customer_id === 'number' ? inv.customer_id : null;
-    const key = id ? `id:${id}` : `name:${name.toLowerCase()}`;
+    const key = `name:${name.toLowerCase()}`;
     const remaining = Number(inv.remaining_amount ?? inv.amount ?? 0);
     const prev = map.get(key);
     if (prev) {
@@ -253,15 +260,11 @@ const selectedCicilanCustomer = computed<CicilanCustomerOption | null>(() => {
 });
 
 const filteredCicilanInvoices = computed<Invoice[]>(() => {
-  let list = allUnpaidInvoices.value;
+  let list = cicilanFilteredByType.value;
   const selected = selectedCicilanCustomer.value;
   if (selected) {
-    if (typeof selected.customer_id === 'number') {
-      list = list.filter((inv) => inv.customer_id === selected.customer_id);
-    } else {
-      const nameKey = selected.customer_name.trim().toLowerCase();
-      list = list.filter((inv) => (inv.customer_name || '').trim().toLowerCase() === nameKey);
-    }
+    const nameKey = selected.customer_name.trim().toLowerCase();
+    list = list.filter((inv) => (inv.customer_name || '').trim().toLowerCase() === nameKey);
   }
   if (cicilanSearch.value.trim()) {
     const q = cicilanSearch.value.trim().toLowerCase();
@@ -293,15 +296,11 @@ const cicilanEligibleInvoices = computed<Invoice[]>(() => {
 });
 
 const cicilanCustomerInvoices = computed<Invoice[]>(() => {
-  let list = allUnpaidInvoices.value;
+  let list = cicilanFilteredByType.value;
   const selected = selectedCicilanCustomer.value;
   if (selected) {
-    if (typeof selected.customer_id === 'number') {
-      list = list.filter((inv) => inv.customer_id === selected.customer_id);
-    } else {
-      const nameKey = selected.customer_name.trim().toLowerCase();
-      list = list.filter((inv) => (inv.customer_name || '').trim().toLowerCase() === nameKey);
-    }
+    const nameKey = selected.customer_name.trim().toLowerCase();
+    list = list.filter((inv) => (inv.customer_name || '').trim().toLowerCase() === nameKey);
   }
   return list;
 });
@@ -755,6 +754,7 @@ function openCicilanModal(): void {
   showCicilanModal.value = true;
   cicilanCustomerKey.value = '';
   cicilanSearch.value = '';
+  cicilanFilterType.value = 'semua';
   cicilanPaymentType.value = 'TF_JAKARTA';
   cicilanPaymentDate.value = new Date().toISOString().split('T')[0]!;
   cicilanReferenceNo.value = '';
@@ -2328,6 +2328,50 @@ watch(() => createPaymentType.value, (val) => {
         <div class="flex items-center justify-between gap-3 flex-wrap">
           <div class="text-lg font-semibold dark:text-gray-100">Cicilan / Pelunasan Invoice</div>
           <Button variant="default" @click="showCicilanModal = false">Tutup</Button>
+        </div>
+
+        <div class="flex gap-2 items-center">
+          <button
+            type="button"
+            @click="() => { cicilanFilterType = 'semua'; cicilanCustomerKey = ''; }"
+            :class="[
+              'px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+              cicilanFilterType === 'semua'
+                ? 'bg-gray-700 text-white dark:bg-gray-200 dark:text-gray-900'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
+            ]"
+            :disabled="cicilanBusy"
+          >
+            Semua
+          </button>
+          <button
+            type="button"
+            @click="() => { cicilanFilterType = 'penerima'; cicilanCustomerKey = ''; }"
+            :class="[
+              'px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+              cicilanFilterType === 'penerima'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-gray-600'
+            ]"
+            :disabled="cicilanBusy"
+          >
+            <Icon icon="mdi:package-variant-closed" class="inline-block mr-1 text-base" />
+            Penerima
+          </button>
+          <button
+            type="button"
+            @click="() => { cicilanFilterType = 'pengirim'; cicilanCustomerKey = ''; }"
+            :class="[
+              'px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+              cicilanFilterType === 'pengirim'
+                ? 'bg-green-600 text-white'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-green-50 dark:hover:bg-gray-600'
+            ]"
+            :disabled="cicilanBusy"
+          >
+            <Icon icon="mdi:truck-delivery" class="inline-block mr-1 text-base" />
+            Pengirim
+          </button>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">

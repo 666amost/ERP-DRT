@@ -56,7 +56,7 @@ export const ROLE_PERMISSIONS = {
     canViewSPB: true,
     canViewDBL: false,
     canViewSuratJalan: false,
-    canViewOperationalCost: false,
+    canViewOperationalCost: true,
   },
 } as const;
 

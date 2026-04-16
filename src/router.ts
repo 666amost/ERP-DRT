@@ -57,8 +57,11 @@ export const router = createRouter({
 
 router.beforeEach(async (to, _from, next) => {
   if (to.meta.requiresAuth) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {
-      const res = await fetch('/api/auth?endpoint=me', { credentials: 'include' });
+      const res = await fetch('/api/auth?endpoint=me', { credentials: 'include', signal: controller.signal });
+      clearTimeout(timeoutId);
       if (res.ok) {
         const data = await res.json();
         const user = data.user;
@@ -80,10 +83,21 @@ router.beforeEach(async (to, _from, next) => {
         next('/login');
       }
     } catch (err) {
+      clearTimeout(timeoutId);
       console.warn('Auth check failed', err);
       next('/login');
     }
   } else {
     next();
+  }
+});
+
+router.onError((error, to) => {
+  const isChunkLoadError =
+    error.message?.includes('Failed to fetch dynamically imported module') ||
+    error.message?.includes('Importing a module script failed') ||
+    error.message?.includes('Unable to preload CSS');
+  if (isChunkLoadError) {
+    window.location.href = to.fullPath;
   }
 });

@@ -19,10 +19,12 @@ type DBLWithCost = {
   total_nominal: number;
   bayar_supir: number | null;
   solar: number | null;
-  sewa_mobil: number | null;
-  kuli_muat: number | null;
-  kuli_bongkar: number | null;
-  biaya_lain: number | null;
+  ongkos_mobil: number | null;
+  ops_jakarta: number | null;
+  ops_bali: number | null;
+  ops_lombok: number | null;
+  lain_lain: number | null;
+  potongan_diskon: number | null;
   total_operational: number | null;
   oc_catatan: string | null;
 };
@@ -31,10 +33,12 @@ type CostForm = {
   dbl_id: number;
   bayar_supir: string;
   solar: string;
-  sewa_mobil: string;
-  kuli_muat: string;
-  kuli_bongkar: string;
-  biaya_lain: string;
+  ongkos_mobil: string;
+  ops_jakarta: string;
+  ops_bali: string;
+  ops_lombok: string;
+  lain_lain: string;
+  potongan_diskon: string;
   catatan: string;
 };
 
@@ -49,10 +53,12 @@ type ReportItem = {
   total_nominal: number;
   bayar_supir: number;
   solar: number;
-  sewa_mobil: number;
-  kuli_muat: number;
-  kuli_bongkar: number;
-  biaya_lain: number;
+  ongkos_mobil: number;
+  ops_jakarta: number;
+  ops_bali: number;
+  ops_lombok: number;
+  lain_lain: number;
+  potongan_diskon: number;
   total_operational: number;
   margin: number;
   margin_percent: string | number;
@@ -74,10 +80,12 @@ const form = ref<CostForm>({
   dbl_id: 0,
   bayar_supir: '0',
   solar: '0',
-  sewa_mobil: '0',
-  kuli_muat: '0',
-  kuli_bongkar: '0',
-  biaya_lain: '0',
+  ongkos_mobil: '0',
+  ops_jakarta: '0',
+  ops_bali: '0',
+  ops_lombok: '0',
+  lain_lain: '0',
+  potongan_diskon: '0',
   catatan: ''
 });
 
@@ -87,23 +95,19 @@ const summary = ref({
   total_margin: 0
 });
 
-const isBaliDestination = computed(() => {
-  if (!selectedDbl.value?.destination) return false;
-  return selectedDbl.value.destination.toLowerCase().includes('bali');
-});
-
-const isJakartaOrigin = computed(() => {
-  if (!selectedDbl.value?.origin) return false;
-  return selectedDbl.value.origin.toLowerCase().includes('jakarta');
-});
+function toAmount(value: string): number {
+  return parseFloat(value) || 0;
+}
 
 const calculatedTotal = computed(() => {
-  return (parseFloat(form.value.bayar_supir) || 0) +
-    (parseFloat(form.value.solar) || 0) +
-    (parseFloat(form.value.sewa_mobil) || 0) +
-    (parseFloat(form.value.kuli_muat) || 0) +
-    (parseFloat(form.value.kuli_bongkar) || 0) +
-    (parseFloat(form.value.biaya_lain) || 0);
+  return toAmount(form.value.bayar_supir) +
+    toAmount(form.value.solar) +
+    toAmount(form.value.ongkos_mobil) +
+    toAmount(form.value.ops_jakarta) +
+    toAmount(form.value.ops_bali) +
+    toAmount(form.value.ops_lombok) +
+    toAmount(form.value.lain_lain) -
+    toAmount(form.value.potongan_diskon);
 });
 
 const calculatedMargin = computed(() => {
@@ -167,10 +171,12 @@ function openCostModal(dbl: DBLWithCost): void {
     dbl_id: dbl.id,
     bayar_supir: String(dbl.bayar_supir || 0),
     solar: String(dbl.solar || 0),
-    sewa_mobil: String(dbl.sewa_mobil || 0),
-    kuli_muat: String(dbl.kuli_muat || 0),
-    kuli_bongkar: String(dbl.kuli_bongkar || 0),
-    biaya_lain: String(dbl.biaya_lain || 0),
+    ongkos_mobil: String(dbl.ongkos_mobil || 0),
+    ops_jakarta: String(dbl.ops_jakarta || 0),
+    ops_bali: String(dbl.ops_bali || 0),
+    ops_lombok: String(dbl.ops_lombok || 0),
+    lain_lain: String(dbl.lain_lain || 0),
+    potongan_diskon: String(dbl.potongan_diskon || 0),
     catatan: dbl.oc_catatan || ''
   };
   showModal.value = true;
@@ -185,12 +191,14 @@ async function saveCosts(): Promise<void> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         dbl_id: form.value.dbl_id,
-        bayar_supir: parseFloat(form.value.bayar_supir) || 0,
-        solar: parseFloat(form.value.solar) || 0,
-        sewa_mobil: parseFloat(form.value.sewa_mobil) || 0,
-        kuli_muat: parseFloat(form.value.kuli_muat) || 0,
-        kuli_bongkar: parseFloat(form.value.kuli_bongkar) || 0,
-        biaya_lain: parseFloat(form.value.biaya_lain) || 0,
+        bayar_supir: toAmount(form.value.bayar_supir),
+        solar: toAmount(form.value.solar),
+        ongkos_mobil: toAmount(form.value.ongkos_mobil),
+        ops_jakarta: toAmount(form.value.ops_jakarta),
+        ops_bali: toAmount(form.value.ops_bali),
+        ops_lombok: toAmount(form.value.ops_lombok),
+        lain_lain: toAmount(form.value.lain_lain),
+        potongan_diskon: toAmount(form.value.potongan_diskon),
         catatan: form.value.catatan || null
       })
     });
@@ -476,7 +484,7 @@ onMounted(() => {
     <template v-else>
       <div class="hidden lg:block bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
         <div class="overflow-x-auto">
-          <table class="min-w-[1100px] w-full text-sm table-auto">
+          <table class="min-w-[1450px] w-full text-sm table-auto">
             <thead class="bg-gray-50 dark:bg-gray-700/50">
               <tr>
                 <th class="w-[90px] px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">DBL</th>
@@ -485,9 +493,12 @@ onMounted(() => {
                 <th class="w-[110px] px-3 py-3 text-right text-xs font-medium text-blue-600 dark:text-blue-400 uppercase whitespace-nowrap">Nominal</th>
                 <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Supir</th>
                 <th class="w-[80px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Solar</th>
-                <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Sewa</th>
-                <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Kuli</th>
-                <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Lain</th>
+                <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Mobil</th>
+                <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Ops Jkt</th>
+                <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Ops Bali</th>
+                <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Ops Lbk</th>
+                <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Lain2</th>
+                <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-amber-600 dark:text-amber-400 uppercase whitespace-nowrap">Diskon</th>
                 <th class="w-[110px] px-3 py-3 text-right text-xs font-medium text-red-600 dark:text-red-400 uppercase whitespace-nowrap">Total</th>
                 <th class="w-[110px] px-3 py-3 text-right text-xs font-medium text-green-600 dark:text-green-400 uppercase whitespace-nowrap">Margin</th>
                 <th class="w-[60px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">%</th>
@@ -495,7 +506,7 @@ onMounted(() => {
             </thead>
             <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
               <tr v-if="reportItems.length === 0">
-                <td colspan="12" class="px-4 py-8 text-center text-gray-500">Tidak ada data laporan</td>
+                <td colspan="15" class="px-4 py-8 text-center text-gray-500">Tidak ada data laporan</td>
               </tr>
               <tr
                 v-for="item in reportItems"
@@ -508,9 +519,12 @@ onMounted(() => {
                 <td class="px-3 py-2 text-right font-medium text-blue-600 dark:text-blue-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.total_nominal) }}</td>
                 <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.bayar_supir) }}</td>
                 <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.solar) }}</td>
-                <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.sewa_mobil) }}</td>
-                <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.kuli_muat + item.kuli_bongkar) }}</td>
-                <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.biaya_lain) }}</td>
+                <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.ongkos_mobil) }}</td>
+                <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.ops_jakarta) }}</td>
+                <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.ops_bali) }}</td>
+                <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.ops_lombok) }}</td>
+                <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.lain_lain) }}</td>
+                <td class="px-3 py-2 text-right text-amber-600 dark:text-amber-400 text-xs whitespace-nowrap tabular-nums">-{{ formatRupiah(item.potongan_diskon) }}</td>
                 <td class="px-3 py-2 text-right font-medium text-red-600 dark:text-red-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.total_operational) }}</td>
                 <td
                   class="px-3 py-2 text-right font-medium text-xs whitespace-nowrap tabular-nums"
@@ -548,7 +562,7 @@ onMounted(() => {
                 <div class="font-semibold text-gray-900 dark:text-gray-100">{{ item.dbl_number }}</div>
                 <div class="text-xs text-gray-500 mt-0.5">{{ item.dbl_date ? formatDate(item.dbl_date) : '-' }}</div>
               </div>
-              <Badge :variant="item.margin >= 0 ? 'success' : 'danger'">
+              <Badge :variant="item.margin >= 0 ? 'success' : 'warning'">
                 {{ item.margin_percent }}%
               </Badge>
             </div>
@@ -573,16 +587,28 @@ onMounted(() => {
                   <span class="text-gray-600 dark:text-gray-300">{{ formatRupiah(item.solar) }}</span>
                 </div>
                 <div class="flex justify-between">
-                  <span class="text-gray-400">Sewa</span>
-                  <span class="text-gray-600 dark:text-gray-300">{{ formatRupiah(item.sewa_mobil) }}</span>
+                  <span class="text-gray-400">Mobil</span>
+                  <span class="text-gray-600 dark:text-gray-300">{{ formatRupiah(item.ongkos_mobil) }}</span>
                 </div>
                 <div class="flex justify-between">
-                  <span class="text-gray-400">Kuli</span>
-                  <span class="text-gray-600 dark:text-gray-300">{{ formatRupiah(item.kuli_muat + item.kuli_bongkar) }}</span>
+                  <span class="text-gray-400">Ops Jakarta</span>
+                  <span class="text-gray-600 dark:text-gray-300">{{ formatRupiah(item.ops_jakarta) }}</span>
                 </div>
                 <div class="flex justify-between">
-                  <span class="text-gray-400">Lain</span>
-                  <span class="text-gray-600 dark:text-gray-300">{{ formatRupiah(item.biaya_lain) }}</span>
+                  <span class="text-gray-400">Ops Bali</span>
+                  <span class="text-gray-600 dark:text-gray-300">{{ formatRupiah(item.ops_bali) }}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-gray-400">Ops Lombok</span>
+                  <span class="text-gray-600 dark:text-gray-300">{{ formatRupiah(item.ops_lombok) }}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-gray-400">Lain2</span>
+                  <span class="text-gray-600 dark:text-gray-300">{{ formatRupiah(item.lain_lain) }}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-gray-400">Diskon</span>
+                  <span class="text-amber-600 dark:text-amber-400">-{{ formatRupiah(item.potongan_diskon) }}</span>
                 </div>
               </div>
             </div>
@@ -659,52 +685,60 @@ onMounted(() => {
                 @focus="($event.target as HTMLInputElement).select()"
               />
             </div>
-          </div>
-
-          <div>
-            <label class="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Sewa Mobil</label>
-            <input 
-              v-model="form.sewa_mobil" 
-              type="number" 
-              class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
-              @focus="($event.target as HTMLInputElement).select()"
-            />
-          </div>
-
-          <div
-            v-if="isJakartaOrigin"
-            class="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-3"
-          >
-            <label class="block text-xs font-medium mb-1 text-orange-700 dark:text-orange-400">Kuli Muat (Jakarta)</label>
-            <input 
-              v-model="form.kuli_muat" 
-              type="number" 
-              class="w-full px-3 py-2 text-sm border border-orange-300 dark:border-orange-700 rounded-lg bg-white dark:bg-gray-700 dark:text-gray-100"
-              @focus="($event.target as HTMLInputElement).select()"
-            />
-          </div>
-
-          <div
-            v-if="isBaliDestination"
-            class="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-3"
-          >
-            <label class="block text-xs font-medium mb-1 text-purple-700 dark:text-purple-400">Kuli Bongkar (Bali)</label>
-            <input 
-              v-model="form.kuli_bongkar" 
-              type="number" 
-              class="w-full px-3 py-2 text-sm border border-purple-300 dark:border-purple-700 rounded-lg bg-white dark:bg-gray-700 dark:text-gray-100"
-              @focus="($event.target as HTMLInputElement).select()"
-            />
-          </div>
-
-          <div>
-            <label class="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Biaya Lain</label>
-            <input 
-              v-model="form.biaya_lain" 
-              type="number" 
-              class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
-              @focus="($event.target as HTMLInputElement).select()"
-            />
+            <div>
+              <label class="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Ongkos Mobil</label>
+              <input 
+                v-model="form.ongkos_mobil" 
+                type="number" 
+                class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
+                @focus="($event.target as HTMLInputElement).select()"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Ops Jakarta</label>
+              <input 
+                v-model="form.ops_jakarta" 
+                type="number" 
+                class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
+                @focus="($event.target as HTMLInputElement).select()"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Ops Bali</label>
+              <input 
+                v-model="form.ops_bali" 
+                type="number" 
+                class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
+                @focus="($event.target as HTMLInputElement).select()"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Ops Lombok</label>
+              <input 
+                v-model="form.ops_lombok" 
+                type="number" 
+                class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
+                @focus="($event.target as HTMLInputElement).select()"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Lain2</label>
+              <input 
+                v-model="form.lain_lain" 
+                type="number" 
+                class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
+                @focus="($event.target as HTMLInputElement).select()"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium mb-1 text-amber-700 dark:text-amber-400">Potongan / Diskon</label>
+              <input 
+                v-model="form.potongan_diskon" 
+                type="number" 
+                class="w-full px-3 py-2 text-sm border border-amber-300 dark:border-amber-700 rounded-lg dark:bg-gray-700 dark:text-gray-100"
+                @focus="($event.target as HTMLInputElement).select()"
+              />
+            </div>
           </div>
 
           <div>

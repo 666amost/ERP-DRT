@@ -109,6 +109,28 @@ function buildDestinationCondition(raw?: string | null): string | null {
   return `lower(d.destination) like '%${escapeSqlLiteral(value)}%'`;
 }
 
+type OperationalCostPayload = {
+  bayar_supir?: number;
+  solar?: number;
+  ongkos_mobil?: number;
+  ops_jakarta?: number;
+  ops_bali?: number;
+  ops_lombok?: number;
+  lain_lain?: number;
+  potongan_diskon?: number;
+};
+
+function getOperationalCostTotal(cost: OperationalCostPayload): number {
+  return (cost.bayar_supir || 0) +
+    (cost.solar || 0) +
+    (cost.ongkos_mobil || 0) +
+    (cost.ops_jakarta || 0) +
+    (cost.ops_bali || 0) +
+    (cost.ops_lombok || 0) +
+    (cost.lain_lain || 0) -
+    (cost.potongan_diskon || 0);
+}
+
 export async function dblHandler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method === 'OPTIONS') { res.writeHead(204, corsHeaders); res.end(); return }
 
@@ -762,7 +784,7 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
           const query = `
             select d.id, d.dbl_number, d.origin, d.destination, d.driver_name, d.dbl_date, d.vehicle_plate,
               (select coalesce(sum(s.nominal), 0)::float from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_nominal,
-              oc.bayar_supir, oc.solar, oc.sewa_mobil, oc.kuli_muat, oc.kuli_bongkar, oc.biaya_lain, oc.total_operational, oc.catatan as oc_catatan
+              oc.bayar_supir, oc.solar, oc.ongkos_mobil, oc.ops_jakarta, oc.ops_bali, oc.ops_lombok, oc.lain_lain, oc.potongan_diskon, oc.total_operational, oc.catatan as oc_catatan
             from dbl d
             left join dbl_operational_costs oc on oc.dbl_id = d.id
             ${whereClause}
@@ -774,7 +796,7 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
           const query = `
             select d.id, d.dbl_number, d.origin, d.destination, d.driver_name, d.dbl_date, d.vehicle_plate,
               (select coalesce(sum(s.nominal), 0)::float from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_nominal,
-              oc.bayar_supir, oc.solar, oc.sewa_mobil, oc.kuli_muat, oc.kuli_bongkar, oc.biaya_lain, oc.total_operational, oc.catatan as oc_catatan
+              oc.bayar_supir, oc.solar, oc.ongkos_mobil, oc.ops_jakarta, oc.ops_bali, oc.ops_lombok, oc.lain_lain, oc.potongan_diskon, oc.total_operational, oc.catatan as oc_catatan
             from dbl d
             left join dbl_operational_costs oc on oc.dbl_id = d.id
             order by ${orderExpr}
@@ -793,10 +815,12 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
         dbl_id: number;
         bayar_supir?: number;
         solar?: number;
-        sewa_mobil?: number;
-        kuli_muat?: number;
-        kuli_bongkar?: number;
-        biaya_lain?: number;
+        ongkos_mobil?: number;
+        ops_jakarta?: number;
+        ops_bali?: number;
+        ops_lombok?: number;
+        lain_lain?: number;
+        potongan_diskon?: number;
         catatan?: string;
       } | null;
 
@@ -805,8 +829,7 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
         return;
       }
 
-      const totalOperational = (body.bayar_supir || 0) + (body.solar || 0) + (body.sewa_mobil || 0) +
-        (body.kuli_muat || 0) + (body.kuli_bongkar || 0) + (body.biaya_lain || 0);
+      const totalOperational = getOperationalCostTotal(body);
 
       const existing = await sql`
         select id from dbl_operational_costs where dbl_id = ${body.dbl_id}
@@ -817,10 +840,12 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
           update dbl_operational_costs set
             bayar_supir = ${body.bayar_supir || 0},
             solar = ${body.solar || 0},
-            sewa_mobil = ${body.sewa_mobil || 0},
-            kuli_muat = ${body.kuli_muat || 0},
-            kuli_bongkar = ${body.kuli_bongkar || 0},
-            biaya_lain = ${body.biaya_lain || 0},
+            ongkos_mobil = ${body.ongkos_mobil || 0},
+            ops_jakarta = ${body.ops_jakarta || 0},
+            ops_bali = ${body.ops_bali || 0},
+            ops_lombok = ${body.ops_lombok || 0},
+            lain_lain = ${body.lain_lain || 0},
+            potongan_diskon = ${body.potongan_diskon || 0},
             total_operational = ${totalOperational},
             catatan = ${body.catatan || null},
             updated_at = now()
@@ -829,15 +854,17 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
       } else {
         await sql`
           insert into dbl_operational_costs (
-            dbl_id, bayar_supir, solar, sewa_mobil, kuli_muat, kuli_bongkar, biaya_lain, total_operational, catatan
+            dbl_id, bayar_supir, solar, ongkos_mobil, ops_jakarta, ops_bali, ops_lombok, lain_lain, potongan_diskon, total_operational, catatan
           ) values (
             ${body.dbl_id},
             ${body.bayar_supir || 0},
             ${body.solar || 0},
-            ${body.sewa_mobil || 0},
-            ${body.kuli_muat || 0},
-            ${body.kuli_bongkar || 0},
-            ${body.biaya_lain || 0},
+            ${body.ongkos_mobil || 0},
+            ${body.ops_jakarta || 0},
+            ${body.ops_bali || 0},
+            ${body.ops_lombok || 0},
+            ${body.lain_lain || 0},
+            ${body.potongan_diskon || 0},
             ${totalOperational},
             ${body.catatan || null}
           )
@@ -863,10 +890,12 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
           coalesce(oc.total_operational, 0)::float as total_operational,
           coalesce(oc.bayar_supir, 0)::float as bayar_supir,
           coalesce(oc.solar, 0)::float as solar,
-          coalesce(oc.sewa_mobil, 0)::float as sewa_mobil,
-          coalesce(oc.kuli_muat, 0)::float as kuli_muat,
-          coalesce(oc.kuli_bongkar, 0)::float as kuli_bongkar,
-          coalesce(oc.biaya_lain, 0)::float as biaya_lain
+          coalesce(oc.ongkos_mobil, 0)::float as ongkos_mobil,
+          coalesce(oc.ops_jakarta, 0)::float as ops_jakarta,
+          coalesce(oc.ops_bali, 0)::float as ops_bali,
+          coalesce(oc.ops_lombok, 0)::float as ops_lombok,
+          coalesce(oc.lain_lain, 0)::float as lain_lain,
+          coalesce(oc.potongan_diskon, 0)::float as potongan_diskon
         from dbl d
         left join dbl_operational_costs oc on oc.dbl_id = d.id
       `;
@@ -894,10 +923,12 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
         total_operational: number;
         bayar_supir: number;
         solar: number;
-        sewa_mobil: number;
-        kuli_muat: number;
-        kuli_bongkar: number;
-        biaya_lain: number;
+        ongkos_mobil: number;
+        ops_jakarta: number;
+        ops_bali: number;
+        ops_lombok: number;
+        lain_lain: number;
+        potongan_diskon: number;
       }>;
 
       const report = items.map(item => ({

@@ -127,7 +127,7 @@ function getOperationalCostTotal(cost: OperationalCostPayload): number {
     (cost.ops_jakarta || 0) +
     (cost.ops_bali || 0) +
     (cost.ops_lombok || 0) +
-    (cost.lain_lain || 0) -
+    (cost.lain_lain || 0) +
     (cost.potongan_diskon || 0);
 }
 

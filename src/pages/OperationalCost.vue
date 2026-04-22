@@ -42,6 +42,8 @@ type CostForm = {
   catatan: string;
 };
 
+type CostAmountField = Exclude<keyof CostForm, 'dbl_id' | 'catatan'>;
+
 type ReportItem = {
   id: number;
   dbl_number: string;
@@ -99,6 +101,18 @@ function toAmount(value: string): number {
   return parseFloat(value) || 0;
 }
 
+function formatInputAmount(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  if (!digits) return '';
+  return new Intl.NumberFormat('id-ID').format(Number(digits));
+}
+
+function updateAmountField(field: CostAmountField, event: Event): void {
+  const target = event.target as HTMLInputElement | null;
+  if (!target) return;
+  form.value[field] = target.value.replace(/\D/g, '');
+}
+
 const calculatedTotal = computed(() => {
   return toAmount(form.value.bayar_supir) +
     toAmount(form.value.solar) +
@@ -106,7 +120,7 @@ const calculatedTotal = computed(() => {
     toAmount(form.value.ops_jakarta) +
     toAmount(form.value.ops_bali) +
     toAmount(form.value.ops_lombok) +
-    toAmount(form.value.lain_lain) -
+    toAmount(form.value.lain_lain) +
     toAmount(form.value.potongan_diskon);
 });
 
@@ -524,7 +538,7 @@ onMounted(() => {
                 <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.ops_bali) }}</td>
                 <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.ops_lombok) }}</td>
                 <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.lain_lain) }}</td>
-                <td class="px-3 py-2 text-right text-amber-600 dark:text-amber-400 text-xs whitespace-nowrap tabular-nums">-{{ formatRupiah(item.potongan_diskon) }}</td>
+                <td class="px-3 py-2 text-right text-amber-600 dark:text-amber-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.potongan_diskon) }}</td>
                 <td class="px-3 py-2 text-right font-medium text-red-600 dark:text-red-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.total_operational) }}</td>
                 <td
                   class="px-3 py-2 text-right font-medium text-xs whitespace-nowrap tabular-nums"
@@ -608,7 +622,7 @@ onMounted(() => {
                 </div>
                 <div class="flex justify-between">
                   <span class="text-gray-400">Diskon</span>
-                  <span class="text-amber-600 dark:text-amber-400">-{{ formatRupiah(item.potongan_diskon) }}</span>
+                  <span class="text-amber-600 dark:text-amber-400">{{ formatRupiah(item.potongan_diskon) }}</span>
                 </div>
               </div>
             </div>
@@ -670,72 +684,88 @@ onMounted(() => {
             <div>
               <label class="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Bayar Supir</label>
               <input 
-                v-model="form.bayar_supir" 
-                type="number" 
+                :value="formatInputAmount(form.bayar_supir)" 
+                type="text"
+                inputmode="numeric"
                 class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
+                @input="updateAmountField('bayar_supir', $event)"
                 @focus="($event.target as HTMLInputElement).select()"
               />
             </div>
             <div>
               <label class="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Solar / BBM</label>
               <input 
-                v-model="form.solar" 
-                type="number" 
+                :value="formatInputAmount(form.solar)" 
+                type="text"
+                inputmode="numeric"
                 class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
+                @input="updateAmountField('solar', $event)"
                 @focus="($event.target as HTMLInputElement).select()"
               />
             </div>
             <div>
               <label class="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Ongkos Mobil</label>
               <input 
-                v-model="form.ongkos_mobil" 
-                type="number" 
+                :value="formatInputAmount(form.ongkos_mobil)" 
+                type="text"
+                inputmode="numeric"
                 class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
+                @input="updateAmountField('ongkos_mobil', $event)"
                 @focus="($event.target as HTMLInputElement).select()"
               />
             </div>
             <div>
               <label class="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Ops Jakarta</label>
               <input 
-                v-model="form.ops_jakarta" 
-                type="number" 
+                :value="formatInputAmount(form.ops_jakarta)" 
+                type="text"
+                inputmode="numeric"
                 class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
+                @input="updateAmountField('ops_jakarta', $event)"
                 @focus="($event.target as HTMLInputElement).select()"
               />
             </div>
             <div>
               <label class="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Ops Bali</label>
               <input 
-                v-model="form.ops_bali" 
-                type="number" 
+                :value="formatInputAmount(form.ops_bali)" 
+                type="text"
+                inputmode="numeric"
                 class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
+                @input="updateAmountField('ops_bali', $event)"
                 @focus="($event.target as HTMLInputElement).select()"
               />
             </div>
             <div>
               <label class="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Ops Lombok</label>
               <input 
-                v-model="form.ops_lombok" 
-                type="number" 
+                :value="formatInputAmount(form.ops_lombok)" 
+                type="text"
+                inputmode="numeric"
                 class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
+                @input="updateAmountField('ops_lombok', $event)"
                 @focus="($event.target as HTMLInputElement).select()"
               />
             </div>
             <div>
               <label class="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Lain2</label>
               <input 
-                v-model="form.lain_lain" 
-                type="number" 
+                :value="formatInputAmount(form.lain_lain)" 
+                type="text"
+                inputmode="numeric"
                 class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
+                @input="updateAmountField('lain_lain', $event)"
                 @focus="($event.target as HTMLInputElement).select()"
               />
             </div>
             <div>
               <label class="block text-xs font-medium mb-1 text-amber-700 dark:text-amber-400">Potongan / Diskon</label>
               <input 
-                v-model="form.potongan_diskon" 
-                type="number" 
+                :value="formatInputAmount(form.potongan_diskon)" 
+                type="text"
+                inputmode="numeric"
                 class="w-full px-3 py-2 text-sm border border-amber-300 dark:border-amber-700 rounded-lg dark:bg-gray-700 dark:text-gray-100"
+                @input="updateAmountField('potongan_diskon', $event)"
                 @focus="($event.target as HTMLInputElement).select()"
               />
             </div>

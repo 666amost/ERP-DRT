@@ -29,6 +29,7 @@ const selectedCustomer = ref('');
 const selectedMethod = ref('');
 const dateFrom = ref('');
 const dateTo = ref('');
+const selectedMonth = ref('');
 
 function normalizeMethod(value?: string | null): string {
   return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
@@ -182,12 +183,14 @@ function setRangeToday(): void {
   const todayStr = toWIBDateString();
   dateFrom.value = todayStr;
   dateTo.value = todayStr;
+  selectedMonth.value = '';
 }
 
 function setRangeDefault(): void {
   const { from, to } = getDefaultRange();
   dateFrom.value = from;
   dateTo.value = to;
+  selectedMonth.value = '';
 }
 
 function setRangeLast7Days(): void {
@@ -197,6 +200,7 @@ function setRangeLast7Days(): void {
   start.setDate(start.getDate() - 6);
   dateFrom.value = toWIBDateString(start);
   dateTo.value = todayStr;
+  selectedMonth.value = '';
 }
 
 function setRangeThisMonth(): void {
@@ -205,7 +209,40 @@ function setRangeThisMonth(): void {
   const start = new Date(todayMid.getFullYear(), todayMid.getMonth(), 1);
   dateFrom.value = toWIBDateString(start);
   dateTo.value = todayStr;
+  selectedMonth.value = `${todayMid.getFullYear()}-${String(todayMid.getMonth() + 1).padStart(2, '0')}`;
 }
+
+function setRangeMonth(yearMonth: string): void {
+  if (!yearMonth) return;
+  const parts = yearMonth.split('-');
+  const year = Number(parts[0] ?? 0);
+  const month = Number(parts[1] ?? 0);
+  if (!year || !month) return;
+  const firstDay = new Date(year, month - 1, 1);
+  const lastDay = new Date(year, month, 0);
+  dateFrom.value = toWIBDateString(firstDay);
+  dateTo.value = toWIBDateString(lastDay);
+}
+
+const activePeriodLabel = computed<string>(() => {
+  if (!dateFrom.value && !dateTo.value) return '';
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  const fmt = (d: string) => {
+    const dt = new Date(d + 'T00:00:00');
+    return `${dt.getDate()} ${monthNames[dt.getMonth()]} ${dt.getFullYear()}`;
+  };
+  if (dateFrom.value && dateTo.value) {
+    if (dateFrom.value === dateTo.value) return fmt(dateFrom.value);
+    const from = new Date(dateFrom.value + 'T00:00:00');
+    const to = new Date(dateTo.value + 'T00:00:00');
+    if (from.getDate() === 1 && to.getDate() === new Date(to.getFullYear(), to.getMonth() + 1, 0).getDate() && from.getMonth() === to.getMonth()) {
+      return `${monthNames[from.getMonth()]} ${from.getFullYear()}`;
+    }
+    return `${fmt(dateFrom.value)} – ${fmt(dateTo.value)}`;
+  }
+  if (dateFrom.value) return `Sejak ${fmt(dateFrom.value)}`;
+  return `Sampai ${fmt(dateTo.value)}`;
+});
 
 async function applyFilters(): Promise<void> {
   await loadPayments();
@@ -215,6 +252,7 @@ function resetFilters() {
   searchQuery.value = '';
   selectedCustomer.value = '';
   selectedMethod.value = '';
+  selectedMonth.value = '';
   setRangeDefault();
   applyFilters();
 }
@@ -260,37 +298,46 @@ onMounted(() => {
     </div>
 
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-4">
-      <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div>
+          <label class="block text-sm font-medium mb-1 dark:text-gray-300">Pilih Bulan</label>
+          <input
+            v-model="selectedMonth"
+            type="month"
+            class="w-full min-w-0 px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:[color-scheme:dark]"
+            @change="() => { setRangeMonth(selectedMonth); applyFilters(); }"
+          />
+        </div>
         <div>
           <label class="block text-sm font-medium mb-1 dark:text-gray-300">Cari</label>
           <input
             v-model="searchQuery"
             type="text"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-400"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-400"
             placeholder="Invoice, Customer..."
           />
         </div>
         <div>
           <label class="block text-sm font-medium mb-1 dark:text-gray-300">Customer</label>
-          <select v-model="selectedCustomer" class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100">
+          <select v-model="selectedCustomer" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100">
             <option value="">Semua Customer</option>
             <option v-for="c in customers" :key="c.key" :value="c.key">{{ c.name }}</option>
           </select>
         </div>
         <div>
           <label class="block text-sm font-medium mb-1 dark:text-gray-300">Metode</label>
-          <select v-model="selectedMethod" class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100">
+          <select v-model="selectedMethod" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100">
             <option value="">Semua Metode</option>
             <option v-for="m in methodOptions" :key="m" :value="m">{{ m }}</option>
           </select>
         </div>
         <div>
           <label class="block text-sm font-medium mb-1 dark:text-gray-300">Dari Tanggal</label>
-          <input v-model="dateFrom" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
+          <input v-model="dateFrom" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:[color-scheme:dark]" />
         </div>
         <div>
           <label class="block text-sm font-medium mb-1 dark:text-gray-300">Sampai Tanggal</label>
-          <input v-model="dateTo" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100" />
+          <input v-model="dateTo" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:[color-scheme:dark]" />
         </div>
       </div>
       <div class="flex flex-wrap gap-2 items-center">
@@ -314,14 +361,17 @@ onMounted(() => {
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
       <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
         <div class="text-sm text-gray-500">Total Dibayar</div>
+        <div v-if="activePeriodLabel" class="text-xs text-primary-dark dark:text-primary-light font-medium mb-1">{{ activePeriodLabel }}</div>
         <div class="text-2xl font-bold text-green-600">{{ formatRupiah(totalPaid) }}</div>
       </div>
       <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
         <div class="text-sm text-gray-500">Total Diskon</div>
+        <div v-if="activePeriodLabel" class="text-xs text-primary-dark dark:text-primary-light font-medium mb-1">{{ activePeriodLabel }}</div>
         <div class="text-2xl font-bold text-orange-500">{{ formatRupiah(totalDiscount) }}</div>
       </div>
       <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
         <div class="text-sm text-gray-500">Jumlah Transaksi</div>
+        <div v-if="activePeriodLabel" class="text-xs text-primary-dark dark:text-primary-light font-medium mb-1">{{ activePeriodLabel }}</div>
         <div class="text-2xl font-bold text-blue-600">{{ filteredPayments.length }}</div>
       </div>
     </div>

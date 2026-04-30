@@ -1636,7 +1636,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         where ip.payment_date >= ${fromDate}::date
           and ip.payment_date < (${toDate}::date + interval '1 day')
         order by ip.payment_date desc
-        limit 500
+        limit 9999
       ` as PaymentHistory[];
     } else if (fromDate) {
       payments = await sql`
@@ -1650,7 +1650,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         join invoices i on i.id = ip.invoice_id
         where ip.payment_date >= ${fromDate}::date
         order by ip.payment_date desc
-        limit 500
+        limit 9999
       ` as PaymentHistory[];
     } else if (toDate) {
       payments = await sql`
@@ -1664,7 +1664,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         join invoices i on i.id = ip.invoice_id
         where ip.payment_date < (${toDate}::date + interval '1 day')
         order by ip.payment_date desc
-        limit 500
+        limit 9999
       ` as PaymentHistory[];
     } else {
       payments = await sql`

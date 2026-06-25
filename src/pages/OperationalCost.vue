@@ -271,8 +271,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-4 pb-20 lg:pb-4">
-    <div class="hidden lg:flex items-center justify-between gap-4 mb-4">
+  <div class="min-w-0 space-y-3 pb-20 lg:pb-0 overflow-x-hidden">
+    <div class="hidden lg:flex items-center justify-between gap-4">
       <h1 class="text-xl font-semibold dark:text-gray-100">Biaya Operasional</h1>
       <div class="flex gap-2">
         <Button
@@ -309,29 +309,29 @@ onMounted(() => {
       </div>
     </div>
 
-    <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+      <div class="grid grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.35fr)_7rem] gap-3">
+        <div class="min-w-0">
           <label class="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Dari</label>
           <input
             v-model="startDate"
             type="date"
-            class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
+            class="w-full min-w-0 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
           />
         </div>
-        <div>
+        <div class="min-w-0">
           <label class="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Sampai</label>
           <input
             v-model="endDate"
             type="date"
-            class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
+            class="w-full min-w-0 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
           />
         </div>
-        <div>
+        <div class="min-w-0">
           <label class="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Tujuan</label>
           <select
             v-model="destinationFilter"
-            class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
+            class="w-full min-w-0 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
           >
             <option v-for="opt in destinationOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
@@ -349,24 +349,25 @@ onMounted(() => {
     </div>
 
     <template v-if="viewMode === 'report'">
-      <div class="grid grid-cols-3 gap-3 lg:gap-4">
-        <div class="bg-white dark:bg-gray-800 rounded-lg p-3 lg:p-4 border border-gray-200 dark:border-gray-700">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div class="min-w-0 bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
           <div class="text-xs font-medium text-blue-600 dark:text-blue-400 uppercase">Pendapatan</div>
-          <div class="text-sm lg:text-lg font-bold text-gray-900 dark:text-gray-100 mt-1">
+          <div class="text-sm lg:text-base xl:text-lg font-bold text-gray-900 dark:text-gray-100 mt-1 truncate" :title="formatRupiah(summary.total_nominal)">
             {{ formatRupiah(summary.total_nominal) }}
           </div>
         </div>
-        <div class="bg-white dark:bg-gray-800 rounded-lg p-3 lg:p-4 border border-gray-200 dark:border-gray-700">
+        <div class="min-w-0 bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
           <div class="text-xs font-medium text-red-600 dark:text-red-400 uppercase">Biaya</div>
-          <div class="text-sm lg:text-lg font-bold text-gray-900 dark:text-gray-100 mt-1">
+          <div class="text-sm lg:text-base xl:text-lg font-bold text-gray-900 dark:text-gray-100 mt-1 truncate" :title="formatRupiah(summary.total_operational)">
             {{ formatRupiah(summary.total_operational) }}
           </div>
         </div>
-        <div class="bg-white dark:bg-gray-800 rounded-lg p-3 lg:p-4 border border-gray-200 dark:border-gray-700">
+        <div class="min-w-0 bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
           <div class="text-xs font-medium uppercase" :class="summary.total_margin >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">Margin</div>
           <div
-            class="text-sm lg:text-lg font-bold mt-1"
+            class="text-sm lg:text-base xl:text-lg font-bold mt-1 truncate"
             :class="summary.total_margin >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
+            :title="formatRupiah(summary.total_margin)"
           >
             {{ formatRupiah(summary.total_margin) }}
           </div>
@@ -380,8 +381,9 @@ onMounted(() => {
 
     <template v-else-if="viewMode === 'input'">
       <div class="hidden lg:block bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <div class="max-h-[calc(100vh-14rem)] overflow-auto">
         <table class="w-full text-sm">
-          <thead class="bg-gray-50 dark:bg-gray-700/50">
+          <thead class="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700/50">
             <tr>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">No. DBL</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tanggal</th>
@@ -435,6 +437,7 @@ onMounted(() => {
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
 
       <div class="lg:hidden space-y-3">
@@ -496,26 +499,43 @@ onMounted(() => {
     </template>
 
     <template v-else>
-      <div class="hidden lg:block bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
-        <div class="overflow-x-auto">
-          <table class="min-w-[1450px] w-full text-sm table-auto">
-            <thead class="bg-gray-50 dark:bg-gray-700/50">
+      <div class="hidden lg:block bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <div class="max-h-[calc(100vh-20rem)] overflow-auto">
+          <table class="w-full table-fixed text-[11px]">
+            <colgroup>
+              <col style="width: 7.5%" />
+              <col style="width: 6%" />
+              <col style="width: 14%" />
+              <col style="width: 8%" />
+              <col style="width: 6%" />
+              <col style="width: 5%" />
+              <col style="width: 5.5%" />
+              <col style="width: 5.2%" />
+              <col style="width: 5.2%" />
+              <col style="width: 5.2%" />
+              <col style="width: 5%" />
+              <col style="width: 5.4%" />
+              <col style="width: 6.7%" />
+              <col style="width: 7%" />
+              <col style="width: 3.3%" />
+            </colgroup>
+            <thead class="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700/50">
               <tr>
-                <th class="w-[90px] px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">DBL</th>
-                <th class="w-[80px] px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Tgl</th>
-                <th class="w-[150px] px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Rute</th>
-                <th class="w-[110px] px-3 py-3 text-right text-xs font-medium text-blue-600 dark:text-blue-400 uppercase whitespace-nowrap">Nominal</th>
-                <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Supir</th>
-                <th class="w-[80px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Solar</th>
-                <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Mobil</th>
-                <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Ops Jkt</th>
-                <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Ops Bali</th>
-                <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Ops Lbk</th>
-                <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Lain2</th>
-                <th class="w-[90px] px-3 py-3 text-right text-xs font-medium text-amber-600 dark:text-amber-400 uppercase whitespace-nowrap">Diskon</th>
-                <th class="w-[110px] px-3 py-3 text-right text-xs font-medium text-red-600 dark:text-red-400 uppercase whitespace-nowrap">Total</th>
-                <th class="w-[110px] px-3 py-3 text-right text-xs font-medium text-green-600 dark:text-green-400 uppercase whitespace-nowrap">Margin</th>
-                <th class="w-[60px] px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">%</th>
+                <th class="px-1.5 py-2.5 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase">DBL</th>
+                <th class="px-1.5 py-2.5 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Tgl</th>
+                <th class="px-1.5 py-2.5 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase">Rute</th>
+                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-blue-600 dark:text-blue-400 uppercase whitespace-nowrap">Nom.</th>
+                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Supir</th>
+                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Solar</th>
+                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Mobil</th>
+                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Jkt</th>
+                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Bali</th>
+                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Lbk</th>
+                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Lain</th>
+                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-amber-600 dark:text-amber-400 uppercase whitespace-nowrap">Disk</th>
+                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-red-600 dark:text-red-400 uppercase whitespace-nowrap">Total</th>
+                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-green-600 dark:text-green-400 uppercase whitespace-nowrap">Margin</th>
+                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">%</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
@@ -527,27 +547,27 @@ onMounted(() => {
                 :key="item.id"
                 class="hover:bg-gray-50 dark:hover:bg-gray-700/50"
               >
-                <td class="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 truncate">{{ item.dbl_number }}</td>
-                <td class="px-3 py-2 text-gray-600 dark:text-gray-300 text-xs whitespace-nowrap">{{ item.dbl_date ? formatDate(item.dbl_date) : '-' }}</td>
-                <td class="px-3 py-2 text-gray-600 dark:text-gray-300 text-xs truncate">{{ item.origin || '-' }} - {{ item.destination || '-' }}</td>
-                <td class="px-3 py-2 text-right font-medium text-blue-600 dark:text-blue-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.total_nominal) }}</td>
-                <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.bayar_supir) }}</td>
-                <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.solar) }}</td>
-                <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.ongkos_mobil) }}</td>
-                <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.ops_jakarta) }}</td>
-                <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.ops_bali) }}</td>
-                <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.ops_lombok) }}</td>
-                <td class="px-3 py-2 text-right text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.lain_lain) }}</td>
-                <td class="px-3 py-2 text-right text-amber-600 dark:text-amber-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.potongan_diskon) }}</td>
-                <td class="px-3 py-2 text-right font-medium text-red-600 dark:text-red-400 text-xs whitespace-nowrap tabular-nums">{{ formatRupiah(item.total_operational) }}</td>
+                <td class="px-1.5 py-2 font-medium text-gray-900 dark:text-gray-100 truncate" :title="item.dbl_number">{{ item.dbl_number }}</td>
+                <td class="px-1.5 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">{{ item.dbl_date ? formatDate(item.dbl_date) : '-' }}</td>
+                <td class="px-1.5 py-2 text-gray-600 dark:text-gray-300 truncate" :title="`${item.origin || '-'} - ${item.destination || '-'}`">{{ item.origin || '-' }} - {{ item.destination || '-' }}</td>
+                <td class="px-1.5 py-2 text-right font-medium text-blue-600 dark:text-blue-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.total_nominal) }}</td>
+                <td class="px-1.5 py-2 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.bayar_supir) }}</td>
+                <td class="px-1.5 py-2 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.solar) }}</td>
+                <td class="px-1.5 py-2 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.ongkos_mobil) }}</td>
+                <td class="px-1.5 py-2 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.ops_jakarta) }}</td>
+                <td class="px-1.5 py-2 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.ops_bali) }}</td>
+                <td class="px-1.5 py-2 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.ops_lombok) }}</td>
+                <td class="px-1.5 py-2 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.lain_lain) }}</td>
+                <td class="px-1.5 py-2 text-right text-amber-600 dark:text-amber-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.potongan_diskon) }}</td>
+                <td class="px-1.5 py-2 text-right font-medium text-red-600 dark:text-red-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.total_operational) }}</td>
                 <td
-                  class="px-3 py-2 text-right font-medium text-xs whitespace-nowrap tabular-nums"
+                  class="px-1.5 py-2 text-right font-medium whitespace-nowrap tabular-nums"
                   :class="item.margin >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
                 >
                   {{ formatRupiah(item.margin) }}
                 </td>
                 <td
-                  class="px-3 py-2 text-right font-medium text-xs whitespace-nowrap tabular-nums"
+                  class="px-1.5 py-2 text-right font-medium whitespace-nowrap tabular-nums"
                   :class="Number(item.margin_percent) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
                 >
                   {{ item.margin_percent }}%

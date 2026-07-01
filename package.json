@@ -40,7 +40,7 @@
     "browser-image-compression": "^2.0.2",
     "bwip-js": "^4.8.0",
     "countup.js": "^2.9.0",
-    "echarts": "^6.0.0",
+    "echarts": "^6.1.0",
     "jsbarcode": "^3.12.1",
     "nprogress": "^0.2.0",
     "qr-scanner": "^1.4.2",

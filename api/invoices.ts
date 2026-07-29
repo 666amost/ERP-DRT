@@ -1627,14 +1627,25 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       payments = await sql`
         select 
           ip.id, ip.invoice_id, i.invoice_number, i.customer_name, i.customer_id,
-          coalesce(i.amount, 0)::float as original_amount,
+          (
+            case
+              when coalesce(i.discount_amount, 0) > 0
+                then coalesce(
+                  nullif(i.subtotal, 0),
+                  coalesce(i.total_tagihan, i.amount, 0)
+                    + coalesce(i.discount_amount, 0)
+                    + coalesce(i.pph_amount, 0)
+                )
+              else coalesce(i.amount, 0)
+            end
+          )::float as original_amount,
           coalesce(i.discount_amount, 0)::float as discount,
           coalesce(ip.amount, 0)::float as final_amount,
           ip.payment_date, ip.payment_method, ip.reference_no, ip.notes
         from invoice_payments ip
         join invoices i on i.id = ip.invoice_id
-        where ip.payment_date >= ${fromDate}::date
-          and ip.payment_date < (${toDate}::date + interval '1 day')
+        where (ip.payment_date at time zone 'Asia/Jakarta') >= ${fromDate}::date
+          and (ip.payment_date at time zone 'Asia/Jakarta') < (${toDate}::date + interval '1 day')
         order by ip.payment_date desc
         limit 9999
       ` as PaymentHistory[];
@@ -1642,13 +1653,24 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       payments = await sql`
         select 
           ip.id, ip.invoice_id, i.invoice_number, i.customer_name, i.customer_id,
-          coalesce(i.amount, 0)::float as original_amount,
+          (
+            case
+              when coalesce(i.discount_amount, 0) > 0
+                then coalesce(
+                  nullif(i.subtotal, 0),
+                  coalesce(i.total_tagihan, i.amount, 0)
+                    + coalesce(i.discount_amount, 0)
+                    + coalesce(i.pph_amount, 0)
+                )
+              else coalesce(i.amount, 0)
+            end
+          )::float as original_amount,
           coalesce(i.discount_amount, 0)::float as discount,
           coalesce(ip.amount, 0)::float as final_amount,
           ip.payment_date, ip.payment_method, ip.reference_no, ip.notes
         from invoice_payments ip
         join invoices i on i.id = ip.invoice_id
-        where ip.payment_date >= ${fromDate}::date
+        where (ip.payment_date at time zone 'Asia/Jakarta') >= ${fromDate}::date
         order by ip.payment_date desc
         limit 9999
       ` as PaymentHistory[];
@@ -1656,13 +1678,24 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       payments = await sql`
         select 
           ip.id, ip.invoice_id, i.invoice_number, i.customer_name, i.customer_id,
-          coalesce(i.amount, 0)::float as original_amount,
+          (
+            case
+              when coalesce(i.discount_amount, 0) > 0
+                then coalesce(
+                  nullif(i.subtotal, 0),
+                  coalesce(i.total_tagihan, i.amount, 0)
+                    + coalesce(i.discount_amount, 0)
+                    + coalesce(i.pph_amount, 0)
+                )
+              else coalesce(i.amount, 0)
+            end
+          )::float as original_amount,
           coalesce(i.discount_amount, 0)::float as discount,
           coalesce(ip.amount, 0)::float as final_amount,
           ip.payment_date, ip.payment_method, ip.reference_no, ip.notes
         from invoice_payments ip
         join invoices i on i.id = ip.invoice_id
-        where ip.payment_date < (${toDate}::date + interval '1 day')
+        where (ip.payment_date at time zone 'Asia/Jakarta') < (${toDate}::date + interval '1 day')
         order by ip.payment_date desc
         limit 9999
       ` as PaymentHistory[];
@@ -1670,7 +1703,18 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       payments = await sql`
         select 
           ip.id, ip.invoice_id, i.invoice_number, i.customer_name, i.customer_id,
-          coalesce(i.amount, 0)::float as original_amount,
+          (
+            case
+              when coalesce(i.discount_amount, 0) > 0
+                then coalesce(
+                  nullif(i.subtotal, 0),
+                  coalesce(i.total_tagihan, i.amount, 0)
+                    + coalesce(i.discount_amount, 0)
+                    + coalesce(i.pph_amount, 0)
+                )
+              else coalesce(i.amount, 0)
+            end
+          )::float as original_amount,
           coalesce(i.discount_amount, 0)::float as discount,
           coalesce(ip.amount, 0)::float as final_amount,
           ip.payment_date, ip.payment_method, ip.reference_no, ip.notes

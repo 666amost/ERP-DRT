@@ -102,9 +102,12 @@ function toAmount(value: string): number {
 }
 
 function formatInputAmount(value: string): string {
-  const digits = value.replace(/\D/g, '');
-  if (!digits) return '';
-  return new Intl.NumberFormat('id-ID').format(Number(digits));
+  if (!value.trim()) return '';
+
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return '';
+
+  return new Intl.NumberFormat('id-ID').format(Math.round(amount));
 }
 
 function updateAmountField(field: CostAmountField, event: Event): void {

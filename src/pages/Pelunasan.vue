@@ -31,6 +31,15 @@ const dateFrom = ref('');
 const dateTo = ref('');
 const selectedMonth = ref('');
 
+function hasDiscount(payment: PaymentHistory): boolean {
+  return Number(payment.discount || 0) > 0;
+}
+
+function getPaymentWIBDate(paymentDate: string): string {
+  const parsed = new Date(paymentDate);
+  return Number.isNaN(parsed.getTime()) ? '' : toWIBDateString(parsed);
+}
+
 function normalizeMethod(value?: string | null): string {
   return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
@@ -121,10 +130,10 @@ const filteredPayments = computed(() => {
     result = result.filter(p => normalizeMethod(p.payment_method) === target);
   }
   if (dateFrom.value) {
-    result = result.filter(p => new Date(p.payment_date) >= new Date(dateFrom.value));
+    result = result.filter(p => getPaymentWIBDate(p.payment_date) >= dateFrom.value);
   }
   if (dateTo.value) {
-    result = result.filter(p => new Date(p.payment_date) <= new Date(dateTo.value + 'T23:59:59'));
+    result = result.filter(p => getPaymentWIBDate(p.payment_date) <= dateTo.value);
   }
   return result;
 });
@@ -403,8 +412,20 @@ onMounted(() => {
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-              <tr v-for="(p, idx) in filteredPayments" :key="p.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
-                <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ idx + 1 }}</td>
+              <tr
+                v-for="(p, idx) in filteredPayments"
+                :key="p.id"
+                class="transition-colors"
+                :class="hasDiscount(p)
+                  ? 'bg-amber-50/80 hover:bg-amber-100/80 dark:bg-amber-950/25 dark:hover:bg-amber-900/30'
+                  : 'hover:bg-gray-50 dark:hover:bg-gray-700'"
+              >
+                <td
+                  class="border-l-4 px-2 py-2 text-gray-700 dark:text-gray-300"
+                  :class="hasDiscount(p) ? 'border-amber-400 dark:border-amber-500' : 'border-transparent'"
+                >
+                  {{ idx + 1 }}
+                </td>
                 <td class="px-2 py-2 text-gray-700 dark:text-gray-300">
                   <div class="font-medium text-gray-900 dark:text-gray-100 truncate" :title="p.invoice_number || '-'">
                     {{ p.invoice_number || '-' }}
@@ -412,10 +433,16 @@ onMounted(() => {
                   <div class="text-[11px] text-gray-600 dark:text-gray-400 truncate" :title="p.customer_name || '-'">
                     {{ p.customer_name || '-' }}
                   </div>
-                  <div class="text-[11px] text-gray-500 dark:text-gray-400">
-                    <span>Orig: {{ formatRupiah(p.original_amount) }}</span>
-                    <span class="mx-1">&middot;</span>
-                    <span>Disk: {{ p.discount ? formatRupiah(p.discount) : '-' }}</span>
+                  <div class="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
+                    <span class="text-gray-500 dark:text-gray-400">Orig: {{ formatRupiah(p.original_amount) }}</span>
+                    <span
+                      v-if="hasDiscount(p)"
+                      class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 font-bold text-amber-700 dark:bg-amber-900/60 dark:text-amber-300"
+                    >
+                      <Icon icon="mdi:tag-check-outline" class="text-xs" />
+                      DISKON -{{ formatRupiah(p.discount) }}
+                    </span>
+                    <span v-else class="text-gray-400 dark:text-gray-500">· Disk: -</span>
                   </div>
                 </td>
                 <td class="px-2 py-2 text-right tabular-nums text-[11px] font-medium text-gray-700 dark:text-gray-300">
@@ -470,13 +497,27 @@ onMounted(() => {
         </div>
 
         <div class="lg:hidden space-y-3">
-          <div v-for="p in filteredPayments" :key="p.id" class="border border-gray-200 dark:border-gray-700 rounded-xl p-3 bg-white dark:bg-gray-800">
+          <div
+            v-for="p in filteredPayments"
+            :key="p.id"
+            class="rounded-xl border border-l-4 p-3"
+            :class="hasDiscount(p)
+              ? 'border-amber-300 border-l-amber-400 bg-amber-50 dark:border-amber-800 dark:border-l-amber-500 dark:bg-amber-950/25'
+              : 'border-gray-200 border-l-transparent bg-white dark:border-gray-700 dark:bg-gray-800'"
+          >
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0 flex-1">
                 <div class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{{ p.invoice_number || '-' }}</div>
                 <div class="text-xs text-gray-600 dark:text-gray-400 truncate">{{ p.customer_name || '-' }}</div>
               </div>
               <div class="text-right">
+                <div
+                  v-if="hasDiscount(p)"
+                  class="mb-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-amber-900/60 dark:text-amber-300"
+                >
+                  <Icon icon="mdi:tag-check-outline" class="text-xs" />
+                  DISKON -{{ formatRupiah(p.discount) }}
+                </div>
                 <div class="text-sm font-bold text-green-600">{{ formatRupiah(p.final_amount) }}</div>
                 <div class="text-xs text-gray-500">{{ formatDate(p.payment_date) }}</div>
               </div>
@@ -484,8 +525,10 @@ onMounted(() => {
 
             <div class="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
               <span>Orig: {{ formatRupiah(p.original_amount) }}</span>
-              <span class="mx-1">&middot;</span>
-              <span>Disk: {{ p.discount ? formatRupiah(p.discount) : '-' }}</span>
+              <template v-if="!hasDiscount(p)">
+                <span class="mx-1">&middot;</span>
+                <span>Disk: -</span>
+              </template>
             </div>
 
             <div class="mt-2 space-y-1 text-[11px] leading-4">

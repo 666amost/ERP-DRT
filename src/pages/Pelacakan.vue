@@ -9,6 +9,7 @@ import {
   isNewerTrackingPayload,
   parseTrackingPayload
 } from '../lib/trackingPayload';
+import { bearingBetween, interpolatePoint, shortestRotation } from '../lib/mapMotion';
 
 type ActiveTrip = {
   id: number;
@@ -45,20 +46,23 @@ const mqttUrl = import.meta.env.VITE_MQTT_WSS_URL || '';
 const mqttUsername = import.meta.env.VITE_MQTT_USERNAME || '';
 const mqttPassword = import.meta.env.VITE_MQTT_PASSWORD || '';
 const mqttTopic = import.meta.env.VITE_MQTT_TOPIC || 'sumbertrans/tracking/driver/+';
-const credentialExpiresAt = import.meta.env.VITE_MQTT_CREDENTIAL_EXPIRES_AT || '2027-08-06';
 
 let map: LeafletMap | null = null;
 let mqttClient: MqttClient | null = null;
 let clockTimer: ReturnType<typeof setInterval> | null = null;
 const markers = new Map<number, Marker>();
 const removalTimers = new Map<number, ReturnType<typeof setTimeout>>();
+const markerMotion = new Map<number, {
+  animationFrame: number | null;
+  heading: number;
+}>();
 
 const connectionLabel = computed(() => ({
   connecting: 'Menghubungkan',
-  connected: 'MQTT Terhubung',
-  reconnecting: 'Menyambungkan ulang',
-  offline: 'MQTT Terputus',
-  error: 'Konfigurasi bermasalah'
+  connected: 'Terhubung',
+  reconnecting: 'Menghubungkan ulang',
+  offline: 'Terputus',
+  error: 'Bermasalah'
 })[connectionState.value]);
 
 const activeItems = computed(() => {
@@ -102,11 +106,92 @@ function escapeHtml(value: unknown): string {
 function createTruckIcon(stale: boolean): L.DivIcon {
   return L.divIcon({
     className: 'ste-truck-marker',
-    html: `<div class="${stale ? 'stale' : ''}">🚚</div>`,
-    iconSize: [38, 38],
-    iconAnchor: [19, 19],
-    popupAnchor: [0, -18]
+    html: `
+      <div class="ste-truck-vehicle ${stale ? 'stale' : 'active'}" aria-hidden="true">
+        <svg viewBox="0 0 48 72" role="img">
+          <ellipse class="ste-truck-shadow" cx="24" cy="39" rx="17" ry="29" />
+          <path class="ste-truck-outline" d="M14 69c-3 0-5-2-5-5V31c0-2 1-4 3-5V16C12 7 17 3 24 3s12 4 12 13v10c2 1 3 3 3 5v33c0 3-2 5-5 5H14Z" />
+          <g class="ste-truck-body">
+            <rect class="ste-truck-wheel" x="4" y="25" width="7" height="15" rx="2.5" />
+            <rect class="ste-truck-wheel" x="37" y="25" width="7" height="15" rx="2.5" />
+            <rect class="ste-truck-wheel" x="4" y="52" width="7" height="14" rx="2.5" />
+            <rect class="ste-truck-wheel" x="37" y="52" width="7" height="14" rx="2.5" />
+            <path class="ste-truck-mirror" d="M9 17H5c-1 0-2 1-2 2v4h6v-6ZM39 17h4c1 0 2 1 2 2v4h-6v-6Z" />
+            <rect class="ste-truck-cargo" x="9" y="29" width="30" height="40" rx="4" />
+            <rect class="ste-truck-cargo-panel" x="12" y="32" width="24" height="31" rx="2" />
+            <path class="ste-truck-cab" d="M11 31V16C11 7.5 16.3 3 24 3s13 4.5 13 13v15H11Z" />
+            <path class="ste-truck-hood" d="M15 13c.7-4.4 4-7 9-7s8.3 2.6 9 7H15Z" />
+            <path class="ste-truck-windshield" d="M14 17c0-1.3.2-2.4.5-3.5h19c.3 1.1.5 2.2.5 3.5v5H14v-5Z" />
+            <path class="ste-truck-window-divider" d="M24 14v8" />
+            <path class="ste-truck-cab-detail" d="M14 25h20M17 25l-2 5M31 25l2 5" />
+            <path class="ste-truck-cargo-ridge" d="M15 36h18M15 42h18M15 48h18M15 54h18M24 32v31" />
+            <path class="ste-truck-rear-door" d="M12 64h24v3H12z" />
+            <path class="ste-truck-bumper" d="M15 3h18M13 69h22" />
+            <rect class="ste-truck-headlight" x="12.5" y="8.5" width="4.5" height="3.5" rx="1" />
+            <rect class="ste-truck-headlight" x="31" y="8.5" width="4.5" height="3.5" rx="1" />
+            <rect class="ste-truck-tail-light" x="10" y="64" width="3.5" height="3" rx="1" />
+            <rect class="ste-truck-tail-light" x="34.5" y="64" width="3.5" height="3" rx="1" />
+          </g>
+        </svg>
+      </div>`,
+    iconSize: [42, 63],
+    iconAnchor: [21, 32],
+    popupAnchor: [0, -32]
   });
+}
+
+function setMarkerHeading(marker: Marker, heading: number): void {
+  const vehicle = marker.getElement()?.querySelector<HTMLElement>('.ste-truck-vehicle');
+  if (vehicle) vehicle.style.transform = `rotate(${heading}deg)`;
+}
+
+function setMarkerStale(marker: Marker, stale: boolean): void {
+  const vehicle = marker.getElement()?.querySelector('.ste-truck-vehicle');
+  vehicle?.classList.toggle('stale', stale);
+  vehicle?.classList.toggle('active', !stale);
+}
+
+function animateMarker(accountId: number, marker: Marker, target: L.LatLng): void {
+  const state = markerMotion.get(accountId) || { animationFrame: null, heading: 0 };
+  if (state.animationFrame !== null) cancelAnimationFrame(state.animationFrame);
+
+  const start = marker.getLatLng();
+  const distance = start.distanceTo(target);
+  if (distance < 0.5) {
+    marker.setLatLng(target);
+    setMarkerHeading(marker, state.heading);
+    markerMotion.set(accountId, { ...state, animationFrame: null });
+    return;
+  }
+
+  const targetHeading = bearingBetween(start, target);
+  const startHeading = state.heading;
+  const headingDelta = shortestRotation(startHeading, targetHeading);
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const duration = reduceMotion ? 0 : Math.min(2600, Math.max(1400, 1400 + distance * 0.8));
+  const startedAt = performance.now();
+
+  const step = (timestamp: number): void => {
+    const progress = duration === 0 ? 1 : Math.min(1, (timestamp - startedAt) / duration);
+    const eased = progress * progress * (3 - 2 * progress);
+    const position = interpolatePoint(start, target, eased);
+    const heading = startHeading + headingDelta * eased;
+    marker.setLatLng(position);
+    setMarkerHeading(marker, heading);
+    state.heading = heading;
+
+    if (progress < 1) {
+      state.animationFrame = requestAnimationFrame(step);
+    } else {
+      state.animationFrame = null;
+      state.heading = (targetHeading + 360) % 360;
+      marker.setLatLng(target);
+      setMarkerHeading(marker, state.heading);
+    }
+  };
+
+  markerMotion.set(accountId, state);
+  state.animationFrame = requestAnimationFrame(step);
 }
 
 function updateMarker(item: TrackingItem, fitIfFirst = false): void {
@@ -124,15 +209,24 @@ function updateMarker(item: TrackingItem, fitIfFirst = false): void {
 
   const existing = markers.get(item.tracking_account_id);
   if (existing) {
-    existing.setLatLng(latLng).setIcon(createTruckIcon(stale)).setPopupContent(popup);
+    existing.setPopupContent(popup);
+    setMarkerStale(existing, stale);
+    animateMarker(item.tracking_account_id, existing, latLng);
   } else {
     const marker = L.marker(latLng, { icon: createTruckIcon(stale) }).addTo(map).bindPopup(popup);
     markers.set(item.tracking_account_id, marker);
+    markerMotion.set(item.tracking_account_id, { animationFrame: null, heading: 0 });
+    setMarkerHeading(marker, 0);
     if (fitIfFirst && markers.size === 1) map.setView(latLng, 12);
   }
 }
 
 function removeTrip(accountId: number): void {
+  const motion = markerMotion.get(accountId);
+  if (motion?.animationFrame !== null && motion?.animationFrame !== undefined) {
+    cancelAnimationFrame(motion.animationFrame);
+  }
+  markerMotion.delete(accountId);
   const marker = markers.get(accountId);
   if (marker && map) map.removeLayer(marker);
   markers.delete(accountId);
@@ -218,7 +312,7 @@ function initializeMap(): void {
 function connectMqtt(): void {
   if (!mqttUrl || !mqttUsername || !mqttPassword || !mqttTopic) {
     connectionState.value = 'error';
-    connectionError.value = 'Environment MQTT belum lengkap';
+    connectionError.value = 'Layanan pelacakan belum tersedia.';
     return;
   }
   connectionState.value = 'connecting';
@@ -238,7 +332,7 @@ function connectMqtt(): void {
     mqttClient?.subscribe(mqttTopic, { qos: 1 }, error => {
       if (error) {
         connectionState.value = 'error';
-        connectionError.value = 'Gagal subscribe topic tracking';
+        connectionError.value = 'Koneksi pelacakan tidak dapat diaktifkan.';
       }
     });
   });
@@ -249,7 +343,9 @@ function connectMqtt(): void {
   });
   mqttClient.on('error', error => {
     connectionState.value = 'error';
-    connectionError.value = error.message || 'Koneksi MQTT gagal';
+    connectionError.value = error.message
+      ? 'Koneksi pelacakan bermasalah. Sistem akan mencoba kembali.'
+      : 'Koneksi pelacakan gagal.';
   });
   mqttClient.on('message', (topic, message) => applyPayload(topic, message.toString()));
 }
@@ -286,6 +382,10 @@ onUnmounted(() => {
   if (clockTimer) clearInterval(clockTimer);
   for (const timer of removalTimers.values()) clearTimeout(timer);
   removalTimers.clear();
+  for (const motion of markerMotion.values()) {
+    if (motion.animationFrame !== null) cancelAnimationFrame(motion.animationFrame);
+  }
+  markerMotion.clear();
   mqttClient?.end(true);
   mqttClient = null;
   map?.remove();
@@ -298,20 +398,18 @@ onUnmounted(() => {
   <div class="space-y-4 pb-20 lg:pb-0">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Live Tracking Driver</h1>
-        <p class="text-sm text-gray-500 dark:text-gray-400">Posisi terakhir armada yang diberangkatkan melalui aplikasi STE Driver.</p>
+        <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Pelacakan Armada</h1>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Pantau posisi dan pergerakan armada aktif secara langsung.</p>
       </div>
-      <div class="flex flex-wrap items-center gap-2 text-xs">
+      <div class="flex items-center text-xs">
         <span :class="[
-          'inline-flex items-center gap-2 rounded-full px-3 py-1.5 font-medium',
+          'inline-flex items-center rounded-full px-3 py-1.5 font-semibold',
           connectionState === 'connected' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' :
           connectionState === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' :
           'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
         ]">
-          <span class="h-2 w-2 rounded-full bg-current"></span>
           {{ connectionLabel }}
         </span>
-        <span class="text-gray-400">Kredensial s.d. {{ credentialExpiresAt }}</span>
       </div>
     </div>
 
@@ -393,21 +491,145 @@ onUnmounted(() => {
 </template>
 
 <style>
-.ste-truck-marker > div {
-  display: grid;
-  width: 38px;
-  height: 38px;
-  place-items: center;
-  border: 3px solid white;
-  border-radius: 9999px;
-  background: #2563eb;
-  box-shadow: 0 4px 12px rgb(15 23 42 / 35%);
-  font-size: 20px;
+.ste-truck-marker {
+  background: transparent;
+  border: 0;
 }
 
-.ste-truck-marker > div.stale {
-  background: #6b7280;
-  filter: grayscale(0.5);
+.ste-truck-vehicle {
+  position: relative;
+  width: 42px;
+  height: 63px;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+.ste-truck-vehicle svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.ste-truck-shadow {
+  fill: rgb(15 23 42 / 22%);
+  filter: blur(3px);
+}
+
+.ste-truck-outline {
+  fill: none;
+  stroke: #60a5fa;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  opacity: 0;
+  vector-effect: non-scaling-stroke;
+}
+
+.ste-truck-wheel {
+  fill: #111827;
+  stroke: #fff;
+  stroke-width: 1.1;
+}
+
+.ste-truck-cargo {
+  fill: #1e40af;
+  stroke: #fff;
+  stroke-width: 1.6;
+}
+
+.ste-truck-cargo-panel {
+  fill: #2563eb;
+  stroke: #1e3a8a;
+  stroke-width: 1;
+}
+
+.ste-truck-cab {
+  fill: #1d4ed8;
+  stroke: #fff;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.ste-truck-hood {
+  fill: #2563eb;
+  stroke: #1e3a8a;
+  stroke-width: 0.9;
+}
+
+.ste-truck-windshield {
+  fill: #dbeafe;
+  stroke: #1e3a8a;
+  stroke-width: 1;
+}
+
+.ste-truck-window-divider,
+.ste-truck-cab-detail {
+  fill: none;
+  stroke: #1e3a8a;
+  stroke-linecap: round;
+  stroke-width: 1;
+}
+
+.ste-truck-cargo-ridge {
+  fill: none;
+  stroke: #60a5fa;
+  stroke-linecap: round;
+  stroke-width: 0.9;
+}
+
+.ste-truck-rear-door {
+  fill: #1e3a8a;
+}
+
+.ste-truck-bumper {
+  fill: none;
+  stroke: #e2e8f0;
+  stroke-linecap: round;
+  stroke-width: 1.5;
+}
+
+.ste-truck-mirror {
+  fill: #1e40af;
+  stroke: #fff;
+  stroke-width: 1;
+}
+
+.ste-truck-headlight {
+  fill: #fef3c7;
+}
+
+.ste-truck-tail-light {
+  fill: #fb7185;
+}
+
+.ste-truck-vehicle.active .ste-truck-outline {
+  animation: ste-truck-border-pulse 1.8s ease-in-out infinite;
+}
+
+.ste-truck-vehicle.stale .ste-truck-body {
+  filter: grayscale(1);
+  opacity: 0.78;
+}
+
+@keyframes ste-truck-border-pulse {
+  0%, 100% {
+    stroke-width: 1.5;
+    opacity: 0.25;
+    filter: drop-shadow(0 0 1px rgb(96 165 250 / 20%));
+  }
+
+  50% {
+    stroke-width: 3;
+    opacity: 0.95;
+    filter: drop-shadow(0 0 4px rgb(37 99 235 / 75%));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ste-truck-vehicle.active .ste-truck-outline {
+    animation: none;
+    opacity: 0.7;
+  }
 }
 
 .leaflet-container {

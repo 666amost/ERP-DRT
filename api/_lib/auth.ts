@@ -14,7 +14,7 @@ export type User = {
   id: number;
   email: string;
   name: string | null;
-  role: 'admin' | 'staff' | 'accounting';
+  role: 'admin' | 'staff' | 'accounting' | 'driver';
   password_hash: string;
 };
 
@@ -66,13 +66,13 @@ export async function getValidSession(sql: Sql, id: string): Promise<(Session & 
   ` as (Session & { user: User })[];
   const row = rows[0];
   if (!row) return null;
-  type RowWithUser = Session & { user_id2: number; email: string; name: string | null; role: 'admin' | 'staff' | 'accounting'; password_hash: string };
+  type RowWithUser = Session & { user_id2: number; email: string; name: string | null; role: User['role']; password_hash: string };
   const r = row as unknown as RowWithUser;
   const user: User = {
     id: r.user_id2,
     email: r.email,
     name: r.name ?? null,
-    role: r.role as 'admin' | 'staff' | 'accounting',
+    role: r.role,
     password_hash: r.password_hash
   };
   const session: Session = {
@@ -109,6 +109,7 @@ export async function requireSession(req: any): Promise<RequireSessionResult> {
 
   const record = await getValidSession(sql, sid);
   if (!record) throw new Response(null, { status: 401 });
+  if (record.user.role === 'driver') throw new Response(null, { status: 403 });
 
   const createdAt = new Date(record.created_at);
   const now = new Date();
@@ -150,5 +151,23 @@ export async function requireSession(req: any): Promise<RequireSessionResult> {
 export async function verifyPassword(plain: string, storedHash: string): Promise<boolean> {
   const inputHash = await hashPassword(plain);
   return inputHash === storedHash;
+}
+
+export function getBearerToken(req: any): string | null {
+  const headers = req?.headers || {};
+  const value = typeof headers.get === 'function'
+    ? headers.get('authorization')
+    : headers.authorization || headers.Authorization;
+  if (typeof value !== 'string') return null;
+  const match = value.match(/^Bearer\s+([0-9a-f-]{36})$/i);
+  return match?.[1] || null;
+}
+
+export async function requireBearerSession(req: any): Promise<Session & { user: User }> {
+  const token = getBearerToken(req);
+  if (!token) throw new Response(null, { status: 401 });
+  const record = await getValidSession(getSql(), token);
+  if (!record) throw new Response(null, { status: 401 });
+  return record;
 }
 

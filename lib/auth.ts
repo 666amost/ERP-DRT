@@ -6,7 +6,7 @@ export type User = {
   id: number;
   email: string;
   name: string | null;
-  role: 'admin' | 'staff' | 'accounting';
+  role: 'admin' | 'staff' | 'accounting' | 'driver';
   password_hash: string;
 };
 
@@ -58,7 +58,7 @@ export async function getValidSession(sql: Sql, id: string): Promise<(Session & 
   ` as (Session & { user: User })[];
   const row = rows[0];
   if (!row) return null;
-  type RowWithUser = Session & { user_id2: number; email: string; name: string | null; role: 'admin' | 'staff' | 'accounting'; password_hash: string };
+  type RowWithUser = Session & { user_id2: number; email: string; name: string | null; role: User['role']; password_hash: string };
   const r = row as unknown as RowWithUser;
   const user: User = {
     id: r.user_id2,
@@ -101,6 +101,7 @@ export async function requireSession(req: any): Promise<RequireSessionResult> {
 
   const record = await getValidSession(sql, sid);
   if (!record) throw new Response(null, { status: 401 });
+  if (record.user.role === 'driver') throw new Response(null, { status: 403 });
 
   const createdAt = new Date(record.created_at);
   const now = new Date();

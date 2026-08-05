@@ -196,6 +196,7 @@ function go(routeName: string) {
         @keydown.space.prevent="go('barang-keluar')"
       />
       <OverviewCard
+        v-if="permissions.canViewPelacakan"
         title="Pengiriman Aktif"
         :value="stats.activeShipments"
         icon="mdi:truck-delivery"
@@ -287,7 +288,7 @@ function go(routeName: string) {
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 card">
+      <div v-if="permissions.canViewPelacakan" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 card">
         <div class="flex items-center justify-between mb-4">
           <h2 class="font-semibold dark:text-gray-100">Trend Pengiriman</h2>
           <span class="text-xs text-gray-500">7 hari terakhir</span>

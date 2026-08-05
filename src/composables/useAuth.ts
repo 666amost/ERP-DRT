@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue';
 
-export type UserRole = 'admin' | 'staff' | 'accounting';
+export type UserRole = 'admin' | 'staff' | 'accounting' | 'driver';
 
 export type AuthUser = {
   id: number;
@@ -31,7 +31,7 @@ export const ROLE_PERMISSIONS = {
   staff: {
     canViewKeuangan: false,
     canViewSalesReport: false,
-    canViewPelacakan: true,
+    canViewPelacakan: false,
     canDeleteShipment: false,
     canEditShipment: true,
     canCreateAWB: true,
@@ -58,6 +58,21 @@ export const ROLE_PERMISSIONS = {
     canViewSuratJalan: false,
     canViewOperationalCost: true,
   },
+  driver: {
+    canViewKeuangan: false,
+    canViewSalesReport: false,
+    canViewPelacakan: false,
+    canDeleteShipment: false,
+    canEditShipment: false,
+    canCreateAWB: false,
+    canPelunasan: false,
+    canViewSettings: false,
+    canViewDashboard: false,
+    canViewSPB: false,
+    canViewDBL: false,
+    canViewSuratJalan: false,
+    canViewOperationalCost: false,
+  },
 } as const;
 
 export function useAuth() {
@@ -72,6 +87,7 @@ export function useAuth() {
   const isAdmin = computed(() => currentUser.value?.role === 'admin');
   const isStaff = computed(() => currentUser.value?.role === 'staff');
   const isAccounting = computed(() => currentUser.value?.role === 'accounting');
+  const isDriver = computed(() => currentUser.value?.role === 'driver');
 
   async function fetchUser(): Promise<AuthUser | null> {
     isLoading.value = true;
@@ -157,6 +173,7 @@ export function useAuth() {
     isAdmin,
     isStaff,
     isAccounting,
+    isDriver,
     fetchUser,
     setUser,
     clearUser,

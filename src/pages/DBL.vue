@@ -8,6 +8,7 @@ import { useFormatters } from '../composables/useFormatters';
 import { getCompany } from '../lib/company';
 import { exportToExcel } from '../lib/excelExport';
 import { useAuth } from '../composables/useAuth';
+import QRCode from 'qrcode';
 
 const { fetchUser, permissions } = useAuth();
 
@@ -449,6 +450,18 @@ async function printDaftarMuat(dbl: DBL) {
   const totalNom = items.reduce((sum, s) => sum + (s.nominal || 0), 0);
   const totalCol = items.reduce((sum, s) => sum + (s.total_colli || 0), 0);
 
+  let qrDataUrl = '';
+  try {
+    qrDataUrl = await QRCode.toDataURL(dbl.dbl_number, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 180,
+      color: { dark: '#000000', light: '#ffffff' }
+    });
+  } catch (error) {
+    console.warn('Failed to generate DBL QR code', error);
+  }
+
   const win = window.open('', '_blank');
   if (!win) return;
 
@@ -480,11 +493,20 @@ async function printDaftarMuat(dbl: DBL) {
     tbody tr { page-break-inside: avoid; }
     .page-break { page-break-after: always; }
     .footer-section { page-break-inside: avoid; }
+    .manifest-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 4mm; }
+    .manifest-header-left { display: flex; flex-direction: column; align-items: flex-start; }
+    .manifest-qr { text-align: center; min-height: 24mm; margin-top: 2mm; margin-left: 15mm; }
+    .manifest-qr img { display: block; width: 21mm; height: 21mm; margin: 0 auto; }
   </style>
   </head><body class="p-2">
   
-  <div class="flex justify-between items-start mb-2">
-    <div class="text-lg font-bold">DAFTAR MUATAN</div>
+  <div class="manifest-header mb-2">
+    <div class="manifest-header-left">
+      <div class="text-lg font-bold">DAFTAR MUATAN</div>
+      <div class="manifest-qr">
+        ${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR ${esc(dbl.dbl_number)}" />` : ''}
+      </div>
+    </div>
     <div class="text-right text-sm">
       <div class="font-bold">No: ${esc(dbl.dbl_number)}</div>
       <div>Tgl: ${esc(dblDate)}</div>

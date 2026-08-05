@@ -3,9 +3,11 @@ dist
 .vercel
 .env
 .env.*
+!.env.example
 *.log
 *.md
 design-dashboard-figma/
+kotlin-android-disini/
 scripts/
 expedisi-darat-erwin.code-workspace
 asset_brand/
@@ -14,3 +16,4 @@ invoice_amos_ste.pdf
 *.pdf
 *.xlsx
 dbskema.sql
+.env.example

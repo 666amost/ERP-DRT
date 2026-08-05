@@ -74,6 +74,12 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         return;
       }
 
+      // Driver accounts are intentionally limited to the native driver app.
+      if (user.role === 'driver') {
+        writeJson(res, { error: 'DRIVER_APP_REQUIRED' }, 403);
+        return;
+      }
+
       const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       const headers: any = req.headers || {};
       const ip = (headers['x-forwarded-for'] as string) || null;
@@ -131,6 +137,10 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       const sql = getSql();
       const sessionRecord = await getValidSession(sql, sid);
       if (!sessionRecord) { writeJson(res, { error: 'Unauthorized' }, 401); return; }
+      if (sessionRecord.user.role === 'driver') {
+        writeJson(res, { error: 'DRIVER_APP_REQUIRED' }, 403);
+        return;
+      }
       const user = { id: sessionRecord.user.id, email: sessionRecord.user.email, name: sessionRecord.user.name, role: sessionRecord.user.role };
       writeJson(res, { user }, 200);
       return;

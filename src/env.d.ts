@@ -31,3 +31,15 @@ declare module 'jsbarcode' {
   function JsBarcode(_el: Element | string, _text: string, _options?: Record<string, unknown>): void;
   export default JsBarcode;
 }
+
+interface ImportMetaEnv {
+  readonly VITE_MQTT_WSS_URL?: string;
+  readonly VITE_MQTT_USERNAME?: string;
+  readonly VITE_MQTT_PASSWORD?: string;
+  readonly VITE_MQTT_TOPIC?: string;
+  readonly VITE_MQTT_CREDENTIAL_EXPIRES_AT?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}

@@ -3,10 +3,12 @@ import { Icon } from '@iconify/vue';
 import { useTheme } from '../../composables/useTheme';
 import { useRouter, useRoute } from 'vue-router';
 import { ref, computed } from 'vue';
+import { useAuth } from '../../composables/useAuth';
 
 const { theme, toggle } = useTheme();
 const router = useRouter();
 const route = useRoute();
+const { permissions } = useAuth();
 
 defineEmits<{
   toggleSidebar: [];
@@ -31,7 +33,11 @@ function submitSearch() {
     router.push({ name: 'surat-jalan', query: { q: value } });
     return;
   }
-  router.push({ name: 'pelacakan', query: { q: value } });
+  if (permissions.value.canViewPelacakan) {
+    router.push({ name: 'pelacakan', query: { q: value } });
+  } else if (permissions.value.canViewSPB) {
+    router.push({ name: 'barang-keluar', query: { q: value } });
+  }
 }
 
 async function handleLogout() {

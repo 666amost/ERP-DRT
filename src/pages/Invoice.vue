@@ -179,6 +179,33 @@ function getCreatePaymentMethod(type: CreatePaymentType): string | undefined {
   return 'TF JAKARTA';
 }
 
+type ApiErrorPayload = {
+  error?: string;
+  details?: string;
+};
+
+async function readApiResponse<T extends ApiErrorPayload>(response: Response, fallbackMessage: string): Promise<T> {
+  const responseText = await response.text();
+  let payload: ApiErrorPayload = {};
+
+  if (responseText) {
+    try {
+      payload = JSON.parse(responseText) as ApiErrorPayload;
+    } catch {
+      if (!response.ok) {
+        throw new Error(`${fallbackMessage} (HTTP ${response.status})`);
+      }
+      throw new Error('Respons server tidak valid. Silakan muat ulang halaman.');
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(payload.error || payload.details || `${fallbackMessage} (HTTP ${response.status})`);
+  }
+
+  return payload as T;
+}
+
 type CicilanCustomerOption = {
   key: string;
   customer_id: number | null;
@@ -206,6 +233,8 @@ const notes = ref<string>('');
 const pphPercent = ref<number>(0);
 const loadingUnpaidShipments = ref(false);
 const manualAmountMode = ref(false);
+const savingInvoice = ref(false);
+const invoiceSaveError = ref('');
 const existingPaidAmount = ref<number>(0);
 const editingCustomerName = ref<string>('');
 const selectedCustomerKey = ref<string>('');
@@ -740,6 +769,7 @@ function openCreateModal(): void {
   notes.value = '';
   pphPercent.value = 0;
   manualAmountMode.value = false;
+  invoiceSaveError.value = '';
   existingPaidAmount.value = 0;
   editingCustomerName.value = '';
   selectedCustomerKey.value = '';
@@ -917,6 +947,7 @@ async function openEditModal(invoice: Invoice) {
   editingId.value = invoice.id;
   sjBulkInputStatus.value = '';
   manualAmountMode.value = true;
+  invoiceSaveError.value = '';
   existingPaidAmount.value = invoice.paid_amount || 0;
   editingCustomerName.value = invoice.customer_name || '';
   selectedCustomerKey.value = typeof invoice.customer_id === 'number'
@@ -953,6 +984,8 @@ async function openEditModal(invoice: Invoice) {
 }
 
 async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
+  if (savingInvoice.value) return;
+
   const inputAmount = parseFloat(form.value.amount) || 0;
   if (!form.value.customer_name && !form.value.customer_id) {
     const firstItem = items.value[0];
@@ -1007,6 +1040,9 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
       return;
     }
   }
+
+  savingInvoice.value = true;
+  invoiceSaveError.value = '';
 
   try {
     if (editingId.value) {
@@ -1107,15 +1143,15 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
         })
       });
 
-      const created: { invoice_number?: string; error?: string } = await res.json();
-      if (!res.ok) {
-        throw new Error(created.error || 'Create failed');
-      }
+      const created = await readApiResponse<{ invoice_number?: string; error?: string }>(
+        res,
+        'Invoice gagal dibuat'
+      );
 
       alert(created.invoice_number ? `Invoice ${created.invoice_number} berhasil dibuat` : 'Berhasil membuat invoice bulk');
     } else {
       const createdInvoices: string[] = [];
-      const failedInvoices: { spb: string; error: string }[] = [];
+      const failedInvoices: { index: number; spb: string; error: string }[] = [];
 
       const invoiceLevelDiscountRaw = Math.max(0, Number(discountAmount.value || 0));
       const itemBaseSubtotals = itemsSnapshot.map((item) =>
@@ -1203,34 +1239,56 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
             })
           });
           
-          const created = await res.json();
-          if (!res.ok) {
-            throw new Error(created.error || 'Create failed');
-          }
+          await readApiResponse<{ invoice_number?: string; error?: string }>(
+            res,
+            `Invoice SPB ${item.spb_number || item.tracking_code || 'N/A'} gagal dibuat`
+          );
           
           createdInvoices.push(item.spb_number || item.tracking_code || 'N/A');
         } catch (error) {
           failedInvoices.push({
+            index: itemIndex,
             spb: item.spb_number || item.tracking_code || 'N/A',
             error: error instanceof Error ? error.message : 'Unknown error'
           });
         }
       }
 
-      if (createdInvoices.length > 0) {
-        alert(`Berhasil membuat ${createdInvoices.length} invoice dari ${itemsSnapshot.length} SPB`);
-      }
-      
       if (failedInvoices.length > 0) {
         console.error('Failed invoices:', failedInvoices);
-        alert(`${failedInvoices.length} invoice gagal dibuat. Silakan cek console untuk detail.`);
+        const failedIndexes = new Set(failedInvoices.map((failed) => failed.index));
+        items.value = itemsSnapshot.filter((_item, index) => failedIndexes.has(index));
+        selectedShipmentIds.value = new Set(
+          items.value
+            .map((item) => item.shipment_id)
+            .map((id) => Number(id))
+            .filter((id) => Number.isFinite(id) && id > 0)
+        );
+        addInvoiceTab.value = 'selected';
+
+        const details = failedInvoices
+          .slice(0, 5)
+          .map((failed) => `• ${failed.spb}: ${failed.error}`)
+          .join('\n');
+        const successInfo = createdInvoices.length > 0
+          ? `${createdInvoices.length} invoice berhasil dibuat.\n`
+          : '';
+        invoiceSaveError.value = `${failedInvoices.length} invoice gagal dibuat. ${failedInvoices[0]?.error || ''}`.trim();
+        alert(`${successInfo}${failedInvoices.length} invoice gagal dibuat:\n${details}\n\nData yang gagal tetap dipilih agar bisa dicoba lagi.`);
+        if (createdInvoices.length > 0) await loadInvoices();
+        return;
       }
+
+      alert(`Berhasil membuat ${createdInvoices.length} invoice dari ${itemsSnapshot.length} SPB`);
     }
     showModal.value = false;
-    loadInvoices();
+    await loadInvoices();
   } catch (e) {
     console.error('Save error:', e);
-    alert(e instanceof Error ? e.message : 'Gagal menyimpan invoice');
+    invoiceSaveError.value = e instanceof Error ? e.message : 'Gagal menyimpan invoice';
+    alert(invoiceSaveError.value);
+  } finally {
+    savingInvoice.value = false;
   }
 }
 
@@ -3069,22 +3127,29 @@ watch(() => createPaymentType.value, (val) => {
       </div>
     </div>
 
-    <div class="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
-      <Button variant="secondary" @click="showModal = false">Batal</Button>
+    <div class="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2 flex-wrap">
+      <p
+        v-if="invoiceSaveError"
+        class="mr-auto text-sm text-red-600 dark:text-red-400"
+        role="alert"
+      >
+        {{ invoiceSaveError }}
+      </p>
+      <Button variant="secondary" :disabled="savingInvoice" @click="showModal = false">Batal</Button>
       <Button
         v-if="!editingId"
         variant="success"
-        :disabled="items.length === 0 || !sjBulkInputStatus"
+        :disabled="savingInvoice || items.length === 0 || !sjBulkInputStatus"
         @click="saveInvoice('bulk')"
       >
-        Simpan Bulk
+        {{ savingInvoice ? 'Menyimpan...' : 'Simpan Bulk' }}
       </Button>
       <Button
         variant="primary"
-        :disabled="!editingId && (items.length === 0 || !sjBulkInputStatus)"
+        :disabled="savingInvoice || (!editingId && (items.length === 0 || !sjBulkInputStatus))"
         @click="saveInvoice"
       >
-        {{ editingId ? 'Update' : 'Simpan' }} Invoice
+        {{ savingInvoice ? 'Menyimpan...' : editingId ? 'Update Invoice' : 'Simpan Invoice' }}
       </Button>
     </div>
   </div>

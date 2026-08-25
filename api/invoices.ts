@@ -219,28 +219,20 @@ async function generateInvoiceNumber(sql: Sql): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `INV-${year}-`;
   try {
-    const res = await sql`select generate_invoice_number() as num` as [{ num: string }];
-    if (res?.[0]?.num) return res[0].num;
+    const generated = await sql`select generate_invoice_number() as num` as [{ num: string }];
+    if (generated[0]?.num) return generated[0].num;
   } catch (err) {
-    console.warn('[invoices] generate_invoice_number() missing, fallback to local generator', err);
+    console.warn('[invoices] generate_invoice_number() tidak tersedia, memakai fallback', err);
   }
 
+  // Compare the suffix numerically: text ordering considers 9999 greater than 10000.
+  const numberPattern = `^INV-${year}-([0-9]+)$`;
   const maxResult = await sql`
-    select invoice_number from invoices
+    select coalesce(max(substring(invoice_number from ${numberPattern})::bigint), 0)::text as max_number
+    from invoices
     where invoice_number like ${prefix + '%'}
-    order by invoice_number desc
-    limit 1
-    for update
-  ` as [{ invoice_number: string }];
-
-  let nextNum = 1;
-  const lastNumber = maxResult[0]?.invoice_number;
-  if (lastNumber) {
-    const match = lastNumber.match(/INV-\d{4}-(\d+)/);
-    if (match?.[1]) {
-      nextNum = parseInt(match[1], 10) + 1;
-    }
-  }
+  ` as [{ max_number: string }];
+  const nextNum = Number(maxResult[0]?.max_number || 0) + 1;
 
   return `INV-${year}-${String(nextNum).padStart(4, '0')}`;
 }
@@ -822,20 +814,29 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       return;
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
+      const dbError = err as Error & { code?: string; constraint?: string };
       if (msg === 'CUSTOMER_NOT_FOUND') {
-        writeJson(res, { error: 'Invalid customer_id' }, 400);
+        writeJson(res, { error: 'Customer tidak ditemukan. Pilih ulang customer lalu coba lagi.' }, 400);
         return;
       }
       if (msg === 'INVALID_TOTAL') {
-        writeJson(res, { error: 'Nominal/Amount harus diisi dan lebih dari 0' }, 400);
+        writeJson(res, { error: 'Nominal invoice harus lebih dari 0.' }, 400);
         return;
       }
       if (msg === 'INVALID_ITEMS') {
-        writeJson(res, { error: 'Minimal 1 SPB harus dipilih' }, 400);
+        writeJson(res, { error: 'Minimal 1 SPB harus dipilih.' }, 400);
+        return;
+      }
+      if (dbError.code === '23505' && dbError.constraint === 'invoices_invoice_number_key') {
+        writeJson(res, { error: 'Nomor invoice berbenturan. Muat ulang halaman lalu coba simpan lagi.' }, 409);
+        return;
+      }
+      if (dbError.code === '23503') {
+        writeJson(res, { error: 'Data customer atau SPB sudah tidak tersedia. Muat ulang lalu pilih ulang datanya.' }, 409);
         return;
       }
       console.error('Invoices API error (create):', err);
-      writeJson(res, { error: 'Internal server error' }, 500);
+      writeJson(res, { error: 'Invoice gagal disimpan karena gangguan server. Silakan coba lagi.' }, 500);
       return;
     }
   } else if (endpoint === 'update' && req.method === 'PUT') {

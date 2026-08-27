@@ -11,6 +11,8 @@ type PaymentHistory = {
   id: number;
   invoice_id: number;
   invoice_number: string | null;
+  spb_number: string | null;
+  dbl_number: string | null;
   customer_name: string | null;
   customer_id: number | null;
   original_amount: number;
@@ -109,6 +111,8 @@ const filteredPayments = computed(() => {
     const q = searchQuery.value.toLowerCase();
     result = result.filter(p =>
       (p.invoice_number || '').toLowerCase().includes(q) ||
+      (p.spb_number || '').toLowerCase().includes(q) ||
+      (p.dbl_number || '').toLowerCase().includes(q) ||
       (p.customer_name || '').toLowerCase().includes(q) ||
       (p.payment_method || '').toLowerCase().includes(q) ||
       (p.notes || '').toLowerCase().includes(q) ||
@@ -267,10 +271,12 @@ function resetFilters() {
 }
 
 function exportExcel() {
-  const headers = ['No', 'Invoice', 'Customer', 'Original', 'Diskon', 'Bayar', ...methodColumns, 'Tanggal'];
+  const headers = ['No', 'Invoice', 'SPB', 'DBL', 'Customer', 'Original', 'Diskon', 'Bayar', ...methodColumns, 'Tanggal'];
   const rows = filteredPayments.value.map((p, idx) => [
     idx + 1,
     p.invoice_number || '-',
+    p.spb_number || '-',
+    p.dbl_number || '-',
     p.customer_name || '-',
     p.original_amount,
     p.discount,
@@ -323,7 +329,7 @@ onMounted(() => {
             v-model="searchQuery"
             type="text"
             class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-400"
-            placeholder="Invoice, Customer..."
+            placeholder="Invoice, SPB, DBL, Customer..."
           />
         </div>
         <div>
@@ -433,6 +439,25 @@ onMounted(() => {
                   <div class="text-[11px] text-gray-600 dark:text-gray-400 truncate" :title="p.customer_name || '-'">
                     {{ p.customer_name || '-' }}
                   </div>
+                  <div
+                    v-if="p.spb_number || p.dbl_number"
+                    class="mt-1 flex flex-wrap items-center gap-1 text-[10px] leading-4"
+                  >
+                    <span
+                      v-if="p.spb_number"
+                      class="inline-flex min-w-0 max-w-full items-center rounded bg-gray-100 px-1.5 py-0.5 font-semibold text-gray-700 ring-1 ring-inset ring-gray-200 dark:bg-gray-700 dark:text-gray-100 dark:ring-gray-600"
+                      :title="`SPB: ${p.spb_number}`"
+                    >
+                      <span class="truncate">SPB: {{ p.spb_number }}</span>
+                    </span>
+                    <span
+                      v-if="p.dbl_number"
+                      class="inline-flex min-w-0 max-w-full items-center rounded bg-cyan-50 px-1.5 py-0.5 font-semibold text-cyan-700 ring-1 ring-inset ring-cyan-200 dark:bg-cyan-950/70 dark:text-cyan-200 dark:ring-cyan-800"
+                      :title="`DBL: ${p.dbl_number}`"
+                    >
+                      <span class="truncate">DBL: {{ p.dbl_number }}</span>
+                    </span>
+                  </div>
                   <div class="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
                     <span class="text-gray-500 dark:text-gray-400">Orig: {{ formatRupiah(p.original_amount) }}</span>
                     <span
@@ -509,6 +534,25 @@ onMounted(() => {
               <div class="min-w-0 flex-1">
                 <div class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{{ p.invoice_number || '-' }}</div>
                 <div class="text-xs text-gray-600 dark:text-gray-400 truncate">{{ p.customer_name || '-' }}</div>
+                <div
+                  v-if="p.spb_number || p.dbl_number"
+                  class="mt-1 flex flex-wrap items-center gap-1 text-[11px] leading-4"
+                >
+                  <span
+                    v-if="p.spb_number"
+                    class="inline-flex min-w-0 max-w-full items-center rounded bg-gray-100 px-1.5 py-0.5 font-semibold text-gray-700 ring-1 ring-inset ring-gray-200 dark:bg-gray-700 dark:text-gray-100 dark:ring-gray-600"
+                    :title="`SPB: ${p.spb_number}`"
+                  >
+                    <span class="truncate">SPB: {{ p.spb_number }}</span>
+                  </span>
+                  <span
+                    v-if="p.dbl_number"
+                    class="inline-flex min-w-0 max-w-full items-center rounded bg-cyan-50 px-1.5 py-0.5 font-semibold text-cyan-700 ring-1 ring-inset ring-cyan-200 dark:bg-cyan-950/70 dark:text-cyan-200 dark:ring-cyan-800"
+                    :title="`DBL: ${p.dbl_number}`"
+                  >
+                    <span class="truncate">DBL: {{ p.dbl_number }}</span>
+                  </span>
+                </div>
               </div>
               <div class="text-right">
                 <div

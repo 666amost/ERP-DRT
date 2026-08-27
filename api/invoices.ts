@@ -52,6 +52,8 @@ type PaymentHistory = {
   id: number;
   invoice_id: number;
   invoice_number: string | null;
+  spb_number: string | null;
+  dbl_number: string | null;
   customer_name: string | null;
   customer_id: number | null;
   original_amount: number;
@@ -1623,108 +1625,49 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const fromDate = isValidDate(fromRaw) ? fromRaw : null;
     const toDate = isValidDate(toRaw) ? toRaw : null;
 
-    let payments: PaymentHistory[];
-    if (fromDate && toDate) {
-      payments = await sql`
-        select 
-          ip.id, ip.invoice_id, i.invoice_number, i.customer_name, i.customer_id,
-          (
-            case
-              when coalesce(i.discount_amount, 0) > 0
-                then coalesce(
-                  nullif(i.subtotal, 0),
-                  coalesce(i.total_tagihan, i.amount, 0)
-                    + coalesce(i.discount_amount, 0)
-                    + coalesce(i.pph_amount, 0)
-                )
-              else coalesce(i.amount, 0)
-            end
-          )::float as original_amount,
-          coalesce(i.discount_amount, 0)::float as discount,
-          coalesce(ip.amount, 0)::float as final_amount,
-          ip.payment_date, ip.payment_method, ip.reference_no, ip.notes
-        from invoice_payments ip
-        join invoices i on i.id = ip.invoice_id
-        where (ip.payment_date at time zone 'Asia/Jakarta') >= ${fromDate}::date
-          and (ip.payment_date at time zone 'Asia/Jakarta') < (${toDate}::date + interval '1 day')
-        order by ip.payment_date desc
-        limit 9999
-      ` as PaymentHistory[];
-    } else if (fromDate) {
-      payments = await sql`
-        select 
-          ip.id, ip.invoice_id, i.invoice_number, i.customer_name, i.customer_id,
-          (
-            case
-              when coalesce(i.discount_amount, 0) > 0
-                then coalesce(
-                  nullif(i.subtotal, 0),
-                  coalesce(i.total_tagihan, i.amount, 0)
-                    + coalesce(i.discount_amount, 0)
-                    + coalesce(i.pph_amount, 0)
-                )
-              else coalesce(i.amount, 0)
-            end
-          )::float as original_amount,
-          coalesce(i.discount_amount, 0)::float as discount,
-          coalesce(ip.amount, 0)::float as final_amount,
-          ip.payment_date, ip.payment_method, ip.reference_no, ip.notes
-        from invoice_payments ip
-        join invoices i on i.id = ip.invoice_id
-        where (ip.payment_date at time zone 'Asia/Jakarta') >= ${fromDate}::date
-        order by ip.payment_date desc
-        limit 9999
-      ` as PaymentHistory[];
-    } else if (toDate) {
-      payments = await sql`
-        select 
-          ip.id, ip.invoice_id, i.invoice_number, i.customer_name, i.customer_id,
-          (
-            case
-              when coalesce(i.discount_amount, 0) > 0
-                then coalesce(
-                  nullif(i.subtotal, 0),
-                  coalesce(i.total_tagihan, i.amount, 0)
-                    + coalesce(i.discount_amount, 0)
-                    + coalesce(i.pph_amount, 0)
-                )
-              else coalesce(i.amount, 0)
-            end
-          )::float as original_amount,
-          coalesce(i.discount_amount, 0)::float as discount,
-          coalesce(ip.amount, 0)::float as final_amount,
-          ip.payment_date, ip.payment_method, ip.reference_no, ip.notes
-        from invoice_payments ip
-        join invoices i on i.id = ip.invoice_id
-        where (ip.payment_date at time zone 'Asia/Jakarta') < (${toDate}::date + interval '1 day')
-        order by ip.payment_date desc
-        limit 9999
-      ` as PaymentHistory[];
-    } else {
-      payments = await sql`
-        select 
-          ip.id, ip.invoice_id, i.invoice_number, i.customer_name, i.customer_id,
-          (
-            case
-              when coalesce(i.discount_amount, 0) > 0
-                then coalesce(
-                  nullif(i.subtotal, 0),
-                  coalesce(i.total_tagihan, i.amount, 0)
-                    + coalesce(i.discount_amount, 0)
-                    + coalesce(i.pph_amount, 0)
-                )
-              else coalesce(i.amount, 0)
-            end
-          )::float as original_amount,
-          coalesce(i.discount_amount, 0)::float as discount,
-          coalesce(ip.amount, 0)::float as final_amount,
-          ip.payment_date, ip.payment_method, ip.reference_no, ip.notes
-        from invoice_payments ip
-        join invoices i on i.id = ip.invoice_id
-        order by ip.payment_date desc
-        limit 500
-      ` as PaymentHistory[];
-    }
+    const hasDateFilter = Boolean(fromDate || toDate);
+    const payments = await sql`
+      select
+        ip.id, ip.invoice_id, i.invoice_number,
+        coalesce(refs.spb_number, nullif(btrim(i.spb_number), '')) as spb_number,
+        coalesce(refs.dbl_number, invoice_dbl.dbl_number) as dbl_number,
+        i.customer_name, i.customer_id,
+        (
+          case
+            when coalesce(i.discount_amount, 0) > 0
+              then coalesce(
+                nullif(i.subtotal, 0),
+                coalesce(i.total_tagihan, i.amount, 0)
+                  + coalesce(i.discount_amount, 0)
+                  + coalesce(i.pph_amount, 0)
+              )
+            else coalesce(i.amount, 0)
+          end
+        )::float as original_amount,
+        coalesce(i.discount_amount, 0)::float as discount,
+        coalesce(ip.amount, 0)::float as final_amount,
+        ip.payment_date, ip.payment_method, ip.reference_no, ip.notes
+      from invoice_payments ip
+      join invoices i on i.id = ip.invoice_id
+      left join dbl invoice_dbl on invoice_dbl.id = i.dbl_id
+      left join lateral (
+        select
+          string_agg(distinct btrim(s.spb_number), ', ' order by btrim(s.spb_number))
+            filter (where nullif(btrim(s.spb_number), '') is not null) as spb_number,
+          string_agg(distinct btrim(d.dbl_number), ', ' order by btrim(d.dbl_number))
+            filter (where nullif(btrim(d.dbl_number), '') is not null) as dbl_number
+        from invoice_items ii
+        join shipments s on s.id = ii.shipment_id
+        left join dbl d on d.id = s.dbl_id
+        where ii.invoice_id = i.id
+      ) refs on true
+      where (${fromDate}::date is null
+          or (ip.payment_date at time zone 'Asia/Jakarta') >= ${fromDate}::date)
+        and (${toDate}::date is null
+          or (ip.payment_date at time zone 'Asia/Jakarta') < (${toDate}::date + interval '1 day'))
+      order by ip.payment_date desc
+      limit ${hasDateFilter ? 9999 : 500}
+    ` as PaymentHistory[];
     writeJson(res, { items: payments });
     return;
   } else if (endpoint === 'sales-report' && req.method === 'GET') {

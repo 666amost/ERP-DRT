@@ -6,9 +6,9 @@ import 'leaflet/dist/leaflet.css';
 import mqtt, { type MqttClient } from 'mqtt';
 import {
   accountIdFromTopic,
-  isNewerTrackingPayload,
   parseTrackingPayload
 } from '../lib/trackingPayload';
+import { trackingAction } from '../lib/activeTracking';
 import { bearingBetween, interpolatePoint, shortestRotation } from '../lib/mapMotion';
 
 type ActiveTrip = {
@@ -51,7 +51,8 @@ let map: LeafletMap | null = null;
 let mqttClient: MqttClient | null = null;
 let clockTimer: ReturnType<typeof setInterval> | null = null;
 const markers = new Map<number, Marker>();
-const removalTimers = new Map<number, ReturnType<typeof setTimeout>>();
+const latestMessages = new Map<number, string>();
+let disposed = false;
 const markerMotion = new Map<number, {
   animationFrame: number | null;
   heading: number;
@@ -69,6 +70,7 @@ const activeItems = computed(() => {
   const query = searchQuery.value.trim().toLowerCase();
   return Object.values(tripsByAccount.value)
     .filter(item => {
+      if (item.status !== 'DEPARTED') return false;
       if (!query) return true;
       return [item.dbl_number, item.driver_name, item.vehicle_plate, item.origin, item.destination]
         .some(value => String(value || '').toLowerCase().includes(query));
@@ -233,30 +235,34 @@ function removeTrip(accountId: number): void {
   const next = { ...tripsByAccount.value };
   delete next[String(accountId)];
   tripsByAccount.value = next;
-  const timer = removalTimers.get(accountId);
-  if (timer) clearTimeout(timer);
-  removalTimers.delete(accountId);
 }
 
-function applyPayload(topic: string, raw: string): void {
+function applyPayload(topic: string, raw: string, retained = false): void {
+  if (disposed) return;
   const topicAccountId = accountIdFromTopic(mqttTopic, topic);
   const payload = parseTrackingPayload(raw);
   if (!payload || payload.tracking_account_id !== topicAccountId) return;
 
   const key = String(payload.tracking_account_id);
   const previous = tripsByAccount.value[key];
-  if (!isNewerTrackingPayload(previous?.recorded_at || null, payload.recorded_at)) return;
+  const action = trackingAction(previous, payload, retained, latestMessages.get(payload.tracking_account_id) || null);
+  if (action === 'ignore') return;
+  latestMessages.set(payload.tracking_account_id, payload.recorded_at);
+  if (action === 'remove') { removeTrip(payload.tracking_account_id); return; }
+  if (action === 'remember') return;
+  const sameTrip = previous?.id === payload.dbl_id;
+  if (previous && !sameTrip) removeTrip(payload.tracking_account_id);
 
   const item: TrackingItem = {
     id: payload.dbl_id,
     dbl_number: payload.dbl_number,
-    dbl_date: previous?.dbl_date || '',
+    dbl_date: sameTrip ? previous?.dbl_date || '' : '',
     driver_name: payload.driver_name,
     vehicle_plate: payload.vehicle_plate,
     origin: payload.origin,
     destination: payload.destination,
     status: payload.status,
-    shipment_count: previous?.shipment_count || 0,
+    shipment_count: sameTrip ? previous?.shipment_count || 0 : 0,
     tracking_account_id: payload.tracking_account_id,
     lat: payload.status === 'DEPARTED' ? payload.lat : previous?.lat ?? null,
     lng: payload.status === 'DEPARTED' ? payload.lng : previous?.lng ?? null,
@@ -267,11 +273,6 @@ function applyPayload(topic: string, raw: string): void {
   tripsByAccount.value = { ...tripsByAccount.value, [key]: item };
   updateMarker(item, true);
 
-  if (payload.status === 'COMPLETED') {
-    const oldTimer = removalTimers.get(payload.tracking_account_id);
-    if (oldTimer) clearTimeout(oldTimer);
-    removalTimers.set(payload.tracking_account_id, setTimeout(() => removeTrip(payload.tracking_account_id), 5000));
-  }
 }
 
 async function loadActiveTrips(): Promise<void> {
@@ -282,7 +283,9 @@ async function loadActiveTrips(): Promise<void> {
     if (!response.ok) throw new Error(response.status === 403 ? 'Akses live tracking ditolak' : 'Gagal memuat DBL aktif');
     const data = await response.json() as { items?: ActiveTrip[] };
     const next: Record<string, TrackingItem> = {};
+    if (disposed) return;
     for (const trip of data.items || []) {
+      if (trip.status !== 'DEPARTED') continue;
       next[String(trip.tracking_account_id)] = {
         ...trip,
         lat: null,
@@ -347,7 +350,7 @@ function connectMqtt(): void {
       ? 'Koneksi pelacakan bermasalah. Sistem akan mencoba kembali.'
       : 'Koneksi pelacakan gagal.';
   });
-  mqttClient.on('message', (topic, message) => applyPayload(topic, message.toString()));
+  mqttClient.on('message', (topic, message, packet) => applyPayload(topic, message.toString(), Boolean(packet.retain)));
 }
 
 function focusTrip(item: TrackingItem): void {
@@ -368,8 +371,10 @@ watch(() => route.query.q, value => {
 
 onMounted(async () => {
   await nextTick();
+  if (disposed) return;
   initializeMap();
   await loadActiveTrips();
+  if (disposed) return;
   connectMqtt();
   clockTimer = setInterval(() => {
     now.value = Date.now();
@@ -379,9 +384,9 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  disposed = true;
   if (clockTimer) clearInterval(clockTimer);
-  for (const timer of removalTimers.values()) clearTimeout(timer);
-  removalTimers.clear();
+  latestMessages.clear();
   for (const motion of markerMotion.values()) {
     if (motion.animationFrame !== null) cancelAnimationFrame(motion.animationFrame);
   }
@@ -466,10 +471,9 @@ onUnmounted(() => {
               </div>
               <span :class="[
                 'shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold uppercase',
-                item.status === 'COMPLETED' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' :
                 isStale(item) ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300' : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
               ]">
-                {{ item.status === 'COMPLETED' ? 'Selesai' : isStale(item) ? (item.recorded_at ? 'Stale' : 'Menunggu GPS') : 'Live' }}
+                {{ isStale(item) ? (item.recorded_at ? 'GPS belum diperbarui' : 'Menunggu GPS') : 'Live' }}
               </span>
             </div>
             <div class="mt-2 flex flex-wrap gap-1.5 text-xs text-gray-600 dark:text-gray-300">

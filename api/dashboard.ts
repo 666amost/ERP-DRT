@@ -28,6 +28,7 @@ type Invoice = {
 
 type Shipment = {
   id: number;
+  spb_number: string | null;
   public_code: string;
   origin: string;
   destination: string;
@@ -176,15 +177,17 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       writeJson(res, { items: invoices, meta: { page, limit, total, pages: Math.ceil(total / limit) } });
       return;
     } else if (endpoint === 'tracking') {
+      const limit = clampInt(parseInt(url.searchParams.get('limit') || '100', 10), 1, 100);
       const shipments = await sql`
         select 
-          s.id, s.public_code, s.origin, s.destination, s.status,
+          s.id, s.spb_number, s.public_code, s.origin, s.destination, s.status,
           t.carrier_name, t.driver_name
         from shipments s
         left join trip_items ti on ti.shipment_id = s.id
         left join trips t on t.id = ti.trip_id
         where s.status in ('IN_TRANSIT', 'LOADING')
-        order by s.created_at desc
+        order by s.created_at desc, s.id desc
+        limit ${limit}
       ` as Shipment[];
       
       writeJson(res, { items: shipments });

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue';
+import { useRoute } from 'vue-router';
 import Button from '../components/ui/Button.vue';
 import Badge from '../components/ui/Badge.vue';
 import ShipmentFormModal from '../components/ShipmentFormModal.vue';
@@ -18,7 +19,9 @@ const canEdit = computed(() => permissions.value.canEditShipment);
 const { formatDate, formatRupiah } = useFormatters();
 
 const loading = ref(true);
-const searchQuery = ref('');
+const route = useRoute();
+const searchQuery = ref(typeof route.query.q === 'string' ? route.query.q : '');
+watch(() => route.query.q, value => { searchQuery.value = typeof value === 'string' ? value : ''; });
 const showFormModal = ref(false);
 const activeTab = ref<'unloaded' | 'loaded'>('unloaded');
 const selectedRegion = ref('');
@@ -61,13 +64,6 @@ function viewBarcode(shipment: Shipment) {
   modalBarcodeValue.value = shipment.spb_number || `SPB-${shipment.id}`;
 }
 
-function formatPublicCode(code: string | null | undefined): string {
-  const val = String(code || '').trim();
-  if (!val) return '-';
-  const idx = val.indexOf('-');
-  if (idx < 0) return val;
-  return `${val.slice(0, idx + 1)}\n${val.slice(idx + 1)}`;
-}
 
 function getRegionFromDestination(destination: string): string {
   const dest = (destination || '').toUpperCase();
@@ -412,7 +408,9 @@ async function printLabel() {
   setTimeout(() => win.close(), 500);
 }
 
+watch(() => route.query.create, value => { if (value && permissions.value.canCreateAWB) openCreateModal(); });
 onMounted(() => {
+  if (route.query.create && permissions.value.canCreateAWB) openCreateModal();
   fetchUser();
   loadTabShipments('unloaded');
   loadTabShipments('loaded');
@@ -518,12 +516,8 @@ onMounted(() => {
               <tr v-for="ship in filteredShipments" :key="ship.id" class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-150 border-b border-gray-100 dark:border-gray-700">
                 <td class="px-3 py-3 text-xs dark:text-gray-300">
                   <div class="flex flex-col gap-1">
-                    <div class="text-[10px] font-medium dark:text-gray-200 whitespace-pre-line leading-tight max-w-[90px]">
-                      {{ formatPublicCode(ship.public_code) }}
-                    </div>
-                    <span class="inline-block text-[10px] leading-tight bg-black text-white rounded px-2 py-1 font-medium whitespace-nowrap">
-                      {{ ship.spb_number || `SPB-${ship.id}` }}
-                    </span>
+                    <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ ship.spb_number || 'SPB belum tersedia' }}</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400 break-words">{{ ship.public_code || '-' }}</div>
                   </div>
                 </td>
                 <td class="px-3 py-3 text-xs dark:text-gray-300">
@@ -589,10 +583,10 @@ onMounted(() => {
             <div v-for="s in filteredShipments" :key="s.id" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 transition-all duration-200 hover:shadow-md flex flex-col">
               <div class="flex items-start justify-between gap-2">
                 <div class="flex-1">
-                  <div class="text-xs font-semibold dark:text-gray-100 whitespace-pre-line leading-tight">{{ formatPublicCode(s.public_code) }}</div>
+                  <div class="text-base font-semibold dark:text-gray-100">{{ s.spb_number || 'SPB belum tersedia' }}</div>
                   <div class="mt-0.5">
-                    <span class="inline-block text-[10px] leading-tight bg-black text-white rounded px-1.5 py-0.5 font-medium">
-                      {{ s.spb_number || `SPB-${s.id}` }}
+                    <span class="text-xs text-gray-500 dark:text-gray-400 break-words">
+                      {{ s.public_code || '-' }}
                     </span>
                   </div>
                   <div class="flex flex-wrap gap-1 mt-2">

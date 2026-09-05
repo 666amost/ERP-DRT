@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
+import { vDialog } from '../directives/dialog';
 
 type City = {
   id: number;
@@ -169,7 +170,10 @@ loadCities();
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
       @click.self="showAddModal = false"
     >
-      <div class="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-sm space-y-4 card dark:text-gray-100">
+      <div
+        v-dialog="() => { if (!loading) showAddModal = false; }" aria-label="Tambah kota"
+        class="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-sm space-y-4 card dark:text-gray-100"
+      >
         <div class="text-lg font-semibold">
           Tambah Kota Baru
         </div>

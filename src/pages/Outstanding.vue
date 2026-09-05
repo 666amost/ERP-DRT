@@ -314,7 +314,7 @@ onMounted(async () => {
     </div>
 
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-4 print:hidden">
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-8 gap-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div>
           <label class="block text-sm font-medium mb-1 dark:text-gray-300">Cari</label>
           <input
@@ -419,9 +419,9 @@ onMounted(async () => {
               <tr v-for="(item, idx) in filteredItems" :key="item.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
                 <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ idx + 1 }}</td>
                 <td class="px-2 py-2 text-gray-700 dark:text-gray-300">
-                  <div class="font-medium text-gray-900 dark:text-gray-100 truncate" :title="item.public_code || '-'">{{ item.public_code || '-' }}</div>
+                  <div class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate" :title="item.spb_number || 'SPB belum tersedia'">{{ item.spb_number || 'SPB belum tersedia' }}</div>
                   <div class="text-[11px] text-gray-500 dark:text-gray-400 truncate">
-                    <span>SPB: {{ item.spb_number || '-' }}</span>
+                    <span>Tracking: {{ item.public_code || '-' }}</span>
                     <span class="mx-1">•</span>
                     <span>DBL: {{ item.dbl_number || '-' }}</span>
                     <span v-if="item.driver_name" class="ml-1">({{ item.driver_name }})</span>
@@ -467,8 +467,8 @@ onMounted(async () => {
           <div v-for="item in filteredItems" :key="item.id" class="border border-gray-200 dark:border-gray-700 rounded-xl p-3 bg-white dark:bg-gray-800">
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0 flex-1">
-                <div class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{{ item.public_code || '-' }}</div>
-                <div class="text-xs text-gray-500 dark:text-gray-400">SPB: {{ item.spb_number || '-' }}</div>
+                <div class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{{ item.spb_number || 'SPB belum tersedia' }}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">Tracking: {{ item.public_code || '-' }}</div>
                 <div v-if="item.dbl_number || hasUnassignedDbl" class="text-[11px] text-gray-500 dark:text-gray-400">
                   DBL: {{ item.dbl_number || 'Belum ada' }}
                   <span v-if="item.driver_name" class="text-gray-400">| {{ item.driver_name }}</span>

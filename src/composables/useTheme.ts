@@ -1,40 +1,41 @@
-import { ref, onMounted } from 'vue';
+import { ref } from 'vue';
 
-const KEY = 'erp-theme';
+type ThemePreference = 'light' | 'dark' | 'system';
 const theme = ref<'light' | 'dark'>('light');
-
-function apply(t: 'light' | 'dark') {
-  if (typeof document === 'undefined') return;
-  const el = document.documentElement;
-  if (!el) return;
-  if (t === 'dark') el.classList.add('dark');
-  else el.classList.remove('dark');
-}
+const preference = ref<ThemePreference>('light');
+const textSize = ref<'standard' | 'large'>('standard');
+let initialized = false;
 
 export function useTheme() {
-  // Lazily initialize from localStorage on client
-  onMounted(() => {
+  function apply() {
+    if (typeof document === 'undefined') return;
+    theme.value = preference.value === 'system'
+      ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : preference.value;
+    document.documentElement.classList.toggle('dark', theme.value === 'dark');
+    document.documentElement.classList.toggle('text-large', textSize.value === 'large');
+  }
+  if (!initialized && typeof window !== 'undefined') {
+    initialized = true;
     try {
-      const saved = localStorage.getItem(KEY);
-      if (saved === 'dark' || saved === 'light') theme.value = saved;
-    } catch (err) {
-      // ignore localStorage errors in private mode
-      console.debug('useTheme localStorage read error', err);
-    }
-    apply(theme.value);
-  });
-
-  function toggle() {
-    theme.value = theme.value === 'light' ? 'dark' : 'light';
-    try { localStorage.setItem(KEY, theme.value); } catch (err) { console.debug('useTheme localStorage write error', err); }
-    apply(theme.value);
+      const saved = localStorage.getItem('erp-theme');
+      if (saved === 'light' || saved === 'dark' || saved === 'system') preference.value = saved;
+      textSize.value = localStorage.getItem('erp-text-size') === 'large' ? 'large' : 'standard';
+    } catch { /* Storage is optional. */ }
+    window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener('change', apply);
+    apply();
   }
-  function set(t: 'light' | 'dark') {
-    theme.value = t;
-    try { localStorage.setItem(KEY, t); } catch (err) { console.debug('useTheme localStorage write error', err); }
-    apply(t);
+  function set(value: ThemePreference) {
+    preference.value = value;
+    try { localStorage.setItem('erp-theme', value); } catch { /* Storage is optional. */ }
+    apply();
   }
-  return { theme, toggle, set };
+  function setTextSize(value: 'standard' | 'large') {
+    textSize.value = value;
+    try { localStorage.setItem('erp-text-size', value); } catch { /* Storage is optional. */ }
+    apply();
+  }
+  function toggle() { set(theme.value === 'dark' ? 'light' : 'dark'); }
+  return { theme, preference, textSize, toggle, set, setTextSize };
 }
-
 export default useTheme;

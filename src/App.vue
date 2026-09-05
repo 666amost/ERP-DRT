@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FeedbackHost from './components/ui/FeedbackHost.vue';
 import { ref, onErrorCaptured } from 'vue';
 
 const hasError = ref(false);
@@ -21,4 +22,5 @@ onErrorCaptured((err) => {
       <component :is="Component" />
     </Transition>
   </router-view>
+  <FeedbackHost />
 </template>

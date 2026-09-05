@@ -1,11 +1,14 @@
 ﻿<script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue';
+import { notify } from '../composables/useNotifications';
+import { ref, onMounted, watch, computed, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { vDialog } from '../directives/dialog';
 import Button from '../components/ui/Button.vue';
 import Badge from '../components/ui/Badge.vue';
 import { useFormatters } from '../composables/useFormatters';
 import { Icon } from '@iconify/vue';
 import { getCompany } from '../lib/company';
+import { invoiceTotals } from '../lib/invoiceTotals';
 import { useAuth } from '../composables/useAuth';
 const LOGO_URL = '/brand/logo.png';
 
@@ -139,6 +142,8 @@ const router = useRouter();
 const searchQuery = ref(typeof route.query.q === 'string' ? route.query.q : '');
 const filteredInvoices = computed(() => invoices.value);
 const loading = ref(true);
+const printingInvoiceId = ref<number | null>(null);
+const printError = ref('');
 const showModal = ref(false);
 const editingId = ref<number | null>(null);
 const pagination = ref({ page: 1, limit: 50, total: 0, pages: 1 });
@@ -234,6 +239,7 @@ const pphPercent = ref<number>(0);
 const loadingUnpaidShipments = ref(false);
 const manualAmountMode = ref(false);
 const savingInvoice = ref(false);
+const savingMode = ref<'single' | 'bulk'>('single');
 const invoiceSaveError = ref('');
 const existingPaidAmount = ref<number>(0);
 const editingCustomerName = ref<string>('');
@@ -670,7 +676,7 @@ function calcSubtotal(): number {
 }
 
 function calcDiscountedSubtotal(): number {
-  return Math.max(0, calcSubtotal() - (discountAmount.value || 0));
+  return invoiceTotals(calcSubtotal(), discountAmount.value, pphPercent.value).discountedSubtotal;
 }
 
 function lineSubtotal(it: Item): number {
@@ -678,13 +684,11 @@ function lineSubtotal(it: Item): number {
 }
 
 function calcPph(): number {
-  return calcDiscountedSubtotal() * (pphPercent.value / 100);
+  return invoiceTotals(calcSubtotal(), discountAmount.value, pphPercent.value).pph;
 }
 
 function calcTotal(): number {
-  const subtotal = calcDiscountedSubtotal();
-  const pph = calcPph();
-  return Math.max(0, subtotal - pph);
+  return invoiceTotals(calcSubtotal(), discountAmount.value, pphPercent.value).total;
 }
 
 async function loadInvoices(options: { page?: number; q?: string } = {}): Promise<void> {
@@ -803,13 +807,13 @@ watch(
 async function settleCicilanForSelectedCustomer(): Promise<void> {
   const selected = selectedCicilanCustomer.value;
   if (!selected) {
-    alert('Pilih customer terlebih dahulu');
+    notify.error('Pilih customer terlebih dahulu');
     return;
   }
 
   const invoiceCount = cicilanCustomerInvoices.value.length;
   if (invoiceCount === 0) {
-    alert('Tidak ada invoice yang belum lunas untuk customer ini');
+    notify.error('Tidak ada invoice yang belum lunas untuk customer ini');
     return;
   }
 
@@ -836,12 +840,12 @@ async function settleCicilanForSelectedCustomer(): Promise<void> {
     if (!res.ok) {
       throw new Error(data?.error || 'Gagal melunasi invoice');
     }
-    alert(`Berhasil melunasi ${data.settled_count || 0} invoice (${formatRupiah(data.total_paid || 0)})`);
+    notify.success(`Berhasil melunasi ${data.settled_count || 0} invoice (${formatRupiah(data.total_paid || 0)})`);
     await loadInvoices({ page: pagination.value.page, q: searchQuery.value });
     await loadAllUnpaidInvoices();
   } catch (e) {
     console.error('Settle customer error:', e);
-    alert(e instanceof Error ? e.message : 'Gagal melunasi invoice');
+    notify.error(e instanceof Error ? e.message : 'Gagal melunasi invoice');
   } finally {
     cicilanActionLoading.value = false;
   }
@@ -850,14 +854,14 @@ async function settleCicilanForSelectedCustomer(): Promise<void> {
 async function bulkSettleCicilanSelectedInvoices(): Promise<void> {
   const selected = selectedCicilanCustomer.value;
   if (!selected) {
-    alert('Pilih customer terlebih dahulu');
+    notify.error('Pilih customer terlebih dahulu');
     return;
   }
 
   const selectedEligible = cicilanSelectedInvoices.value.filter(isCicilanEligibleForBulk);
   const selectedEligibleIds = selectedEligible.map((inv) => inv.id);
   if (selectedEligibleIds.length === 0) {
-    alert('Pilih minimal 1 invoice yang masih ada sisa untuk gabung');
+    notify.error('Pilih minimal 1 invoice yang masih ada sisa untuk gabung');
     return;
   }
 
@@ -883,13 +887,13 @@ async function bulkSettleCicilanSelectedInvoices(): Promise<void> {
     if (!res.ok) {
       throw new Error(data?.error || 'Gagal gabung invoice');
     }
-    alert(`Berhasil gabung (${data.merged_count || selectedEligibleIds.length} invoice). Invoice baru: ${data.invoice_number || data.id}`);
+    notify.success(`Berhasil gabung (${data.merged_count || selectedEligibleIds.length} invoice). Invoice baru: ${data.invoice_number || data.id}`);
     cicilanSelectedInvoiceIds.value = new Set();
     await loadInvoices({ page: pagination.value.page, q: searchQuery.value });
     await loadAllUnpaidInvoices();
   } catch (e) {
     console.error('Bulk settle error:', e);
-    alert(e instanceof Error ? e.message : 'Gagal gabung invoice');
+    notify.error(e instanceof Error ? e.message : 'Gagal gabung invoice');
   } finally {
     cicilanActionLoading.value = false;
   }
@@ -898,14 +902,14 @@ async function bulkSettleCicilanSelectedInvoices(): Promise<void> {
 async function bulkSettleCicilanAllInvoices(): Promise<void> {
   const selected = selectedCicilanCustomer.value;
   if (!selected) {
-    alert('Pilih customer terlebih dahulu');
+    notify.error('Pilih customer terlebih dahulu');
     return;
   }
 
   const allEligible = cicilanCustomerInvoices.value.filter(isCicilanEligibleForBulk);
   const allEligibleIds = allEligible.map((inv) => inv.id);
   if (allEligibleIds.length === 0) {
-    alert('Tidak ada invoice yang masih ada sisa untuk customer ini');
+    notify.error('Tidak ada invoice yang masih ada sisa untuk customer ini');
     return;
   }
 
@@ -931,13 +935,13 @@ async function bulkSettleCicilanAllInvoices(): Promise<void> {
     if (!res.ok) {
       throw new Error(data?.error || 'Gagal gabung invoice');
     }
-    alert(`Berhasil bulk semua (${data.merged_count || allEligibleIds.length} invoice). Invoice baru: ${data.invoice_number || data.id}`);
+    notify.success(`Berhasil bulk semua (${data.merged_count || allEligibleIds.length} invoice). Invoice baru: ${data.invoice_number || data.id}`);
     cicilanSelectedInvoiceIds.value = new Set();
     await loadInvoices({ page: pagination.value.page, q: searchQuery.value });
     await loadAllUnpaidInvoices();
   } catch (e) {
     console.error('Bulk all settle error:', e);
-    alert(e instanceof Error ? e.message : 'Gagal gabung invoice');
+    notify.error(e instanceof Error ? e.message : 'Gagal gabung invoice');
   } finally {
     cicilanActionLoading.value = false;
   }
@@ -992,18 +996,18 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
     if (items.value.length > 0 && firstItem?.customer_name) {
       form.value.customer_name = firstItem.customer_name;
     } else {
-      alert('Pilih customer terlebih dahulu');
+      notify.error('Pilih customer terlebih dahulu');
       return;
     }
   }
 
   if (items.value.length === 0) {
-    alert('Pilih minimal satu SPB sebelum menyimpan invoice');
+    notify.error('Pilih minimal satu SPB sebelum menyimpan invoice');
     return;
   }
 
   if (!editingId.value && !sjBulkInputStatus.value) {
-    alert('Pilih status SJ (Sudah balik / Belum balik) sebelum menyimpan invoice');
+    notify.error('Pilih status SJ (Sudah balik / Belum balik) sebelum menyimpan invoice');
     return;
   }
 
@@ -1013,7 +1017,7 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
   const totalTagihan = Math.max(0, subtotalAfterDiscount - pphAmount);
 
   if (totalTagihan <= 0) {
-    alert('Total tagihan harus lebih dari 0');
+    notify.error('Total tagihan harus lebih dari 0');
     return;
   }
   
@@ -1036,11 +1040,12 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
       if (it.customer_name) customerNames.add(it.customer_name.toLowerCase());
     });
     if (customerIds.size > 1 || customerNames.size > 1) {
-      alert('Bulk invoice hanya untuk SPB dengan penagih/customer yang sama');
+      notify.error('Bulk invoice hanya untuk SPB dengan penagih/customer yang sama');
       return;
     }
   }
 
+  savingMode.value = mode;
   savingInvoice.value = true;
   invoiceSaveError.value = '';
 
@@ -1080,6 +1085,7 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
       });
       if (!res.ok) throw new Error('Update failed');
       await saveItemsForInvoice(editingId.value, itemsSnapshot);
+      notify.success('Perubahan invoice berhasil disimpan');
     } else if (mode === 'bulk') {
       let paidAmount = 0;
       let remainingAmount = totalTagihan;
@@ -1148,7 +1154,7 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
         'Invoice gagal dibuat'
       );
 
-      alert(created.invoice_number ? `Invoice ${created.invoice_number} berhasil dibuat` : 'Berhasil membuat invoice bulk');
+      notify.success(created.invoice_number ? `Invoice ${created.invoice_number} berhasil dibuat` : 'Berhasil membuat invoice bulk');
     } else {
       const createdInvoices: string[] = [];
       const failedInvoices: { index: number; spb: string; error: string }[] = [];
@@ -1274,19 +1280,19 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
           ? `${createdInvoices.length} invoice berhasil dibuat.\n`
           : '';
         invoiceSaveError.value = `${failedInvoices.length} invoice gagal dibuat. ${failedInvoices[0]?.error || ''}`.trim();
-        alert(`${successInfo}${failedInvoices.length} invoice gagal dibuat:\n${details}\n\nData yang gagal tetap dipilih agar bisa dicoba lagi.`);
+        notify.error(`${successInfo}${failedInvoices.length} invoice gagal dibuat:\n${details}\n\nData yang gagal tetap dipilih agar bisa dicoba lagi.`);
         if (createdInvoices.length > 0) await loadInvoices();
         return;
       }
 
-      alert(`Berhasil membuat ${createdInvoices.length} invoice dari ${itemsSnapshot.length} SPB`);
+      notify.success(`Berhasil membuat ${createdInvoices.length} invoice dari ${itemsSnapshot.length} SPB`);
     }
     showModal.value = false;
     await loadInvoices();
   } catch (e) {
     console.error('Save error:', e);
     invoiceSaveError.value = e instanceof Error ? e.message : 'Gagal menyimpan invoice';
-    alert(invoiceSaveError.value);
+    notify.error(invoiceSaveError.value);
   } finally {
     savingInvoice.value = false;
   }
@@ -1309,7 +1315,7 @@ Anda yakin ingin menghapus invoice ini? Tindakan ini tidak dapat dibatalkan.`;
     loadInvoices();
   } catch (e) {
     console.error('Delete error:', e);
-    alert('Gagal menghapus invoice');
+    notify.error('Gagal menghapus invoice');
   }
 }
 
@@ -1343,7 +1349,7 @@ async function addPayment() {
   
   const amount = parseFloat(paymentForm.value.amount);
   if (isNaN(amount) || amount <= 0) {
-    alert('Masukkan jumlah pembayaran yang valid');
+    notify.error('Masukkan jumlah pembayaran yang valid');
     return;
   }
   
@@ -1379,7 +1385,7 @@ async function addPayment() {
     loadInvoices();
   } catch (e) {
     console.error('Add payment error:', e);
-    alert('Gagal menambahkan pembayaran: ' + (e instanceof Error ? e.message : 'Unknown error'));
+    notify.error('Gagal menambahkan pembayaran: ' + (e instanceof Error ? e.message : 'Unknown error'));
   }
 }
 
@@ -1395,7 +1401,7 @@ async function deletePayment(paymentId: number) {
     loadInvoices();
   } catch (e) {
     console.error('Delete payment error:', e);
-    alert('Gagal menghapus pembayaran');
+    notify.error('Gagal menghapus pembayaran');
   }
 }
 
@@ -1426,7 +1432,7 @@ async function updatePph() {
     loadInvoices();
   } catch (e) {
     console.error('Update PPh error:', e);
-    alert('Gagal update PPh');
+    notify.error('Gagal update PPh');
   }
 }
 
@@ -1497,32 +1503,24 @@ watch(() => showModal.value, (val) => {
 });
 
 async function printInvoice(inv: Invoice): Promise<void> {
-  let invItems: Item[] = [];
+  if (printingInvoiceId.value !== null) return;
+  printError.value = '';
+  const win = window.open('', '_blank');
+  if (!win) { printError.value = 'Jendela cetak diblokir. Izinkan popup untuk aplikasi ini, lalu coba lagi.'; return; }
+  win.document.body.textContent = 'Menyiapkan invoice untuk dicetak...';
+  printingInvoiceId.value = inv.id;
   try {
-    const res = await fetch(`/api/invoices?endpoint=items&invoice_id=${inv.id}`);
+    const res = await fetch('/api/invoices?endpoint=items&invoice_id=' + inv.id);
+    if (!res.ok) throw new Error('Rincian invoice gagal dimuat. Silakan coba lagi.');
     const data = await res.json();
-    invItems = (data.items || []) as Item[];
-  } catch (e) {
-    console.warn('Failed to load items:', e);
-    invItems = items.value && items.value.length ? items.value : [];
-  }
-  if (!invItems || invItems.length === 0) {
-    invItems = [{ 
-      description: 'Jasa pengiriman', 
-      quantity: 1, 
-      unit_price: inv.amount, 
-      other_fee: 0,
-      tax_type: 'include', 
-      item_discount: 0,
-      spb_number: inv.spb_number || ''
-    }];
-  }
-  
+    const invItems = data.items as Item[];
+    if (!Array.isArray(invItems) || !invItems.length) throw new Error('Rincian invoice kosong. Periksa invoice sebelum mencetak.');
   const subtotal = invItems.reduce((acc: number, it: Item) => {
     return acc + lineSubtotal(it);
   }, 0);
-  const pphAmount = (inv.pph_percent || 0) * subtotal / 100;
-  const grand = subtotal - pphAmount;
+  const totals = invoiceTotals(subtotal, inv.discount_amount || 0, inv.pph_percent || 0);
+  const pphAmount = totals.pph;
+  const grand = totals.total;
   const company = await getCompany();
   
   const rows = invItems.map((it: Item) => {
@@ -1532,8 +1530,9 @@ async function printInvoice(inv: Invoice): Promise<void> {
     const baseLine = lineSubtotal(it);
     const baseTagihan = Number(it.unit_price || 0);
     const otherFee = Number(it.other_fee || 0);
-    const itemPph = (inv.pph_percent || 0) * baseLine / 100;
-    const itemTotal = baseLine - itemPph;
+    const discountedLine = subtotal > 0 ? baseLine * totals.discountedSubtotal / subtotal : 0;
+    const itemPph = (inv.pph_percent || 0) * discountedLine / 100;
+    const itemTotal = Math.max(0, discountedLine - itemPph);
     const colliLabel = it.colli ?? it.quantity ?? 0;
     const qtyLabel = (() => {
       if (it.weight !== undefined && it.weight !== null && !Number.isNaN(it.weight)) {
@@ -1964,13 +1963,14 @@ async function printInvoice(inv: Invoice): Promise<void> {
           <div>Subtotal</div>
           <div>${formatRupiah(subtotal)}</div>
         </div>
+        ${totals.discount ? `<div class="totals-row"><div>Diskon Invoice</div><div>-${formatRupiah(totals.discount)}</div></div>` : ''}
         ${inv.pph_percent ? `<div class="totals-row">
           <div>PPh (${inv.pph_percent}%)</div>
           <div>-${formatRupiah(pphAmount)}</div>
         </div>` : ''}
         <div class="totals-row total">
           <div>TOTAL</div>
-          <div>${formatRupiah(grand || inv.amount)}</div>
+          <div>${formatRupiah(grand)}</div>
         </div>
       </div>
     </div>
@@ -1999,12 +1999,17 @@ async function printInvoice(inv: Invoice): Promise<void> {
 </body>
 </html>`;
 
-  const win = window.open('', '_blank');
-  if (!win) return;
+  if (win.closed) return;
+  win.document.open();
   win.document.write(html);
   win.document.close();
-  win.focus();
-  setTimeout(() => { win.print(); }, 250);
+  await Promise.all(Array.from(win.document.images).map(img => img.complete ? Promise.resolve() : new Promise<void>(resolve => { img.onload = () => resolve(); img.onerror = () => resolve(); })));
+  await win.document.fonts?.ready;
+  if (!win.closed) { win.focus(); win.print(); }
+  } catch (error) {
+    printError.value = error instanceof Error ? error.message : 'Gagal menyiapkan cetak invoice.';
+    if (!win.closed) win.close();
+  } finally { printingInvoiceId.value = null; }
 }
 
 async function printInvoiceReceipt(inv: Invoice): Promise<void> {
@@ -2066,6 +2071,16 @@ watch(() => invoiceFilterType.value, () => {
 watch(() => createPaymentType.value, (val) => {
   if (val === 'CICILAN') manualAmountMode.value = true;
 });
+const initialInvoiceForm = ref('');
+function invoiceFormSnapshot() {
+  return JSON.stringify({ form: form.value, items: items.value, notes: notes.value, discount: discountAmount.value, pph: pphPercent.value, payment: createPaymentType.value, sj: sjBulkInputStatus.value });
+}
+watch(showModal, async open => { if (open) { await nextTick(); initialInvoiceForm.value = invoiceFormSnapshot(); } });
+function closeInvoiceModal() {
+  if (savingInvoice.value) return;
+  if (initialInvoiceForm.value && invoiceFormSnapshot() !== initialInvoiceForm.value && !confirm('Perubahan invoice belum disimpan. Tutup tanpa menyimpan?')) return;
+  showModal.value = false;
+}
 </script>
 
 <template>
@@ -2121,146 +2136,59 @@ watch(() => createPaymentType.value, (val) => {
       </div>
     </div>
 
+    <p v-if="printError" role="alert" class="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950 p-3 text-sm text-red-700 dark:text-red-200">{{ printError }}</p>
+    <p v-if="printingInvoiceId !== null" role="status" class="text-sm">Menyiapkan invoice untuk dicetak...</p>
     <!-- Desktop Table View -->
     <div
-      v-else
+      v-if="!loading"
       class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden card hidden lg:block transition-all duration-200"
     >
-      <div class="overflow-x-auto">
-      <table class="w-full">
+      <table class="w-full table-fixed invoice-list-table">
+        <colgroup><col style="width:19%"><col style="width:19%"><col style="width:17%"><col style="width:17%"><col style="width:14%"><col style="width:14%"></colgroup>
         <thead class="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-          <tr>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">
-              No. Invoice
-            </th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">
-              No. SPB
-            </th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">
-              Customer
-            </th>
-            <th class="px-4 py-3 text-right text-xs font-medium text-gray-600">
-              Amount
-            </th>
-            <th class="px-4 py-3 text-right text-xs font-medium text-gray-600">
-              Dibayar
-            </th>
-            <th class="px-4 py-3 text-right text-xs font-medium text-gray-600">
-              Sisa
-            </th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">
-              Status
-            </th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">
-              SJ Balik
-            </th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">
-              Tanggal
-            </th>
-            <th class="px-4 py-3 text-right text-xs font-medium text-gray-600">
-              Actions
-            </th>
-          </tr>
+          <tr><th>Invoice / SPB</th><th>Pelanggan</th><th class="text-right">Tagihan</th><th class="text-right">Pembayaran</th><th>Status / SJ</th><th>Aksi</th></tr>
         </thead>
         <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-          <tr v-if="filteredInvoices.length === 0">
-            <td
-              colspan="10"
-              class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"
-            >
-              Belum ada invoice
+          <tr v-if="filteredInvoices.length === 0"><td colspan="6" class="py-8 text-center">Belum ada invoice</td></tr>
+          <tr v-for="inv in filteredInvoices" :key="inv.id">
+            <td>
+              <div class="font-semibold text-gray-900 dark:text-gray-100">{{ inv.invoice_number }}</div>
+              <div class="mt-1 text-sm">SPB: {{ inv.spb_number || '-' }}</div>
+              <div class="mt-1 text-xs text-gray-500">{{ formatDate(inv.issued_at) }}</div>
             </td>
-          </tr>
-          <tr
-            v-for="inv in filteredInvoices"
-            :key="inv.id"
-            class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150"
-          >
-            <td class="px-4 py-3 text-sm font-medium dark:text-gray-200">
-              {{ inv.invoice_number }}
+            <td class="text-gray-900 dark:text-gray-100">{{ inv.customer_name }}</td>
+            <td class="text-right">
+              <div class="font-semibold">{{ formatRupiah(inv.discount_amount && inv.discount_amount > 0 && inv.subtotal ? inv.subtotal : inv.amount) }}</div>
+              <div v-if="inv.discount_amount && inv.discount_amount > 0" class="mt-1 text-xs text-red-600">Diskon: -{{ formatRupiah(inv.discount_amount) }}</div>
+              <div v-if="inv.pph_percent && inv.pph_percent > 0" class="mt-1 text-xs text-gray-500">PPh {{ inv.pph_percent }}%: -{{ formatRupiah(inv.pph_amount || 0) }}</div>
             </td>
-            <td class="px-4 py-3 text-sm dark:text-gray-300">
-              {{ inv.spb_number || '-' }}
+            <td class="text-right">
+              <div class="text-xs text-gray-500">Dibayar</div><div class="text-green-600">{{ formatRupiah(inv.paid_amount || 0) }}</div>
+              <div class="mt-2 text-xs text-gray-500">Sisa tagihan</div><div class="font-semibold text-orange-600">{{ formatRupiah(inv.remaining_amount ?? inv.amount) }}</div>
             </td>
-            <td class="px-4 py-3 text-sm dark:text-gray-300">
-              {{ inv.customer_name }}
+            <td>
+              <div class="invoice-status"><Badge :variant="getPaymentStatus(inv).variant">{{ getPaymentStatus(inv).label }}</Badge></div>
+              <div class="invoice-status mt-2"><Badge :variant="getSjStatus(inv).variant">{{ getSjStatus(inv).label }}</Badge></div>
+              <div v-if="inv.sj_pending_count && inv.sj_pending_count > 0" class="mt-1 text-xs text-gray-500">{{ inv.sj_pending_count }} belum balik</div>
             </td>
-            <td class="px-4 py-3 text-sm text-right font-semibold dark:text-gray-100">
-              {{ formatRupiah(inv.discount_amount && inv.discount_amount > 0 && inv.subtotal ? inv.subtotal : inv.amount) }}
-              <div v-if="inv.discount_amount && inv.discount_amount > 0" class="text-xs text-red-600 dark:text-red-400">
-                Diskon: -{{ formatRupiah(inv.discount_amount) }}
-              </div>
-              <div v-if="inv.pph_percent && inv.pph_percent > 0" class="text-xs text-gray-500">
-                PPh {{ inv.pph_percent }}%: -{{ formatRupiah(inv.pph_amount || 0) }}
-              </div>
-            </td>
-            <td class="px-4 py-3 text-sm text-right text-green-600 dark:text-green-400">
-              {{ formatRupiah(inv.paid_amount || 0) }}
-            </td>
-            <td class="px-4 py-3 text-sm text-right text-orange-600 dark:text-orange-400">
-              {{ formatRupiah(inv.remaining_amount ?? inv.amount) }}
-            </td>
-            <td class="px-4 py-3">
-              <Badge :variant="getPaymentStatus(inv).variant">
-                {{ getPaymentStatus(inv).label }}
-              </Badge>
-            </td>
-            <td class="px-4 py-3">
-              <Badge :variant="getSjStatus(inv).variant">
-                {{ getSjStatus(inv).label }}
-              </Badge>
-              <div v-if="inv.sj_pending_count && inv.sj_pending_count > 0" class="text-[11px] text-gray-500">
-                {{ inv.sj_pending_count }} belum balik
-              </div>
-            </td>
-            <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-              {{ formatDate(inv.issued_at) }}
-            </td>
-            <td class="px-4 py-3 text-right">
-              <div class="flex items-center justify-end gap-1 flex-wrap">
-                <button
-                  v-if="(inv.remaining_amount ?? inv.amount) > 0"
-                  class="px-2 py-1 text-xs font-medium text-white bg-blue-500 hover:bg-blue-600 rounded transition-colors"
-                  @click="openPaymentModal(inv)"
-                >
-                  Bayar
-                </button>
-                <button
-                  class="px-2 py-1 text-xs font-medium text-white bg-purple-500 hover:bg-purple-600 rounded transition-colors"
-                  @click="openPphModal(inv)"
-                >
-                  PPh
-                </button>
-                <button
-                  class="px-2 py-1 text-xs font-medium text-white bg-indigo-500 hover:bg-indigo-600 rounded transition-colors"
-                  @click="openEditModal(inv)"
-                >
-                  Edit
-                </button>
-                <button
-                  class="px-2 py-1 text-xs font-medium text-white bg-green-500 hover:bg-green-600 rounded transition-colors"
-                  @click="printInvoice(inv)"
-                >
-                  Print
-                </button>
-                <button
-                  class="px-2 py-1 text-xs font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500 rounded transition-colors"
-                  @click="printInvoiceReceipt(inv)"
-                >
-                  T. Terima
-                </button>
-                <button
-                  class="px-2 py-1 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded transition-colors"
-                  @click="deleteInvoice(inv)"
-                >
-                  Hapus
-                </button>
+            <td>
+              <div class="flex flex-col gap-2 invoice-actions">
+                <Button v-if="(inv.remaining_amount ?? inv.amount) > 0" size="sm" @click="openPaymentModal(inv)">Bayar</Button>
+                <Button size="sm" variant="default" :disabled="printingInvoiceId !== null" @click="printInvoice(inv)">Cetak</Button>
+                <details>
+                  <summary class="cursor-pointer rounded-lg px-2 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Lainnya</summary>
+                  <div class="mt-2 flex flex-col gap-2">
+                    <Button size="sm" variant="default" @click="openEditModal(inv)">Edit</Button>
+                    <Button size="sm" variant="default" @click="openPphModal(inv)">PPh</Button>
+                    <Button size="sm" variant="default" @click="printInvoiceReceipt(inv)">Tanda Terima</Button>
+                    <Button size="sm" variant="danger" @click="deleteInvoice(inv)">Hapus</Button>
+                  </div>
+                </details>
               </div>
             </td>
           </tr>
         </tbody>
       </table>
-      </div>
     </div>
 
     <!-- Mobile Card View -->
@@ -2337,9 +2265,10 @@ watch(() => createPaymentType.value, (val) => {
           <Button
             block
             variant="success"
+            :disabled="printingInvoiceId !== null"
             @click="printInvoice(inv)"
           >
-            Print
+            Cetak
           </Button>
           <Button
             block
@@ -2582,9 +2511,12 @@ watch(() => createPaymentType.value, (val) => {
     <div
       v-if="showModal"
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-      @click.self="showModal = false"
+      @click.self="closeInvoiceModal"
     >
-      <div class="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-7xl h-[90vh] flex flex-col overflow-hidden card dark:text-gray-100">
+      <div
+      v-dialog="closeInvoiceModal" aria-label="Form invoice"
+      class="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-7xl h-[90vh] flex flex-col overflow-hidden card dark:text-gray-100"
+    >
         <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex items-start justify-between gap-3">
           <div class="min-w-0">
             <div class="text-lg font-semibold dark:text-gray-100">
@@ -2597,7 +2529,7 @@ watch(() => createPaymentType.value, (val) => {
               Ubah item/biaya lalu update. Pembayaran dilakukan lewat tombol "Bayar" di list invoice.
             </div>
           </div>
-          <Button variant="default" @click="showModal = false">Tutup</Button>
+          <Button variant="default" @click="closeInvoiceModal">Tutup</Button>
         </div>
 
         <div class="flex-1 overflow-auto p-4">
@@ -3128,6 +3060,7 @@ watch(() => createPaymentType.value, (val) => {
     </div>
 
     <div class="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2 flex-wrap">
+      <p v-if="!editingId" class="w-full text-sm text-gray-600 dark:text-gray-300">{{ items.length }} SPB dipilih. Buat invoice terpisah per SPB, atau gabungkan pilihan menjadi satu invoice.</p>
       <p
         v-if="invoiceSaveError"
         class="mr-auto text-sm text-red-600 dark:text-red-400"
@@ -3135,21 +3068,23 @@ watch(() => createPaymentType.value, (val) => {
       >
         {{ invoiceSaveError }}
       </p>
-      <Button variant="secondary" :disabled="savingInvoice" @click="showModal = false">Batal</Button>
+      <Button variant="secondary" :disabled="savingInvoice" @click="closeInvoiceModal">Batal</Button>
       <Button
         v-if="!editingId"
         variant="success"
         :disabled="savingInvoice || items.length === 0 || !sjBulkInputStatus"
+        :loading="savingInvoice && savingMode === 'bulk'"
         @click="saveInvoice('bulk')"
       >
-        {{ savingInvoice ? 'Menyimpan...' : 'Simpan Bulk' }}
+        {{ savingInvoice && savingMode === 'bulk' ? 'Menyimpan...' : 'Gabungkan menjadi 1 Invoice' }}
       </Button>
       <Button
         variant="primary"
         :disabled="savingInvoice || (!editingId && (items.length === 0 || !sjBulkInputStatus))"
-        @click="saveInvoice"
+        :loading="savingInvoice && savingMode === 'single'"
+        @click="saveInvoice('single')"
       >
-        {{ savingInvoice ? 'Menyimpan...' : editingId ? 'Update Invoice' : 'Simpan Invoice' }}
+        {{ savingInvoice && savingMode === 'single' ? 'Menyimpan...' : editingId ? 'Simpan Perubahan' : 'Buat Invoice per SPB' }}
       </Button>
     </div>
   </div>

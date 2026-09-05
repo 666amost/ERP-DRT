@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { notify } from '../composables/useNotifications';
 import { ref, onMounted, computed, watch } from 'vue';
 import Button from '@/components/ui/Button.vue';
 import Badge from '@/components/ui/Badge.vue';
@@ -200,7 +201,7 @@ function openCostModal(dbl: DBLWithCost): void {
 }
 
 async function saveCosts(): Promise<void> {
-  if (!selectedDbl.value) return;
+  if (saving.value || !selectedDbl.value) return;
   saving.value = true;
   try {
     const res = await fetch('/api/dbl?endpoint=save-operational-costs', {
@@ -221,6 +222,7 @@ async function saveCosts(): Promise<void> {
     });
 
     if (!res.ok) throw new Error('Save failed');
+    notify.success('Biaya operasional berhasil disimpan');
     
     showModal.value = false;
     if (viewMode.value === 'report') {
@@ -229,13 +231,13 @@ async function saveCosts(): Promise<void> {
       await loadData();
     }
   } catch {
-    alert('Gagal menyimpan biaya operasional');
+    notify.error('Gagal menyimpan biaya operasional');
   } finally {
     saving.value = false;
   }
 }
 
-watch([viewMode, startDate, endDate, destinationFilter], () => {
+watch(viewMode, () => {
   if (viewMode.value === 'report') {
     loadReport();
   } else {
@@ -842,6 +844,7 @@ onMounted(() => {
             class="flex-1"
             :disabled="saving"
             @click="saveCosts"
+            :loading="saving"
           >
             {{ saving ? 'Menyimpan...' : 'Simpan' }}
           </Button>

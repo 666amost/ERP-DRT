@@ -1,3 +1,4 @@
+import { beginNavigation, finishNavigation } from './composables/useNavigation';
 import { createRouter, createWebHistory } from 'vue-router';
 import { useAuth, ROLE_PERMISSIONS, type UserRole } from './composables/useAuth';
 
@@ -56,6 +57,7 @@ export const router = createRouter({
 });
 
 router.beforeEach(async (to, _from, next) => {
+  beginNavigation(to.fullPath);
   if (to.meta.requiresAuth) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -92,7 +94,10 @@ router.beforeEach(async (to, _from, next) => {
   }
 });
 
+router.afterEach((to) => finishNavigation(to.fullPath));
+
 router.onError((error, to) => {
+  finishNavigation(to.fullPath);
   const isChunkLoadError =
     error.message?.includes('Failed to fetch dynamically imported module') ||
     error.message?.includes('Importing a module script failed') ||

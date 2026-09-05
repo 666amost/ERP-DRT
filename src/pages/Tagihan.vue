@@ -505,9 +505,9 @@ onMounted(() => {
                 >
                   <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ index + 1 }}</td>
                   <td class="px-2 py-2 text-gray-700 dark:text-gray-300">
-                    <div class="font-medium text-gray-900 dark:text-gray-100 truncate" :title="item.public_code || '-'">{{ item.public_code || '-' }}</div>
+                    <div class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate" :title="item.spb_number || 'SPB belum tersedia'">{{ item.spb_number || 'SPB belum tersedia' }}</div>
                     <div class="text-[11px] text-gray-500 dark:text-gray-400 truncate">
-                      SPB: {{ item.spb_number || '-' }}
+                      Tracking: {{ item.public_code || '-' }}
                       <span class="mx-1">|</span>
                       {{ item.invoice_number || 'Belum invoice' }}
                     </div>
@@ -545,8 +545,8 @@ onMounted(() => {
             >
               <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0 flex-1">
-                  <div class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{{ item.public_code || '-' }}</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">SPB: {{ item.spb_number || '-' }}</div>
+                  <div class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{{ item.spb_number || 'SPB belum tersedia' }}</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">Tracking: {{ item.public_code || '-' }}</div>
                   <div class="text-[11px] text-gray-500 dark:text-gray-400">Invoice: {{ item.invoice_number || 'Belum invoice' }}</div>
                 </div>
                 <div class="text-right">

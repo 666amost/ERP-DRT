@@ -24,7 +24,7 @@ const sidebarOpen = ref(false);
       <Sidebar @close="sidebarOpen = false" />
     </div>
 
-    <div class="flex flex-col min-h-screen lg:min-h-0">
+    <div class="flex flex-col min-w-0 min-h-screen lg:min-h-0">
       <Header class="print:hidden" @toggle-sidebar="sidebarOpen = !sidebarOpen" />
       <main class="p-4 lg:p-6 flex-1 overflow-auto overflow-x-hidden print:p-0 print:overflow-visible">
         <router-view v-slot="{ Component }">

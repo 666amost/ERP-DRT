@@ -1,0 +1,20 @@
+import { mount, flushPromises } from '@vue/test-utils';
+import { it, expect, vi } from 'vitest';
+import ShipmentFormModal from '../src/components/ShipmentFormModal.vue';
+it('keeps an unsaved SPB open when discard is declined, including Escape', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ items: [] }) })));
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  const wrapper = mount(ShipmentFormModal, { props: { shipment: null }, attachTo: document.body, global: { stubs: { Icon: true, CityAutocomplete: true } } });
+  await flushPromises();
+  expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+  await wrapper.find('input').setValue('SPB-UNSAVED');
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  expect(confirm).toHaveBeenCalledOnce();
+  expect(wrapper.emitted('close')).toBeUndefined();
+  confirm.mockReturnValue(true);
+  await wrapper.findAll('button').find(button => button.text() === 'Batal')!.trigger('click');
+  expect(wrapper.emitted('close')).toHaveLength(1);
+  wrapper.unmount();
+  expect(document.body.style.overflow).toBe('');
+  confirm.mockRestore();
+});

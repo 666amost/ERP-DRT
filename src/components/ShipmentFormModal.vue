@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, computed } from 'vue';
+import { notify } from '../composables/useNotifications';
+import { ref, watch, onMounted, computed, nextTick } from 'vue';
+import { vDialog } from '../directives/dialog';
 import Button from './ui/Button.vue';
 import CityAutocomplete from './CityAutocomplete.vue';
 import { Icon } from '@iconify/vue';
@@ -62,6 +64,7 @@ const statusOptions = [
 const form = ref<ShipmentForm>(createDefaultForm());
 const validationErrors = ref<Record<string, string>>({});
 const saving = ref(false);
+const initialForm = ref('');
 
 const showCustomerPicker = ref(false);
 const showAddCustomerForm = ref(false);
@@ -328,7 +331,7 @@ function openCustomerPicker() {
 
 async function createNewCustomer() {
   if (!newCustomerForm.value.name.trim()) {
-    alert('Nama penerima/customer wajib diisi');
+    notify.error('Nama penerima/customer wajib diisi');
     return;
   }
 
@@ -349,7 +352,7 @@ async function createNewCustomer() {
 
     if (!res.ok) {
       const error = await res.json();
-      alert(error.error || `Gagal ${isEdit ? 'update' : 'membuat'} customer`);
+      notify.error(error.error || `Gagal ${isEdit ? 'update' : 'membuat'} customer`);
       return;
     }
 
@@ -365,7 +368,7 @@ async function createNewCustomer() {
     }
   } catch (e) {
     console.error('Error saving customer:', e);
-    alert('Gagal menyimpan customer');
+    notify.error('Gagal menyimpan customer');
   } finally {
     isCreatingCustomer.value = false;
   }
@@ -403,37 +406,40 @@ async function deleteCustomer(c: { id: number; name: string }) {
     const res = await fetch(`/api/customers?endpoint=delete&id=${c.id}`, { method: 'DELETE' });
     if (!res.ok) {
       const error = await res.json();
-      alert(error.error || 'Gagal menghapus customer');
+      notify.error(error.error || 'Gagal menghapus customer');
       return;
     }
     await loadCustomerList();
     await loadFrequentCustomers();
   } catch (e) {
     console.error('Error deleting customer:', e);
-    alert('Gagal menghapus customer');
+    notify.error('Gagal menghapus customer');
   }
 }
 
 function closeModal() {
+  if (saving.value) return;
+  if (initialForm.value && JSON.stringify(form.value) !== initialForm.value && !confirm('Perubahan SPB belum disimpan. Tutup tanpa menyimpan?')) return;
   emit('close');
 }
 
 const customerSelected = computed(() => Boolean(form.value.customer_id));
 
 async function saveShipment() {
+  if (saving.value) return;
   const totalColli = parseInt(form.value.total_colli) || 1;
   const beratVal = parseNumberID(form.value.berat);
   const nominalVal = parseFloat(form.value.nominal) || 0;
 
   if (!form.value.customer_id) {
-    alert('Customer wajib dipilih dari daftar. Gunakan tombol "Pilih / Tambah Customer".');
+    notify.error('Customer wajib dipilih dari daftar. Gunakan tombol "Pilih / Tambah Customer".');
     return;
   }
 
   const validation = validateForm();
   if (!validation.ok) {
     const msgs = Object.entries(validation.errors).map(([k, v]) => `${k}: ${v}`);
-    alert('Periksa field berikut:\n' + msgs.join('\n'));
+    notify.error('Periksa field berikut:\n' + msgs.join('\n'));
     return;
   }
 
@@ -489,21 +495,24 @@ async function saveShipment() {
       }
     }
 
+    notify.success('SPB berhasil disimpan');
     emit('saved');
     emit('close');
   } catch (e) {
     console.error('Save error:', e);
     const errorMessage = e instanceof Error ? e.message : 'Unknown error';
-    alert(`Gagal menyimpan shipment: ${errorMessage}`);
+    notify.error(`Gagal menyimpan shipment: ${errorMessage}`);
   } finally {
     saving.value = false;
   }
 }
 
-watch(() => props.shipment, (val) => resetForm(val));
+watch(() => props.shipment, async val => { resetForm(val); await nextTick(); initialForm.value = JSON.stringify(form.value); });
 
-onMounted(() => {
+onMounted(async () => {
   resetForm(props.shipment);
+  await nextTick();
+  initialForm.value = JSON.stringify(form.value);
 });
 </script>
 
@@ -512,11 +521,14 @@ onMounted(() => {
     class="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center z-50 pt-4 px-4 pb-[60px] lg:p-4"
     @click.self="closeModal"
   >
-    <div class="bg-white dark:bg-gray-900 rounded-xl w-full max-w-2xl card flex flex-col h-[calc(100vh-60px)] lg:max-h-[90vh] dark:text-gray-100">
+    <div
+      v-dialog="closeModal" aria-label="Form SPB"
+      class="bg-white dark:bg-gray-900 rounded-xl w-full max-w-2xl card flex flex-col h-[calc(100vh-60px)] lg:max-h-[90vh] dark:text-gray-100"
+    >
       <div class="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-4 py-3 z-10">
         <h3 class="text-base font-semibold">{{ isEdit ? 'Edit SPB' : 'Tambah SPB Baru' }}</h3>
       </div>
-      <div class="px-4 py-3 overflow-auto flex-1 space-y-1.5">
+      <div class="px-4 py-3 overflow-auto flex-1 space-y-4">
         <div>
           <label class="block text-sm font-medium mb-1 dark:text-gray-200">No. SPB / Resi</label>
           <input
@@ -757,6 +769,7 @@ onMounted(() => {
         <Button
           variant="primary"
           @click="saveShipment"
+          :loading="saving"
           :disabled="saving"
         >
           {{ saving ? 'Menyimpan...' : 'Simpan' }}
@@ -770,7 +783,10 @@ onMounted(() => {
     class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4"
     @click.self="showCustomerPicker = false"
   >
-    <div class="bg-white dark:bg-gray-900 rounded-xl w-full max-w-lg max-h-[85vh] flex flex-col card dark:text-gray-100">
+    <div
+      v-dialog="() => { if (!isCreatingCustomer) showCustomerPicker = false; }" aria-label="Pilih pelanggan"
+      class="bg-white dark:bg-gray-900 rounded-xl w-full max-w-lg max-h-[85vh] flex flex-col card dark:text-gray-100"
+    >
       <div v-if="!showAddCustomerForm" class="p-4 border-b border-gray-200 dark:border-gray-700 space-y-3">
         <div class="flex items-center justify-between">
           <h3 class="text-lg font-semibold">Pilih Customer</h3>

@@ -21,6 +21,7 @@ const updateModelValue = (v: string) => emit('update:modelValue', v);
 const cities = ref<City[]>([]);
 const filteredCities = ref<City[]>([]);
 const searchQuery = ref(props.modelValue || '');
+const inputElement = ref<HTMLInputElement | null>(null);
 const showDropdown = ref(false);
 const showAddModal = ref(false);
 const newCityName = ref('');
@@ -106,7 +107,9 @@ watch(searchQuery, () => {
   debounceTimer = setTimeout(() => {
     filterCities();
     updateModelValue(searchQuery.value);
-    if (document.activeElement && (document.activeElement as HTMLElement).tagName === 'INPUT') {
+    // Programmatic values are populated when an SPB is opened for editing.
+    // Only open suggestions when this autocomplete itself has focus.
+    if (document.activeElement === inputElement.value) {
       showDropdown.value = true;
     }
   }, 300);
@@ -126,6 +129,7 @@ loadCities();
     <label class="block text-sm font-medium mb-1 dark:text-gray-300">{{ label }}</label>
     <div class="relative">
       <input
+        ref="inputElement"
         v-model="searchQuery"
         type="text"
         :placeholder="placeholder || 'Pilih atau ketik kota...'"

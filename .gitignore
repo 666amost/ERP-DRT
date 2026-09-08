@@ -18,3 +18,4 @@ invoice_amos_ste.pdf
 *.xlsx
 dbskema.sql
 .env.example
+test/city-autocomplete.spec.ts

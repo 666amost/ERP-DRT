@@ -418,7 +418,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-4 pb-20 lg:pb-0 overflow-x-auto">
+  <div class="space-y-4 pb-20 lg:pb-0">
     <div class="w-full min-w-0">
       <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3 px-4 lg:px-0">
         <div class="min-w-0">
@@ -448,16 +448,16 @@ onMounted(() => {
             </button>
           </div>
         </div>
-        <div class="flex gap-2 w-full lg:w-auto">
+        <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2 w-full lg:flex lg:w-auto">
           <input
             v-model="searchQuery"
             type="text"
             placeholder="Cari kode, SPB, DBL, supir, customer, rute..."
-            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 dark:border-gray-600 text-sm"
+            class="col-span-2 min-w-0 lg:col-span-1 lg:flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 dark:border-gray-600 text-sm"
           >
           <select
             v-model="selectedRegion"
-            class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 dark:border-gray-600 text-sm"
+            class="min-w-0 w-full lg:w-auto px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 dark:border-gray-600 text-sm"
           >
             <option v-for="opt in regionOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
@@ -490,7 +490,7 @@ onMounted(() => {
       <!-- Desktop Table View -->
       <div
         v-else
-        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden card transition-all duration-200"
+        class="hidden lg:block bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden card transition-all duration-200"
       >
         <div class="overflow-x-auto w-full">
           <table class="w-full text-sm border-collapse">

@@ -32,6 +32,7 @@ type DBLWithCost = {
 
 type CostForm = {
   dbl_id: number;
+  // Retain legacy amounts for existing records; the API resets omitted amounts to zero.
   bayar_supir: string;
   solar: string;
   ongkos_mobil: string;
@@ -43,7 +44,7 @@ type CostForm = {
   catatan: string;
 };
 
-type CostAmountField = Exclude<keyof CostForm, 'dbl_id' | 'catatan'>;
+type CostAmountField = Exclude<keyof CostForm, 'dbl_id' | 'catatan' | 'bayar_supir' | 'solar'>;
 
 type ReportItem = {
   id: number;
@@ -54,8 +55,6 @@ type ReportItem = {
   dbl_date: string | null;
   vehicle_plate: string | null;
   total_nominal: number;
-  bayar_supir: number;
-  solar: number;
   ongkos_mobil: number;
   ops_jakarta: number;
   ops_bali: number;
@@ -506,73 +505,54 @@ onMounted(() => {
     <template v-else>
       <div class="hidden lg:block bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
         <div class="max-h-[calc(100vh-20rem)] overflow-auto">
-          <table class="w-full table-fixed text-[11px]">
-            <colgroup>
-              <col style="width: 7.5%" />
-              <col style="width: 6%" />
-              <col style="width: 14%" />
-              <col style="width: 8%" />
-              <col style="width: 6%" />
-              <col style="width: 5%" />
-              <col style="width: 5.5%" />
-              <col style="width: 5.2%" />
-              <col style="width: 5.2%" />
-              <col style="width: 5.2%" />
-              <col style="width: 5%" />
-              <col style="width: 5.4%" />
-              <col style="width: 6.7%" />
-              <col style="width: 7%" />
-              <col style="width: 3.3%" />
-            </colgroup>
-            <thead class="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700/50">
+          <table class="w-full min-w-max table-auto text-xs">
+            <thead class="sticky top-0 z-10 bg-gray-50 dark:bg-gray-700">
               <tr>
-                <th class="px-1.5 py-2.5 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase">DBL</th>
-                <th class="px-1.5 py-2.5 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Tgl</th>
-                <th class="px-1.5 py-2.5 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase">Rute</th>
-                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-blue-600 dark:text-blue-400 uppercase whitespace-nowrap">Nom.</th>
-                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Supir</th>
-                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Solar</th>
-                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Mobil</th>
-                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Jkt</th>
-                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Bali</th>
-                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Lbk</th>
-                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Lain</th>
-                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-amber-600 dark:text-amber-400 uppercase whitespace-nowrap">Disk</th>
-                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-red-600 dark:text-red-400 uppercase whitespace-nowrap">Total</th>
-                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-green-600 dark:text-green-400 uppercase whitespace-nowrap">Margin</th>
-                <th class="px-1.5 py-2.5 text-right text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">%</th>
+                <th class="px-3 py-3 text-left text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase">DBL</th>
+                <th class="px-3 py-3 text-left text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Tanggal</th>
+                <th class="px-3 py-3 text-left text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase">Rute</th>
+                <th class="px-3 py-3 text-right text-[11px] font-medium text-blue-600 dark:text-blue-400 uppercase whitespace-nowrap">Nominal</th>
+                <th class="px-3 py-3 text-right text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Mobil</th>
+                <th class="px-3 py-3 text-right text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Jkt</th>
+                <th class="px-3 py-3 text-right text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Bali</th>
+                <th class="px-3 py-3 text-right text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Lbk</th>
+                <th class="px-3 py-3 text-right text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Lain</th>
+                <th class="px-3 py-3 text-right text-[11px] font-medium text-amber-600 dark:text-amber-400 uppercase whitespace-nowrap">Diskon</th>
+                <th class="px-3 py-3 text-right text-[11px] font-medium text-red-600 dark:text-red-400 uppercase whitespace-nowrap">Total</th>
+                <th class="px-3 py-3 text-right text-[11px] font-medium text-green-600 dark:text-green-400 uppercase whitespace-nowrap">Margin</th>
+                <th class="px-3 py-3 text-right text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">%</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
               <tr v-if="reportItems.length === 0">
-                <td colspan="15" class="px-4 py-8 text-center text-gray-500">Tidak ada data laporan</td>
+                <td colspan="13" class="px-4 py-8 text-center text-gray-500">Tidak ada data laporan</td>
               </tr>
               <tr
                 v-for="item in reportItems"
                 :key="item.id"
-                class="hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                class="align-top hover:bg-gray-50 dark:hover:bg-gray-700/50"
               >
-                <td class="px-1.5 py-2 font-medium text-gray-900 dark:text-gray-100 truncate" :title="item.dbl_number">{{ item.dbl_number }}</td>
-                <td class="px-1.5 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap">{{ item.dbl_date ? formatDate(item.dbl_date) : '-' }}</td>
-                <td class="px-1.5 py-2 text-gray-600 dark:text-gray-300 truncate" :title="`${item.origin || '-'} - ${item.destination || '-'}`">{{ item.origin || '-' }} - {{ item.destination || '-' }}</td>
-                <td class="px-1.5 py-2 text-right font-medium text-blue-600 dark:text-blue-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.total_nominal) }}</td>
-                <td class="px-1.5 py-2 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.bayar_supir) }}</td>
-                <td class="px-1.5 py-2 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.solar) }}</td>
-                <td class="px-1.5 py-2 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.ongkos_mobil) }}</td>
-                <td class="px-1.5 py-2 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.ops_jakarta) }}</td>
-                <td class="px-1.5 py-2 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.ops_bali) }}</td>
-                <td class="px-1.5 py-2 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.ops_lombok) }}</td>
-                <td class="px-1.5 py-2 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.lain_lain) }}</td>
-                <td class="px-1.5 py-2 text-right text-amber-600 dark:text-amber-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.potongan_diskon) }}</td>
-                <td class="px-1.5 py-2 text-right font-medium text-red-600 dark:text-red-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.total_operational) }}</td>
+                <td class="px-3 py-3 font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap" :title="item.dbl_number">{{ item.dbl_number }}</td>
+                <td class="px-3 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">{{ item.dbl_date ? formatDate(item.dbl_date) : '-' }}</td>
+                <td class="px-3 py-3 text-gray-600 dark:text-gray-300">
+                  <div class="w-48 whitespace-normal break-words">{{ item.origin || '-' }} - {{ item.destination || '-' }}</div>
+                </td>
+                <td class="px-3 py-3 text-right font-medium text-blue-600 dark:text-blue-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.total_nominal) }}</td>
+                <td class="px-3 py-3 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.ongkos_mobil) }}</td>
+                <td class="px-3 py-3 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.ops_jakarta) }}</td>
+                <td class="px-3 py-3 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.ops_bali) }}</td>
+                <td class="px-3 py-3 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.ops_lombok) }}</td>
+                <td class="px-3 py-3 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.lain_lain) }}</td>
+                <td class="px-3 py-3 text-right text-amber-600 dark:text-amber-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.potongan_diskon) }}</td>
+                <td class="px-3 py-3 text-right font-medium text-red-600 dark:text-red-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.total_operational) }}</td>
                 <td
-                  class="px-1.5 py-2 text-right font-medium whitespace-nowrap tabular-nums"
+                  class="px-3 py-3 text-right font-medium whitespace-nowrap tabular-nums"
                   :class="item.margin >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
                 >
                   {{ formatRupiah(item.margin) }}
                 </td>
                 <td
-                  class="px-1.5 py-2 text-right font-medium whitespace-nowrap tabular-nums"
+                  class="px-3 py-3 text-right font-medium whitespace-nowrap tabular-nums"
                   :class="Number(item.margin_percent) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
                 >
                   {{ item.margin_percent }}%
@@ -617,14 +597,6 @@ onMounted(() => {
                 <span class="font-medium text-blue-600 dark:text-blue-400">{{ formatRupiah(item.total_nominal) }}</span>
               </div>
               <div class="grid grid-cols-2 gap-x-4 gap-y-1 py-1">
-                <div class="flex justify-between">
-                  <span class="text-gray-400">Supir</span>
-                  <span class="text-gray-600 dark:text-gray-300">{{ formatRupiah(item.bayar_supir) }}</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-gray-400">Solar</span>
-                  <span class="text-gray-600 dark:text-gray-300">{{ formatRupiah(item.solar) }}</span>
-                </div>
                 <div class="flex justify-between">
                   <span class="text-gray-400">Mobil</span>
                   <span class="text-gray-600 dark:text-gray-300">{{ formatRupiah(item.ongkos_mobil) }}</span>
@@ -706,28 +678,6 @@ onMounted(() => {
           </div>
 
           <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Bayar Supir</label>
-              <input 
-                :value="formatInputAmount(form.bayar_supir)" 
-                type="text"
-                inputmode="numeric"
-                class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
-                @input="updateAmountField('bayar_supir', $event)"
-                @focus="($event.target as HTMLInputElement).select()"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Solar / BBM</label>
-              <input 
-                :value="formatInputAmount(form.solar)" 
-                type="text"
-                inputmode="numeric"
-                class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
-                @input="updateAmountField('solar', $event)"
-                @focus="($event.target as HTMLInputElement).select()"
-              />
-            </div>
             <div>
               <label class="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Ongkos Mobil</label>
               <input 

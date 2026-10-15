@@ -64,6 +64,7 @@ type Item = {
   shipment_id?: number | null;
   dbl_id?: number | null;
   spb_number?: string;
+  shipment_date?: string | null;
   tracking_code?: string;
   description: string;
   weight?: number;
@@ -94,6 +95,7 @@ type LoadedInvoiceItem = {
   id?: number;
   shipment_id?: number | null;
   spb_number?: string;
+  shipment_date?: string | null;
   tracking_code?: string;
   unit_price?: number;
   description?: string;
@@ -187,6 +189,7 @@ function getCreatePaymentMethod(type: CreatePaymentType): string | undefined {
 type ApiErrorPayload = {
   error?: string;
   details?: string;
+  request_id?: string;
 };
 
 async function readApiResponse<T extends ApiErrorPayload>(response: Response, fallbackMessage: string): Promise<T> {
@@ -205,7 +208,8 @@ async function readApiResponse<T extends ApiErrorPayload>(response: Response, fa
   }
 
   if (!response.ok) {
-    throw new Error(payload.error || payload.details || `${fallbackMessage} (HTTP ${response.status})`);
+    const message = payload.error || payload.details || `${fallbackMessage} (HTTP ${response.status})`;
+    throw new Error(payload.request_id ? `${message} (Ref: ${payload.request_id})` : message);
   }
 
   return payload as T;
@@ -462,6 +466,13 @@ function resolveSjReturnedForSave(item: Item): boolean {
   return Boolean(item.sj_returned);
 }
 
+function formatShipmentDate(value?: string | null): string {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return formatDate(value);
+}
+
 async function loadAllUnpaidShipments(): Promise<void> {
   loadingUnpaidShipments.value = true;
   try {
@@ -473,6 +484,7 @@ async function loadAllUnpaidShipments(): Promise<void> {
         shipment_id: s.id,
         dbl_id: s.dbl_id ?? null,
         spb_number: s.spb_number,
+        shipment_date: s.created_at,
         tracking_code: s.tracking_code,
         customer_name: s.customer_name || '-',
         pengirim_name: s.pengirim_name || null,
@@ -1311,11 +1323,18 @@ Anda yakin ingin menghapus invoice ini? Tindakan ini tidak dapat dibatalkan.`;
   
   try {
     const res = await fetch(`/api/invoices?endpoint=delete&id=${inv.id}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error('Delete failed');
-    loadInvoices();
+    const result = await readApiResponse<{ error?: string; sj_restored_count?: number; sj_untracked_count?: number }>(res, 'Gagal menghapus invoice');
+    const restored = Number(result.sj_restored_count || 0);
+    const untracked = Number(result.sj_untracked_count || 0);
+    let message = restored > 0
+      ? `Invoice dihapus. Status SJ ${restored} SPB dikembalikan ke sebelumnya.`
+      : 'Invoice berhasil dihapus.';
+    if (untracked > 0) message += ` Riwayat status SJ awal ${untracked} SPB belum tersedia, sehingga statusnya tetap.`;
+    notify.success(message);
+    await loadInvoices();
   } catch (e) {
     console.error('Delete error:', e);
-    notify.error('Gagal menghapus invoice');
+    notify.error(e instanceof Error ? e.message : 'Gagal menghapus invoice');
   }
 }
 
@@ -2652,8 +2671,9 @@ function closeInvoiceModal() {
                 </select>
               </div>
               <div v-if="!editingId" class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 space-y-2">
-                <label class="block text-sm font-medium dark:text-gray-200">Status SJ saat simpan</label>
+                <label for="invoice-sj-status" class="block text-sm font-medium dark:text-gray-200">Status SJ saat simpan</label>
                 <select
+                  id="invoice-sj-status"
                   v-model="sjBulkInputStatus"
                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
@@ -2678,232 +2698,6 @@ function closeInvoiceModal() {
                   Pilih status SJ untuk mengaktifkan tombol simpan.
                 </p>
               </div>
-            </div>
-          </div>
-          <div v-if="!editingId" class="flex items-center gap-2">
-            <button
-              type="button"
-              @click="addInvoiceTab = 'unpaid'"
-              :class="[
-                'px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                addInvoiceTab === 'unpaid'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
-              ]"
-            >
-              SPB Belum Dibayar
-            </button>
-            <button
-              type="button"
-              @click="addInvoiceTab = 'selected'"
-              :class="[
-                'px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                addInvoiceTab === 'selected'
-                  ? 'bg-green-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
-              ]"
-            >
-              SPB Terpilih ({{ items.length }})
-            </button>
-          </div>
-
-          <div v-if="!editingId && addInvoiceTab === 'unpaid'">
-            <div class="flex flex-wrap items-start justify-between gap-3 mb-2">
-              <div class="space-y-1">
-                <label class="block text-sm font-medium dark:text-gray-200">Daftar SPB yang belum dibayar</label>
-                <div v-if="!editingId && allUnpaidShipments.length > 0" class="text-xs text-gray-500 mt-1 space-x-1">
-                  <span>Total {{ allUnpaidShipments.length }} SPB belum dibayar.</span>
-                  <span v-if="form.customer_name">Filter: {{ getFilteredUnpaidShipments().length }} SPB untuk "{{ form.customer_name }}"</span>
-                <span v-if="selectedDblNumber">
-                  | DBL: {{ selectedDblNumber === '__no_dbl' ? 'Belum ada DBL' : (selectedDblNumber.startsWith('DBL') ? selectedDblNumber : `DBL ${selectedDblNumber}`) }}
-                </span>
-                </div>
-              </div>
-              <div class="flex items-center gap-2 w-full sm:w-auto">
-                <input
-                  v-model="spbSearch"
-                  type="text"
-                  class="w-full sm:w-64 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
-                  placeholder="Cari: SPB, AWB, Kota, Penerima, Pengirim"
-                  :disabled="loadingUnpaidShipments"
-                >
-              </div>
-            </div>
-            <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
-              <div class="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-300">
-                <label class="flex items-center gap-2">
-                  <input type="checkbox" v-model="showUnreturnedOnly" class="h-3 w-3" />
-                  Hanya tampilkan SJ belum balik
-                </label>
-              </div>
-              <div class="flex gap-2">
-                <button
-                  type="button"
-                  class="px-3 py-1 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded text-xs"
-                  @click="selectAllFiltered"
-                  :disabled="getFilteredUnpaidShipments().length === 0"
-                >
-                  Pilih Semua ({{ getFilteredUnpaidShipments().length }})
-                </button>
-                <button
-                  type="button"
-                  class="px-3 py-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded text-xs"
-                  @click="deselectAll"
-                  :disabled="selectedShipmentIds.size === 0"
-                >
-                  Hapus Semua ({{ selectedShipmentIds.size }})
-                </button>
-              </div>
-            </div>
-            <div v-if="loadingUnpaidShipments" class="text-center py-4 text-gray-500 dark:text-gray-400">
-              <span class="animate-pulse">Memuat SPB yang belum dibayar...</span>
-            </div>
-            <div v-else-if="allUnpaidShipments.length === 0" class="text-center py-4 text-gray-400 dark:text-gray-500">
-              Tidak ada SPB yang belum dibayar
-            </div>
-            <div v-else-if="form.customer_name && getFilteredUnpaidShipments().length === 0" class="text-center py-4 text-gray-400 dark:text-gray-500">
-              Tidak ada SPB belum dibayar untuk customer ini
-            </div>
-            <div v-else-if="selectedDblNumber && getFilteredUnpaidShipments().length === 0" class="text-center py-4 text-gray-400 dark:text-gray-500">
-              Tidak ada SPB untuk DBL ini
-            </div>
-            <div v-else class="overflow-x-auto max-h-[45vh] overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
-              <table class="w-full text-sm dark:text-gray-100">
-                <thead class="bg-gray-50 dark:bg-gray-700 sticky top-0">
-                  <tr>
-                    <th class="px-2 py-2 text-center text-xs font-medium w-10"></th>
-                    <th class="px-2 py-2 text-left text-xs font-medium">No. SPB / RESI</th>
-                    <th class="px-2 py-2 text-left text-xs font-medium">Customer</th>
-                    <th class="px-2 py-2 text-left text-xs font-medium">Nama Barang</th>
-                    <th class="px-2 py-2 text-right text-xs font-medium">QTY</th>
-                    <th class="px-2 py-2 text-left text-xs font-medium">Penerima</th>
-                    <th class="px-2 py-2 text-center text-xs font-medium">SJ Balik</th>
-                    <th class="px-2 py-2 text-right text-xs font-medium">Tagihan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="(it, idx) in getFilteredUnpaidShipments()"
-                    :key="`shipment-${it.id}-${idx}`"
-                    class="border-t dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
-                    :class="{ 'bg-blue-50 dark:bg-blue-900/20': selectedShipmentIds.has(it.shipment_id!) }"
-                    @click="toggleShipmentSelection(it.shipment_id!)"
-                  >
-                    <td class="px-2 py-2 text-center">
-                      <input
-                        type="checkbox"
-                        :checked="selectedShipmentIds.has(it.shipment_id!)"
-                        @click.stop="toggleShipmentSelection(it.shipment_id!)"
-                        class="h-4 w-4"
-                      />
-                    </td>
-                    <td class="px-2 py-2">
-                      <div class="text-xs font-mono">
-                        <div>{{ it.spb_number || '-' }}</div>
-                        <div class="text-gray-500 dark:text-gray-400">{{ it.tracking_code || '-' }}</div>
-                    <div v-if="it.dbl_number" class="text-gray-500 dark:text-gray-400">
-                          DBL: {{ it.dbl_number.startsWith('DBL') ? it.dbl_number : `DBL ${it.dbl_number}` }}
-                          <span v-if="it.driver_name" class="font-normal">| {{ it.driver_name }}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td class="px-2 py-2">
-                      <div class="text-xs">{{ it.customer_name || '-' }}</div>
-                    </td>
-                    <td class="px-2 py-2 text-xs">{{ it.description || '-' }}</td>
-                    <td class="px-2 py-2 text-right text-xs">{{ it.quantity || 0 }}</td>
-                    <td class="px-2 py-2">
-                      <div class="text-xs">
-                        <div>{{ it.recipient_name || '-' }}</div>
-                        <div class="text-gray-500 dark:text-gray-400">{{ it.destination_city || '-' }}</div>
-                      </div>
-                    </td>
-                    <td class="px-2 py-2 text-center">
-                      <Badge :variant="it.sj_returned ? 'success' : 'warning'">
-                        {{ it.sj_returned ? 'Sudah' : 'Belum' }}
-                      </Badge>
-                    </td>
-                    <td class="px-2 py-2 text-right text-xs font-semibold">
-                      {{ formatRupiah(it.unit_price || 0) }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div v-if="!editingId && addInvoiceTab === 'selected'">
-            <label class="block text-sm font-medium mb-2 dark:text-gray-200">SPB Terpilih ({{ items.length }})</label>
-            <div v-if="items.length === 0" class="text-center py-6 text-sm text-gray-400 dark:text-gray-500">
-              Belum ada SPB terpilih. Pilih dari tab "SPB Belum Dibayar".
-            </div>
-            <div v-else class="overflow-x-auto max-h-[45vh] overflow-y-auto">
-              <table class="w-full text-sm dark:text-gray-100">
-                <thead class="bg-green-50 dark:bg-green-900/20">
-                  <tr>
-                    <th class="px-2 py-2 text-left text-xs font-medium">No. SPB / RESI</th>
-                    <th class="px-2 py-2 text-left text-xs font-medium">Customer</th>
-                    <th class="px-2 py-2 text-left text-xs font-medium">Nama Barang</th>
-                    <th class="px-2 py-2 text-right text-xs font-medium">Berat</th>
-                    <th class="px-2 py-2 text-right text-xs font-medium">QTY</th>
-                    <th class="px-2 py-2 text-left text-xs font-medium">Penerima</th>
-                    <th class="px-2 py-2 text-center text-xs font-medium">SJ Balik</th>
-                    <th class="px-2 py-2 text-right text-xs font-medium">Tagihan</th>
-                    <th class="px-2 py-2 text-right text-xs font-medium">Biaya Lain</th>
-                    <th class="px-2 py-2 text-right text-xs font-medium">PPh ({{ pphPercent }}%)</th>
-                    <th class="px-2 py-2 text-right text-xs font-medium">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="(it, idx) in items"
-                    :key="`item-view-${it.id}-${idx}`"
-                    class="border-t"
-                  >
-                    <td class="px-2 py-2">
-                      <div class="text-xs font-mono">
-                        <div>{{ it.spb_number || '-' }}</div>
-                        <div class="text-gray-500 dark:text-gray-400">{{ it.tracking_code || '-' }}</div>
-                    <div v-if="it.dbl_number" class="text-gray-500 dark:text-gray-400">
-                          DBL: {{ it.dbl_number.startsWith('DBL') ? it.dbl_number : `DBL ${it.dbl_number}` }}
-                          <span v-if="it.driver_name" class="font-normal">| {{ it.driver_name }}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td class="px-2 py-2 text-xs">{{ it.customer_name || '-' }}</td>
-                    <td class="px-2 py-2 text-xs">{{ it.description || '-' }}</td>
-                    <td class="px-2 py-2 text-right text-xs">{{ it.weight || 0 }} {{ it.unit || 'Kg' }}</td>
-                    <td class="px-2 py-2 text-right text-xs">{{ it.quantity || 0 }}</td>
-                    <td class="px-2 py-2">
-                      <div class="text-xs">
-                        <div>{{ it.recipient_name || '-' }}</div>
-                        <div class="text-gray-500 dark:text-gray-400">{{ it.destination_city || '-' }}</div>
-                      </div>
-                    </td>
-                    <td class="px-2 py-2 text-center">
-                      <Badge :variant="it.sj_returned ? 'success' : 'warning'">
-                        {{ it.sj_returned ? 'Sudah' : 'Belum' }}
-                      </Badge>
-                    </td>
-                    <td class="px-2 py-2 text-right text-xs font-semibold">
-                      {{ formatRupiah(it.unit_price || 0) }}
-                    </td>
-                    <td class="px-2 py-2 text-right text-xs">
-                      <input
-                        v-model.number="it.other_fee"
-                        type="number"
-                        min="0"
-                        class="w-24 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-gray-100"
-                      />
-                    </td>
-                    <td class="px-2 py-2 text-right text-xs text-red-600">
-                      -{{ formatRupiah(lineSubtotal(it) * (pphPercent / 100)) }}
-                    </td>
-                    <td class="px-2 py-2 text-right text-xs font-semibold">
-                      {{ formatRupiah(lineSubtotal(it) * (1 - pphPercent / 100)) }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
             </div>
           </div>
           <div v-if="editingId">
@@ -3054,6 +2848,240 @@ function closeInvoiceModal() {
                 <span class="font-semibold">{{ formatRupiah(Math.max(0, calcTotal() - (parseFloat(form.amount) || 0))) }}</span>
               </div>
             </template>
+          </div>
+        </div>
+        <div v-if="!editingId" class="col-span-12 min-w-0 space-y-4">
+          <div v-if="!editingId" class="flex items-center gap-2">
+            <button
+              type="button"
+              @click="addInvoiceTab = 'unpaid'"
+              :class="[
+                'px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                addInvoiceTab === 'unpaid'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
+              ]"
+            >
+              SPB Belum Dibayar
+            </button>
+            <button
+              type="button"
+              @click="addInvoiceTab = 'selected'"
+              :class="[
+                'px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                addInvoiceTab === 'selected'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
+              ]"
+            >
+              SPB Terpilih ({{ items.length }})
+            </button>
+          </div>
+
+          <div v-if="!editingId && addInvoiceTab === 'unpaid'" data-testid="invoice-unpaid-list" class="min-w-0">
+            <div class="flex flex-wrap items-start justify-between gap-3 mb-2">
+              <div class="space-y-1">
+                <label class="block text-sm font-medium dark:text-gray-200">Daftar SPB yang belum dibayar</label>
+                <div v-if="!editingId && allUnpaidShipments.length > 0" class="text-xs text-gray-500 mt-1 space-x-1">
+                  <span>Total {{ allUnpaidShipments.length }} SPB belum dibayar.</span>
+                  <span v-if="form.customer_name">Filter: {{ getFilteredUnpaidShipments().length }} SPB untuk "{{ form.customer_name }}"</span>
+                <span v-if="selectedDblNumber">
+                  | DBL: {{ selectedDblNumber === '__no_dbl' ? 'Belum ada DBL' : (selectedDblNumber.startsWith('DBL') ? selectedDblNumber : `DBL ${selectedDblNumber}`) }}
+                </span>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:max-w-md">
+                <input
+                  v-model="spbSearch"
+                  type="text"
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
+                  aria-label="Cari SPB"
+                  placeholder="Cari: SPB, AWB, Kota, Penerima, Pengirim"
+                  :disabled="loadingUnpaidShipments"
+                >
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+              <div class="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-300">
+                <label class="flex items-center gap-2">
+                  <input type="checkbox" v-model="showUnreturnedOnly" class="h-3 w-3" />
+                  Hanya tampilkan SJ belum balik
+                </label>
+              </div>
+              <div class="flex gap-2">
+                <button
+                  type="button"
+                  class="px-3 py-1 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded text-xs"
+                  @click="selectAllFiltered"
+                  :disabled="getFilteredUnpaidShipments().length === 0"
+                >
+                  Pilih Semua ({{ getFilteredUnpaidShipments().length }})
+                </button>
+                <button
+                  type="button"
+                  class="px-3 py-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded text-xs"
+                  @click="deselectAll"
+                  :disabled="selectedShipmentIds.size === 0"
+                >
+                  Hapus Semua ({{ selectedShipmentIds.size }})
+                </button>
+              </div>
+            </div>
+            <div v-if="loadingUnpaidShipments" class="text-center py-4 text-gray-500 dark:text-gray-400">
+              <span class="animate-pulse">Memuat SPB yang belum dibayar...</span>
+            </div>
+            <div v-else-if="allUnpaidShipments.length === 0" class="text-center py-4 text-gray-400 dark:text-gray-500">
+              Tidak ada SPB yang belum dibayar
+            </div>
+            <div v-else-if="form.customer_name && getFilteredUnpaidShipments().length === 0" class="text-center py-4 text-gray-400 dark:text-gray-500">
+              Tidak ada SPB belum dibayar untuk customer ini
+            </div>
+            <div v-else-if="selectedDblNumber && getFilteredUnpaidShipments().length === 0" class="text-center py-4 text-gray-400 dark:text-gray-500">
+              Tidak ada SPB untuk DBL ini
+            </div>
+            <div v-else class="overflow-auto max-h-[48vh] border border-gray-200 dark:border-gray-700 rounded-lg">
+              <table class="w-full min-w-[960px] text-sm dark:text-gray-100">
+                <thead class="bg-gray-50 dark:bg-gray-700 sticky top-0 z-10">
+                  <tr>
+                    <th class="px-2 py-2 text-center text-xs font-medium w-10"></th>
+                    <th class="px-2 py-2 text-left text-xs font-medium">No. SPB / RESI</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium whitespace-nowrap">Tanggal SPB</th>
+                    <th class="px-2 py-2 text-left text-xs font-medium">Customer</th>
+                    <th class="px-2 py-2 text-left text-xs font-medium">Nama Barang</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">QTY</th>
+                    <th class="px-2 py-2 text-left text-xs font-medium">Penerima</th>
+                    <th class="px-2 py-2 text-center text-xs font-medium">SJ Balik</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">Tagihan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="(it, idx) in getFilteredUnpaidShipments()"
+                    :key="`shipment-${it.shipment_id}-${idx}`"
+                    class="border-t dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer align-top"
+                    :class="{ 'bg-blue-50 dark:bg-blue-900/20': selectedShipmentIds.has(it.shipment_id!) }"
+                    @click="toggleShipmentSelection(it.shipment_id!)"
+                  >
+                    <td class="px-2 py-2 text-center">
+                      <input
+                        type="checkbox"
+                        :checked="selectedShipmentIds.has(it.shipment_id!)"
+                        :aria-label="`Pilih SPB ${it.spb_number}`"
+                        @click.stop="toggleShipmentSelection(it.shipment_id!)"
+                        class="h-4 w-4"
+                      />
+                    </td>
+                    <td class="px-2 py-2">
+                      <div class="text-xs font-mono">
+                        <div class="font-semibold text-blue-700 dark:text-blue-300">{{ it.spb_number || '-' }}</div>
+                        <div class="text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ it.tracking_code || '-' }}</div>
+                    <div v-if="it.dbl_number" class="text-gray-500 dark:text-gray-400">
+                          DBL: {{ it.dbl_number.startsWith('DBL') ? it.dbl_number : `DBL ${it.dbl_number}` }}
+                          <span v-if="it.driver_name" class="font-normal">| {{ it.driver_name }}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-3 py-2 text-xs whitespace-nowrap text-gray-600 dark:text-gray-300">{{ formatShipmentDate(it.shipment_date) }}</td>
+                    <td class="px-2 py-2">
+                      <div class="text-xs">{{ it.customer_name || '-' }}</div>
+                    </td>
+                    <td class="px-2 py-2 text-xs">{{ it.description || '-' }}</td>
+                    <td class="px-2 py-2 text-right text-xs">{{ it.quantity || 0 }}</td>
+                    <td class="px-2 py-2">
+                      <div class="text-xs">
+                        <div>{{ it.recipient_name || '-' }}</div>
+                        <div class="text-gray-500 dark:text-gray-400">{{ it.destination_city || '-' }}</div>
+                      </div>
+                    </td>
+                    <td class="px-2 py-2 text-center">
+                      <Badge :variant="it.sj_returned ? 'success' : 'warning'">
+                        {{ it.sj_returned ? 'Sudah' : 'Belum' }}
+                      </Badge>
+                    </td>
+                    <td class="px-2 py-2 text-right text-xs font-semibold whitespace-nowrap tabular-nums">
+                      {{ formatRupiah(it.unit_price || 0) }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div v-if="!editingId && addInvoiceTab === 'selected'" data-testid="invoice-selected-list" class="min-w-0">
+            <label class="block text-sm font-medium mb-2 dark:text-gray-200">SPB Terpilih ({{ items.length }})</label>
+            <div v-if="items.length === 0" class="text-center py-6 text-sm text-gray-400 dark:text-gray-500">
+              Belum ada SPB terpilih. Pilih dari tab "SPB Belum Dibayar".
+            </div>
+            <div v-else class="overflow-auto max-h-[48vh] rounded-lg border border-gray-200 dark:border-gray-700">
+              <table class="w-full min-w-[1200px] text-sm dark:text-gray-100">
+                <thead class="bg-green-50 dark:bg-gray-700 sticky top-0 z-10">
+                  <tr>
+                    <th class="px-2 py-2 text-left text-xs font-medium">No. SPB / RESI</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium whitespace-nowrap">Tanggal SPB</th>
+                    <th class="px-2 py-2 text-left text-xs font-medium">Customer</th>
+                    <th class="px-2 py-2 text-left text-xs font-medium">Nama Barang</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">Berat</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">QTY</th>
+                    <th class="px-2 py-2 text-left text-xs font-medium">Penerima</th>
+                    <th class="px-2 py-2 text-center text-xs font-medium">SJ Balik</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">Tagihan</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">Biaya Lain</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">PPh ({{ pphPercent }}%)</th>
+                    <th class="px-2 py-2 text-right text-xs font-medium">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="(it, idx) in items"
+                    :key="`item-view-${it.id}-${idx}`"
+                    class="border-t dark:border-gray-700 align-top"
+                  >
+                    <td class="px-2 py-2">
+                      <div class="text-xs font-mono">
+                        <div>{{ it.spb_number || '-' }}</div>
+                        <div class="text-gray-500 dark:text-gray-400">{{ it.tracking_code || '-' }}</div>
+                    <div v-if="it.dbl_number" class="text-gray-500 dark:text-gray-400">
+                          DBL: {{ it.dbl_number.startsWith('DBL') ? it.dbl_number : `DBL ${it.dbl_number}` }}
+                          <span v-if="it.driver_name" class="font-normal">| {{ it.driver_name }}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-3 py-2 text-xs whitespace-nowrap text-gray-600 dark:text-gray-300">{{ formatShipmentDate(it.shipment_date) }}</td>
+                    <td class="px-2 py-2 text-xs">{{ it.customer_name || '-' }}</td>
+                    <td class="px-2 py-2 text-xs">{{ it.description || '-' }}</td>
+                    <td class="px-2 py-2 text-right text-xs">{{ it.weight || 0 }} {{ it.unit || 'Kg' }}</td>
+                    <td class="px-2 py-2 text-right text-xs">{{ it.quantity || 0 }}</td>
+                    <td class="px-2 py-2">
+                      <div class="text-xs">
+                        <div>{{ it.recipient_name || '-' }}</div>
+                        <div class="text-gray-500 dark:text-gray-400">{{ it.destination_city || '-' }}</div>
+                      </div>
+                    </td>
+                    <td class="px-2 py-2 text-center">
+                      <Badge :variant="it.sj_returned ? 'success' : 'warning'">
+                        {{ it.sj_returned ? 'Sudah' : 'Belum' }}
+                      </Badge>
+                    </td>
+                    <td class="px-2 py-2 text-right text-xs font-semibold">
+                      {{ formatRupiah(it.unit_price || 0) }}
+                    </td>
+                    <td class="px-2 py-2 text-right text-xs">
+                      <input
+                        v-model.number="it.other_fee"
+                        type="number"
+                        min="0"
+                        class="w-24 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-gray-100"
+                      />
+                    </td>
+                    <td class="px-2 py-2 text-right text-xs text-red-600">
+                      -{{ formatRupiah(lineSubtotal(it) * (pphPercent / 100)) }}
+                    </td>
+                    <td class="px-2 py-2 text-right text-xs font-semibold">
+                      {{ formatRupiah(lineSubtotal(it) * (1 - pphPercent / 100)) }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>

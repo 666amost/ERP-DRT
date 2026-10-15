@@ -366,10 +366,12 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         th { background: #fff; font-size: 10px; }
         td { font-size: 14px; font-weight: bold; min-height: 60px; height: 60px; }
 
-        .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 12px; }
+        .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 12px; position: relative; }
         .sign { text-align: center; }
         .sign-label { font-size: 11px; font-weight: bold; margin-bottom: 20px; }
         .sign-line { border-top: 1px solid #000; padding-top: 3px; font-size: 11px; font-weight: bold; }
+        /* Keep the stamp out of flow to preserve the calibrated print layout. */
+        .goods-unchecked-stamp { position: absolute; top: 0; left: 50%; transform: translateX(-50%); border: 1px solid #000; padding: 3px 6px; color: #000; font-size: 10px; font-weight: bold; line-height: 1.2; white-space: nowrap; }
 
         .delivered-stamp {
           position: absolute;
@@ -479,6 +481,7 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         </div>
 
         <div class="sign-row">
+          <div class="goods-unchecked-stamp">ISI BARANG TIDAK DIPERIKSA</div>
           <div class="sign">
             <div class="sign-label">Pengirim</div>
             <div class="sign-line">( ${shipment.sender_name || '................................'} )</div>
@@ -645,6 +648,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           </div>
 
           <div class="sign-row">
+            <div class="goods-unchecked-stamp">ISI BARANG TIDAK DIPERIKSA</div>
             <div class="sign">
               <div class="sign-label">Pengirim</div>
               <div class="sign-line">( ${shipment.sender_name || '................................'} )</div>
@@ -705,10 +709,12 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           th { background: #fff; font-size: 10px; }
           td { font-size: 14px; font-weight: bold; min-height: 60px; height: 60px; }
 
-          .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 12px; }
+          .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 12px; position: relative; }
           .sign { text-align: center; }
           .sign-label { font-size: 11px; font-weight: bold; margin-bottom: 20px; }
           .sign-line { border-top: 1px solid #000; padding-top: 3px; font-size: 11px; font-weight: bold; }
+          /* Keep the stamp out of flow to preserve the calibrated print layout. */
+          .goods-unchecked-stamp { position: absolute; top: 0; left: 50%; transform: translateX(-50%); border: 1px solid #000; padding: 3px 6px; color: #000; font-size: 10px; font-weight: bold; line-height: 1.2; white-space: nowrap; }
 
           .delivered-stamp {
             position: absolute;
@@ -878,6 +884,7 @@ const printSelectedShipments = async (): Promise<void> => {
         </div>
 
         <div class="sign-row">
+          <div class="goods-unchecked-stamp">ISI BARANG TIDAK DIPERIKSA</div>
           <div class="sign">
             <div class="sign-label">Pengirim</div>
             <div class="sign-line">( ${shipment.sender_name || '................................'} )</div>
@@ -938,10 +945,12 @@ const printSelectedShipments = async (): Promise<void> => {
         th { background: #fff; font-size: 10px; }
         td { font-size: 14px; font-weight: bold; min-height: 60px; height: 60px; }
 
-        .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 12px; }
+        .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 12px; position: relative; }
         .sign { text-align: center; }
         .sign-label { font-size: 11px; font-weight: bold; margin-bottom: 20px; }
         .sign-line { border-top: 1px solid #000; padding-top: 3px; font-size: 11px; font-weight: bold; }
+        /* Keep the stamp out of flow to preserve the calibrated print layout. */
+        .goods-unchecked-stamp { position: absolute; top: 0; left: 50%; transform: translateX(-50%); border: 1px solid #000; padding: 3px 6px; color: #000; font-size: 10px; font-weight: bold; line-height: 1.2; white-space: nowrap; }
 
         .delivered-stamp {
           position: absolute;
@@ -1142,6 +1151,7 @@ const printSelectedDBLs = async (): Promise<void> => {
         </div>
 
         <div class="sign-row">
+          <div class="goods-unchecked-stamp">ISI BARANG TIDAK DIPERIKSA</div>
           <div class="sign">
             <div class="sign-label">Pengirim</div>
             <div class="sign-line">( ${shipment.sender_name || '................................'} )</div>
@@ -1202,10 +1212,12 @@ const printSelectedDBLs = async (): Promise<void> => {
         th { background: #fff; font-size: 10px; }
         td { font-size: 14px; font-weight: bold; min-height: 60px; height: 60px; }
 
-        .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 12px; }
+        .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 12px; position: relative; }
         .sign { text-align: center; }
         .sign-label { font-size: 11px; font-weight: bold; margin-bottom: 20px; }
         .sign-line { border-top: 1px solid #000; padding-top: 3px; font-size: 11px; font-weight: bold; }
+        /* Keep the stamp out of flow to preserve the calibrated print layout. */
+        .goods-unchecked-stamp { position: absolute; top: 0; left: 50%; transform: translateX(-50%); border: 1px solid #000; padding: 3px 6px; color: #000; font-size: 10px; font-weight: bold; line-height: 1.2; white-space: nowrap; }
 
         .delivered-stamp {
           position: absolute;

@@ -1,5 +1,4 @@
 import { createServer } from 'http';
-import { parse } from 'url';
 import { existsSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -25,7 +24,7 @@ if (existsSync(envPath)) {
 }
 
 const server = createServer(async (req, res) => {
-  const { pathname } = parse(req.url);
+  const { pathname } = new URL(req.url || '/', `http://localhost:${PORT}`);
   
   res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');

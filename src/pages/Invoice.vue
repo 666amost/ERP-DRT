@@ -1611,55 +1611,73 @@ async function printInvoice(inv: Invoice): Promise<void> {
       print-color-adjust: exact;
     }
     .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 12px;
-      border-bottom: 2px solid #000;
-      padding-bottom: 8px;
+      margin-bottom: 5mm;
+      border-bottom: 1mm double #12385f;
+      padding-bottom: 4mm;
+      break-inside: avoid;
     }
     .company-info {
       display: flex;
-      gap: 8px;
-      align-items: flex-start;
-      flex: 1;
+      gap: 5mm;
+      align-items: center;
     }
     .company-logo {
-      width: 35px;
-      height: 35px;
+      width: 26mm;
+      height: 26mm;
       flex-shrink: 0;
     }
     .company-logo img {
+      display: block;
       width: 100%;
-      height: auto;
+      height: 100%;
+      object-fit: contain;
     }
     .company-details {
-      font-size: 10px;
+      flex: 1;
+      min-width: 0;
     }
     .company-name {
-      font-size: 12px;
+      font-size: 22pt;
       font-weight: bold;
+      line-height: 1.1;
+      color: #12385f;
+      text-transform: uppercase;
+      overflow-wrap: anywhere;
+      margin-bottom: 2mm;
     }
     .company-address {
-      font-size: 9px;
+      font-size: 8.5pt;
+      line-height: 1.4;
       color: #333;
-      margin-top: 1px;
+      overflow-wrap: anywhere;
     }
     .company-contact {
-      font-size: 9px;
+      font-size: 8.5pt;
+      line-height: 1.4;
       color: #333;
+      overflow-wrap: anywhere;
+      margin-top: 1mm;
+    }
+    .billing-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 6mm;
+      margin-bottom: 10px;
+      break-inside: avoid;
     }
     .invoice-meta {
       text-align: right;
-      min-width: 180px;
+      width: 65mm;
+      flex-shrink: 0;
     }
     .invoice-title {
-      font-size: 16px;
+      font-size: 18pt;
       font-weight: bold;
       margin-bottom: 6px;
+      color: #12385f;
     }
     .invoice-meta-row {
-      font-size: 10px;
+      font-size: 9pt;
       margin-bottom: 2px;
       display: flex;
       justify-content: space-between;
@@ -1667,12 +1685,18 @@ async function printInvoice(inv: Invoice): Promise<void> {
     }
     .invoice-meta-label {
       font-weight: bold;
+      flex-shrink: 0;
+    }
+    .invoice-meta-row > :last-child {
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
     .content {
       margin: 8px 0;
     }
     .bill-to {
-      margin-bottom: 10px;
+      flex: 1;
+      min-width: 0;
     }
     .bill-to-label {
       font-weight: bold;
@@ -1684,6 +1708,7 @@ async function printInvoice(inv: Invoice): Promise<void> {
       padding: 6px;
       background: #f8f8f8;
       border: 1px solid #999;
+      overflow-wrap: anywhere;
     }
     .items-table {
       width: 100%;
@@ -1855,20 +1880,9 @@ async function printInvoice(inv: Invoice): Promise<void> {
         padding: 6px 4px;
         font-size: 11px;
       }
-      .company-name {
-        font-size: 14px;
-        font-weight: bold;
-      }
       .company-address,
       .company-contact {
-        font-size: 10px;
         color: #000;
-      }
-      .invoice-title {
-        font-size: 18px;
-      }
-      .invoice-meta-row {
-        font-size: 11px;
       }
       .bill-to-label,
       .bank-title {
@@ -1933,29 +1947,31 @@ async function printInvoice(inv: Invoice): Promise<void> {
           <div class="company-contact">${[company.phone, company.email].filter(Boolean).join(' | ')}</div>
         </div>
       </div>
-      <div class="invoice-meta">
-        <div class="invoice-title">INVOICE</div>
-        <div class="invoice-meta-row">
-          <div class="invoice-meta-label">No. Invoice</div>
-          <div>${inv.invoice_number}</div>
-        </div>
-        <div class="invoice-meta-row">
-          <div class="invoice-meta-label">Tanggal</div>
-          <div>${formatDate(inv.issued_at)}</div>
-        </div>
-        <div class="invoice-meta-row">
-          <div class="invoice-meta-label">Status</div>
-          <div>${inv.status.toUpperCase()}</div>
-        </div>
-      </div>
     </div>
 
     <div class="content">
-      <div class="bill-to">
-        <div class="bill-to-label">TAGIHAN KEPADA:</div>
-        <div class="bill-to-content">
-          <strong>${inv.customer_name}</strong><br>
-          Tgl: ${formatDate(inv.issued_at)}
+      <div class="billing-header">
+        <div class="bill-to">
+          <div class="bill-to-label">TAGIHAN KEPADA:</div>
+          <div class="bill-to-content">
+            <strong>${inv.customer_name}</strong><br>
+            Tgl: ${formatDate(inv.issued_at)}
+          </div>
+        </div>
+        <div class="invoice-meta">
+          <div class="invoice-title">INVOICE</div>
+          <div class="invoice-meta-row">
+            <div class="invoice-meta-label">No. Invoice</div>
+            <div>${inv.invoice_number}</div>
+          </div>
+          <div class="invoice-meta-row">
+            <div class="invoice-meta-label">Tanggal</div>
+            <div>${formatDate(inv.issued_at)}</div>
+          </div>
+          <div class="invoice-meta-row">
+            <div class="invoice-meta-label">Status</div>
+            <div>${inv.status.toUpperCase()}</div>
+          </div>
         </div>
       </div>
 
@@ -2032,44 +2048,179 @@ async function printInvoice(inv: Invoice): Promise<void> {
 }
 
 async function printInvoiceReceipt(inv: Invoice): Promise<void> {
-  const amountDisplay = formatRupiah(inv.amount || 0);
-  const html = `<!DOCTYPE html><html><head><title>Tanda Terima ${inv.invoice_number}</title><style>
-    @page { size: 9.5in 5.5in; margin: 0; }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; font-family: 'Courier New', Courier, monospace; font-size: 9px; color: #000; }
-    body { margin: 0; padding: 4px; }
-    .sheet { width: 9.5in; height: 5.5in; padding: 6px; }
-    .two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-    .copy { border: 1px solid #000; padding: 6px; height: 100%; font-size: 9px; }
-    .head { margin-bottom: 6px; }
-    .meta { font-size: 9px; }
-    .label { font-weight: 700; }
-    .signature { margin-top: 12px; }
-    @media print { .sheet { padding: 4mm 6mm; page-break-after: always; } }
-  </style></head><body><div class="sheet"><div class="two-up">
-    <div class="copy">
-      <div class="head"><div class="label">TANDA TERIMA</div><div>No: ${inv.invoice_number}</div></div>
-      <div class="meta">Diterima dari: <strong>${inv.customer_name}</strong></div>
-      <div class="meta">Jumlah: <strong>${amountDisplay}</strong></div>
-      <div class="meta">Untuk Pembayaran: <strong>${inv.invoice_number}</strong></div>
-      <div class="meta">Tanggal: ${formatDate(inv.issued_at)}</div>
-      <div class="signature">Penerima, <br/><br/><br/> (______________________)</div>
-    </div>
-    <div class="copy">
-      <div class="head"><div class="label">TANDA TERIMA</div><div>No: ${inv.invoice_number}</div></div>
-      <div class="meta">Diterima dari: <strong>${inv.customer_name}</strong></div>
-      <div class="meta">Jumlah: <strong>${amountDisplay}</strong></div>
-      <div class="meta">Untuk Pembayaran: <strong>${inv.invoice_number}</strong></div>
-      <div class="meta">Tanggal: ${formatDate(inv.issued_at)}</div>
-      <div class="signature">Penerima, <br/><br/><br/> (______________________)</div>
-    </div>
-  </div></div></body></html>`;
+  if (printingInvoiceId.value !== null) return;
+  printError.value = '';
   const win = window.open('', '_blank');
-  if (!win) return;
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  setTimeout(() => { win.print(); }, 250);
+  if (!win) {
+    printError.value = 'Jendela cetak diblokir. Izinkan popup untuk aplikasi ini, lalu coba lagi.';
+    return;
+  }
+  win.document.body.textContent = 'Menyiapkan tanda terima untuk dicetak...';
+  printingInvoiceId.value = inv.id;
+
+  try {
+    const company = await getCompany();
+    const escapeHtml = (value: unknown): string => String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+    const companyName = escapeHtml(company?.name || 'SUMBER TRANS EXPRESS');
+    const contact = escapeHtml([company?.phone, company?.email].filter(Boolean).join(' | '));
+    const invoiceNumber = escapeHtml(inv.invoice_number);
+    const customerName = escapeHtml(inv.customer_name);
+    const amountDisplay = escapeHtml(formatRupiah(inv.amount || 0));
+    const html = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tanda Terima ${invoiceNumber}</title>
+  <style>
+    @page { size: 9.5in 5.5in; margin: 8mm 10mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #151515; line-height: 1.35; }
+    body { background: #edf1f5; }
+    .sheet {
+      width: 9.5in;
+      min-height: 5.5in;
+      margin: 20px auto;
+      padding: 8mm 10mm;
+      background: #fff;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .letterhead {
+      display: flex;
+      align-items: center;
+      gap: 5mm;
+      padding-bottom: 2mm;
+      margin-bottom: 3mm;
+      border-bottom: 1mm double #173b63;
+      break-inside: avoid;
+    }
+    .brand-logo { display: block; width: 28mm; height: 28mm; object-fit: contain; flex-shrink: 0; }
+    .company-details { flex: 1; min-width: 0; text-align: center; }
+    .company-name { color: #173b63; font-size: 19pt; font-weight: 800; line-height: 1.1; text-transform: uppercase; overflow-wrap: anywhere; }
+    .service-banner {
+      margin: 1.5mm 0 1mm;
+      padding: 0.6mm 1mm;
+      background: #c62e3d;
+      color: #fff;
+      font-size: 8pt;
+      font-weight: 700;
+      letter-spacing: 0.4pt;
+    }
+    .service-area { color: #173b63; font-size: 7.5pt; font-weight: 700; }
+    .company-address, .company-contact { margin-top: 1mm; font-size: 7pt; overflow-wrap: anywhere; }
+    .company-address { white-space: pre-line; }
+    .receipt-intro { display: flex; justify-content: space-between; gap: 8mm; margin-bottom: 3mm; break-inside: avoid; }
+    .recipient { flex: 1; min-width: 0; padding-top: 1mm; }
+    .recipient-name { margin-top: 1mm; font-weight: 700; overflow-wrap: anywhere; }
+    .receipt-heading { flex: 1; min-width: 0; text-align: right; }
+    .receipt-title { font-size: 14pt; font-weight: 700; letter-spacing: 0.4pt; }
+    .receipt-number { margin-top: 1mm; font-size: 8pt; overflow-wrap: anywhere; }
+    .receipt-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 9pt; break-inside: avoid; }
+    .receipt-table th, .receipt-table td { border: 0.3mm solid #454545; padding: 2mm 2.5mm; overflow-wrap: anywhere; }
+    .receipt-table th { background: #3487a9; color: #fff; font-weight: 700; text-align: center; }
+    .receipt-table tbody td { height: 10mm; }
+    .number-column { width: 7%; }
+    .date-column { width: 25%; }
+    .recipient-column { width: 40%; }
+    .amount-column { width: 28%; }
+    .center { text-align: center; }
+    .money { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .total-label { text-align: right; font-weight: 700; }
+    .receipt-table tfoot td { background: #f1f5f7; font-weight: 700; }
+    .signatures { display: flex; justify-content: space-between; gap: 12mm; margin-top: 5mm; break-inside: avoid; }
+    .signature { width: 65mm; max-width: 45%; text-align: center; }
+    .signature-space { height: 12mm; }
+    .signature-company { font-weight: 700; text-decoration: underline; overflow-wrap: anywhere; }
+    .signature-line { display: flex; justify-content: space-between; }
+    @media print {
+      body { background: #fff; }
+      .sheet { width: 100%; min-height: 0; margin: 0; padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <main class="sheet">
+    <header class="letterhead">
+      <img class="brand-logo" src="${LOGO_URL}" alt="Logo ${companyName}">
+      <div class="company-details">
+        <div class="company-name">${companyName}</div>
+        <div class="service-banner">MELAYANI PENGIRIMAN VIA DARAT, LAUT &amp; UDARA</div>
+        <div class="service-area">JAKARTA &middot; BALI &middot; LOMBOK &middot; SUMBAWA &middot; SUMATRA &middot; KALIMANTAN</div>
+        <div class="service-area">SULAWESI DAN SELURUH WILAYAH INDONESIA</div>
+        ${company?.address ? `<div class="company-address">${escapeHtml(company.address)}</div>` : ''}
+        ${contact ? `<div class="company-contact">${contact}</div>` : ''}
+      </div>
+    </header>
+
+    <section class="receipt-intro">
+      <div class="recipient">
+        <div>Kepada Yth,</div>
+        <div class="recipient-name">${customerName}</div>
+      </div>
+      <div class="receipt-heading">
+        <h1 class="receipt-title">TANDA TERIMA INVOICE</h1>
+        <div class="receipt-number">No. Invoice: ${invoiceNumber}</div>
+      </div>
+    </section>
+
+    <table class="receipt-table" aria-label="Rincian tanda terima invoice">
+      <colgroup>
+        <col class="number-column">
+        <col class="date-column">
+        <col class="recipient-column">
+        <col class="amount-column">
+      </colgroup>
+      <thead>
+        <tr><th scope="col">No.</th><th scope="col">Tanggal Invoice</th><th scope="col">Penerima</th><th scope="col">Total Tagihan</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="center">1</td>
+          <td class="center">${formatDate(inv.issued_at)}</td>
+          <td>${customerName}</td>
+          <td class="money">${amountDisplay}</td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr><td colspan="3" class="total-label">Total</td><td class="money">${amountDisplay}</td></tr>
+      </tfoot>
+    </table>
+
+    <footer class="signatures">
+      <div class="signature">
+        <div>Hormat Kami,</div>
+        <div class="signature-space"></div>
+        <div class="signature-company">${companyName}</div>
+      </div>
+      <div class="signature">
+        <div>Yang Menerima,</div>
+        <div class="signature-space"></div>
+        <div class="signature-line"><span>(</span><span>)</span></div>
+      </div>
+    </footer>
+  </main>
+</body>
+</html>`;
+
+    if (win.closed) return;
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    await Promise.all(Array.from(win.document.images).map(img => img.complete ? Promise.resolve() : new Promise<void>(resolve => { img.onload = () => resolve(); img.onerror = () => resolve(); })));
+    await win.document.fonts?.ready;
+    if (!win.closed) { win.focus(); win.print(); }
+  } catch (error) {
+    printError.value = error instanceof Error ? error.message : 'Gagal menyiapkan cetak tanda terima.';
+    if (!win.closed) win.close();
+  } finally {
+    printingInvoiceId.value = null;
+  }
 }
 
 watch([items, pphPercent, discountAmount], () => {
@@ -2199,7 +2350,7 @@ function closeInvoiceModal() {
                   <div class="mt-2 flex flex-col gap-2">
                     <Button size="sm" variant="default" @click="openEditModal(inv)">Edit</Button>
                     <Button size="sm" variant="default" @click="openPphModal(inv)">PPh</Button>
-                    <Button size="sm" variant="default" @click="printInvoiceReceipt(inv)">Tanda Terima</Button>
+                    <Button size="sm" variant="default" :disabled="printingInvoiceId !== null" @click="printInvoiceReceipt(inv)">Tanda Terima</Button>
                     <Button size="sm" variant="danger" @click="deleteInvoice(inv)">Hapus</Button>
                   </div>
                 </details>
@@ -2293,6 +2444,7 @@ function closeInvoiceModal() {
             block
             variant="default"
             class="text-gray-700"
+            :disabled="printingInvoiceId !== null"
             @click="printInvoiceReceipt(inv)"
           >
             T. Terima

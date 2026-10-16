@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { getSql } from './db.js';
 import { readJsonNode, writeJson } from './http.js';
+import { requireSession } from './auth.js';
 
 interface DBL {
   id: number;
@@ -131,6 +132,11 @@ function getOperationalCostTotal(cost: OperationalCostPayload): number {
     (cost.potongan_diskon || 0);
 }
 
+function redactOperationalRevenue(item: Record<string, unknown> | undefined, canViewRevenue: boolean) {
+  if (!item) return null;
+  return canViewRevenue ? item : { ...item, total_nominal: null };
+}
+
 export async function dblHandler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method === 'OPTIONS') { res.writeHead(204, corsHeaders); res.end(); return }
 
@@ -139,6 +145,14 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
   const sql = getSql();
 
   try {
+    let canViewRevenueAndMargin = false;
+    if (req.method === 'GET' && (endpoint === 'operational-costs' || endpoint === 'margin-report')) {
+      const { user, setCookieHeader } = await requireSession(req);
+      if (setCookieHeader) res.setHeader('Set-Cookie', setCookieHeader);
+      res.setHeader('Cache-Control', 'private, no-store');
+      canViewRevenueAndMargin = user.role === 'admin';
+    }
+
     if (endpoint === 'list' && req.method === 'GET') {
       const page = parseInt(url.searchParams.get('page') || '1');
       const limit = parseInt(url.searchParams.get('limit') || '50');
@@ -751,14 +765,14 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
         ` as Record<string, unknown>[];
         
         if (result.length > 0) {
-          writeJson(res, { item: result[0] });
+          writeJson(res, { item: redactOperationalRevenue(result[0], canViewRevenueAndMargin) });
         } else {
           const dblResult = await sql`
             select d.*, 
               (select coalesce(sum(s.nominal), 0)::float from dbl_items di join shipments s on s.id = di.shipment_id where di.dbl_id = d.id) as total_nominal
             from dbl d where d.id = ${parseInt(dblId)}
           ` as Record<string, unknown>[];
-          writeJson(res, { item: null, dbl: dblResult[0] || null });
+          writeJson(res, { item: null, dbl: redactOperationalRevenue(dblResult[0], canViewRevenueAndMargin) });
         }
       } else {
         const startDateRaw = url.searchParams.get('start_date');
@@ -806,7 +820,7 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
           items = await sql(query as never);
         }
         
-        writeJson(res, { items });
+        writeJson(res, { items: items.map((item: Record<string, unknown>) => redactOperationalRevenue(item, canViewRevenueAndMargin)) });
       }
       return
 
@@ -933,14 +947,15 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
 
       const report = items.map(item => ({
         ...item,
-        margin: item.total_nominal - item.total_operational,
-        margin_percent: item.total_nominal > 0 ? parseFloat(((item.total_nominal - item.total_operational) / item.total_nominal * 100).toFixed(2)) : 0
+        total_nominal: canViewRevenueAndMargin ? item.total_nominal : null,
+        margin: canViewRevenueAndMargin ? item.total_nominal - item.total_operational : null,
+        margin_percent: canViewRevenueAndMargin ? (item.total_nominal > 0 ? parseFloat(((item.total_nominal - item.total_operational) / item.total_nominal * 100).toFixed(2)) : 0) : null
       }));
 
       const summary = {
-        total_nominal: report.reduce((sum, r) => sum + r.total_nominal, 0),
+        total_nominal: canViewRevenueAndMargin ? report.reduce((sum, r) => sum + (r.total_nominal ?? 0), 0) : null,
         total_operational: report.reduce((sum, r) => sum + r.total_operational, 0),
-        total_margin: report.reduce((sum, r) => sum + r.margin, 0)
+        total_margin: canViewRevenueAndMargin ? report.reduce((sum, r) => sum + (r.margin ?? 0), 0) : null
       };
 
       writeJson(res, { items: report, summary });
@@ -949,6 +964,10 @@ export async function dblHandler(req: IncomingMessage, res: ServerResponse): Pro
 
     writeJson(res, { error: 'Invalid endpoint' }, 404);
   } catch (err) {
+    if (err instanceof Response && (err.status === 401 || err.status === 403)) {
+      writeJson(res, { error: err.status === 401 ? 'Unauthorized' : 'Forbidden' }, err.status);
+      return;
+    }
     writeJson(res, { error: 'Internal error', details: String(err) }, 500);
   }
 }

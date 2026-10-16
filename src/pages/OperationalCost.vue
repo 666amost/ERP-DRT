@@ -7,7 +7,8 @@ import { useFormatters } from '../composables/useFormatters';
 import { useAuth } from '../composables/useAuth';
 
 const { formatRupiah, formatDate, toWIBDateString } = useFormatters();
-const { fetchUser } = useAuth();
+const { fetchUser, isAdmin, loading: authLoading } = useAuth();
+const canViewRevenueAndMargin = computed(() => !authLoading.value && isAdmin.value);
 
 type DBLWithCost = {
   id: number;
@@ -17,7 +18,7 @@ type DBLWithCost = {
   driver_name: string | null;
   dbl_date: string | null;
   vehicle_plate: string | null;
-  total_nominal: number;
+  total_nominal: number | null;
   bayar_supir: number | null;
   solar: number | null;
   ongkos_mobil: number | null;
@@ -54,7 +55,7 @@ type ReportItem = {
   driver_name: string | null;
   dbl_date: string | null;
   vehicle_plate: string | null;
-  total_nominal: number;
+  total_nominal: number | null;
   ongkos_mobil: number;
   ops_jakarta: number;
   ops_bali: number;
@@ -62,8 +63,8 @@ type ReportItem = {
   lain_lain: number;
   potongan_diskon: number;
   total_operational: number;
-  margin: number;
-  margin_percent: string | number;
+  margin: number | null;
+  margin_percent: string | number | null;
 };
 
 const loading = ref(true);
@@ -91,7 +92,7 @@ const form = ref<CostForm>({
   catatan: ''
 });
 
-const summary = ref({
+const summary = ref<{ total_nominal: number | null; total_operational: number; total_margin: number | null }>({
   total_nominal: 0,
   total_operational: 0,
   total_margin: 0
@@ -128,14 +129,32 @@ const calculatedTotal = computed(() => {
 });
 
 const calculatedMargin = computed(() => {
-  if (!selectedDbl.value) return 0;
+  if (!canViewRevenueAndMargin.value || !selectedDbl.value || selectedDbl.value.total_nominal === null) return 0;
   return selectedDbl.value.total_nominal - calculatedTotal.value;
 });
 
 const marginPercent = computed(() => {
-  if (!selectedDbl.value || selectedDbl.value.total_nominal === 0) return 0;
+  if (!canViewRevenueAndMargin.value || !selectedDbl.value?.total_nominal) return 0;
   return ((calculatedMargin.value / selectedDbl.value.total_nominal) * 100).toFixed(1);
 });
+
+function formatAdminAmount(value: number | null): string {
+  return canViewRevenueAndMargin.value && value !== null ? formatRupiah(value) : '****';
+}
+
+function formatMarginPercent(value: string | number | null): string {
+  return canViewRevenueAndMargin.value && value !== null ? `${value}%` : '****';
+}
+
+function marginClass(value: number | null): string {
+  if (!canViewRevenueAndMargin.value || value === null) return 'text-gray-500 dark:text-gray-400';
+  return value >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
+}
+
+function dblMargin(dbl: DBLWithCost): number | null {
+  if (!canViewRevenueAndMargin.value || dbl.total_nominal === null) return null;
+  return dbl.total_nominal - (dbl.total_operational || 0);
+}
 
 function initDates(): void {
   const now = new Date();
@@ -356,8 +375,8 @@ onMounted(() => {
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div class="min-w-0 bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
           <div class="text-xs font-medium text-blue-600 dark:text-blue-400 uppercase">Pendapatan</div>
-          <div class="text-sm lg:text-base xl:text-lg font-bold text-gray-900 dark:text-gray-100 mt-1 truncate" :title="formatRupiah(summary.total_nominal)">
-            {{ formatRupiah(summary.total_nominal) }}
+          <div class="text-sm lg:text-base xl:text-lg font-bold text-gray-900 dark:text-gray-100 mt-1 truncate" :title="formatAdminAmount(summary.total_nominal)">
+            {{ formatAdminAmount(summary.total_nominal) }}
           </div>
         </div>
         <div class="min-w-0 bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
@@ -367,13 +386,13 @@ onMounted(() => {
           </div>
         </div>
         <div class="min-w-0 bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-          <div class="text-xs font-medium uppercase" :class="summary.total_margin >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">Margin</div>
+          <div class="text-xs font-medium uppercase" :class="marginClass(summary.total_margin)">Margin</div>
           <div
             class="text-sm lg:text-base xl:text-lg font-bold mt-1 truncate"
-            :class="summary.total_margin >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
-            :title="formatRupiah(summary.total_margin)"
+            :class="marginClass(summary.total_margin)"
+            :title="formatAdminAmount(summary.total_margin)"
           >
-            {{ formatRupiah(summary.total_margin) }}
+            {{ formatAdminAmount(summary.total_margin) }}
           </div>
         </div>
       </div>
@@ -416,13 +435,13 @@ onMounted(() => {
               <td class="px-4 py-3 text-gray-600 dark:text-gray-300">{{ dbl.dbl_date ? formatDate(dbl.dbl_date) : '-' }}</td>
               <td class="px-4 py-3 text-gray-600 dark:text-gray-300">{{ dbl.origin || '-' }} - {{ dbl.destination || '-' }}</td>
               <td class="px-4 py-3 text-gray-600 dark:text-gray-300">{{ dbl.driver_name || '-' }}</td>
-              <td class="px-4 py-3 text-right font-medium text-gray-900 dark:text-gray-100">{{ formatRupiah(dbl.total_nominal || 0) }}</td>
+              <td class="px-4 py-3 text-right font-medium text-gray-900 dark:text-gray-100">{{ formatAdminAmount(dbl.total_nominal) }}</td>
               <td class="px-4 py-3 text-right text-red-600 dark:text-red-400">{{ formatRupiah(dbl.total_operational || 0) }}</td>
               <td
                 class="px-4 py-3 text-right font-medium"
-                :class="(dbl.total_nominal - (dbl.total_operational || 0)) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
+                :class="marginClass(dblMargin(dbl))"
               >
-                {{ formatRupiah(dbl.total_nominal - (dbl.total_operational || 0)) }}
+                {{ formatAdminAmount(dblMargin(dbl)) }}
               </td>
               <td class="px-4 py-3 text-center">
                 <Badge :variant="dbl.total_operational ? 'success' : 'warning'">
@@ -474,7 +493,7 @@ onMounted(() => {
             <div class="grid grid-cols-3 gap-2 mb-3 text-center">
               <div class="p-2 bg-gray-50 dark:bg-gray-700/50 rounded">
                 <div class="text-[10px] text-gray-500 uppercase">Nominal</div>
-                <div class="text-xs font-semibold text-gray-900 dark:text-gray-100">{{ formatRupiah(dbl.total_nominal || 0) }}</div>
+                <div class="text-xs font-semibold text-gray-900 dark:text-gray-100">{{ formatAdminAmount(dbl.total_nominal) }}</div>
               </div>
               <div class="p-2 bg-gray-50 dark:bg-gray-700/50 rounded">
                 <div class="text-[10px] text-gray-500 uppercase">Biaya</div>
@@ -484,9 +503,9 @@ onMounted(() => {
                 <div class="text-[10px] text-gray-500 uppercase">Margin</div>
                 <div
                   class="text-xs font-semibold"
-                  :class="(dbl.total_nominal - (dbl.total_operational || 0)) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
+                  :class="marginClass(dblMargin(dbl))"
                 >
-                  {{ formatRupiah(dbl.total_nominal - (dbl.total_operational || 0)) }}
+                  {{ formatAdminAmount(dblMargin(dbl)) }}
                 </div>
               </div>
             </div>
@@ -537,7 +556,7 @@ onMounted(() => {
                 <td class="px-3 py-3 text-gray-600 dark:text-gray-300">
                   <div class="w-48 whitespace-normal break-words">{{ item.origin || '-' }} - {{ item.destination || '-' }}</div>
                 </td>
-                <td class="px-3 py-3 text-right font-medium text-blue-600 dark:text-blue-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.total_nominal) }}</td>
+                <td class="px-3 py-3 text-right font-medium text-blue-600 dark:text-blue-400 whitespace-nowrap tabular-nums">{{ formatAdminAmount(item.total_nominal) }}</td>
                 <td class="px-3 py-3 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.ongkos_mobil) }}</td>
                 <td class="px-3 py-3 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.ops_jakarta) }}</td>
                 <td class="px-3 py-3 text-right text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.ops_bali) }}</td>
@@ -547,15 +566,15 @@ onMounted(() => {
                 <td class="px-3 py-3 text-right font-medium text-red-600 dark:text-red-400 whitespace-nowrap tabular-nums">{{ formatRupiah(item.total_operational) }}</td>
                 <td
                   class="px-3 py-3 text-right font-medium whitespace-nowrap tabular-nums"
-                  :class="item.margin >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
+                  :class="marginClass(item.margin)"
                 >
-                  {{ formatRupiah(item.margin) }}
+                  {{ formatAdminAmount(item.margin) }}
                 </td>
                 <td
                   class="px-3 py-3 text-right font-medium whitespace-nowrap tabular-nums"
-                  :class="Number(item.margin_percent) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
+                  :class="marginClass(item.margin_percent === null ? null : Number(item.margin_percent))"
                 >
-                  {{ item.margin_percent }}%
+                  {{ formatMarginPercent(item.margin_percent) }}
                 </td>
               </tr>
             </tbody>
@@ -581,8 +600,8 @@ onMounted(() => {
                 <div class="font-semibold text-gray-900 dark:text-gray-100">{{ item.dbl_number }}</div>
                 <div class="text-xs text-gray-500 mt-0.5">{{ item.dbl_date ? formatDate(item.dbl_date) : '-' }}</div>
               </div>
-              <Badge :variant="item.margin >= 0 ? 'success' : 'warning'">
-                {{ item.margin_percent }}%
+              <Badge :variant="!canViewRevenueAndMargin || item.margin === null ? 'default' : item.margin >= 0 ? 'success' : 'warning'">
+                {{ formatMarginPercent(item.margin_percent) }}
               </Badge>
             </div>
           </div>
@@ -594,7 +613,7 @@ onMounted(() => {
             <div class="space-y-1 text-xs mb-3">
               <div class="flex justify-between py-1 border-b border-gray-100 dark:border-gray-700">
                 <span class="text-gray-500">Nominal</span>
-                <span class="font-medium text-blue-600 dark:text-blue-400">{{ formatRupiah(item.total_nominal) }}</span>
+                <span class="font-medium text-blue-600 dark:text-blue-400">{{ formatAdminAmount(item.total_nominal) }}</span>
               </div>
               <div class="grid grid-cols-2 gap-x-4 gap-y-1 py-1">
                 <div class="flex justify-between">
@@ -633,9 +652,9 @@ onMounted(() => {
                 <div class="text-[10px] text-gray-500 uppercase">Margin</div>
                 <div
                   class="text-sm font-semibold"
-                  :class="item.margin >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
+                  :class="marginClass(item.margin)"
                 >
-                  {{ formatRupiah(item.margin) }}
+                  {{ formatAdminAmount(item.margin) }}
                 </div>
               </div>
             </div>
@@ -674,7 +693,7 @@ onMounted(() => {
             class="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-3 border border-blue-200 dark:border-blue-800"
           >
             <div class="text-xs text-blue-600 dark:text-blue-400">Total Nominal DBL</div>
-            <div class="text-xl font-bold text-blue-700 dark:text-blue-300">{{ formatRupiah(selectedDbl.total_nominal) }}</div>
+            <div class="text-xl font-bold text-blue-700 dark:text-blue-300">{{ formatAdminAmount(selectedDbl.total_nominal) }}</div>
           </div>
 
           <div class="grid grid-cols-2 gap-3">
@@ -766,11 +785,12 @@ onMounted(() => {
               <div class="text-right">
                 <span
                   class="font-bold text-lg"
-                  :class="calculatedMargin >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
+                  :class="marginClass(calculatedMargin)"
                 >
-                  {{ formatRupiah(calculatedMargin) }}
+                  {{ formatAdminAmount(calculatedMargin) }}
                 </span>
                 <span
+                  v-if="canViewRevenueAndMargin"
                   class="text-xs ml-1"
                   :class="calculatedMargin >= 0 ? 'text-green-500' : 'text-red-500'"
                 >

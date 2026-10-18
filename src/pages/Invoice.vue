@@ -1561,29 +1561,29 @@ async function printInvoice(inv: Invoice): Promise<void> {
     })();
     const penerimaLabel = it.recipient_name || '-';
     return `<tr>
-      <td style="padding: 4px 3px; border: 1px solid #000; text-align: center; font-size: 10px; width: 12%;">${displaySpb.replace(/</g,'&lt;')}</td>
-    <td style="padding: 4px 3px; border: 1px solid #000; font-size: 9px; width: 18%; line-height: 1.2;">
+      <td class="cell-center">${displaySpb.replace(/</g,'&lt;')}</td>
+      <td class="item-description">
         <div>${(it.description || '').replace(/</g,'&lt;')}</div>
-        <div style="color:#444;">Penerima: ${(penerimaLabel || '-').replace(/</g,'&lt;')}</div>
+        <div>Penerima: ${(penerimaLabel || '-').replace(/</g,'&lt;')}</div>
       </td>
-      <td style="padding: 4px 3px; border: 1px solid #000; text-align: center; font-size: 10px; width: 8%;">${colliLabel}</td>
-      <td style="padding: 4px 3px; border: 1px solid #000; text-align: center; font-size: 10px; width: 8%;">${qtyLabel}</td>
-      <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-size: 10px; width: 12%;">${formatRupiah(baseTagihan)}</td>
-      <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-size: 10px; width: 12%;">${formatRupiah(otherFee)}</td>
-      <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-size: 10px; width: 12%;">${formatRupiah(itemPph)}</td>
-      <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-size: 10px; font-weight: 600; width: 13%;">${formatRupiah(itemTotal)}</td>
+      <td class="cell-center">${colliLabel}</td>
+      <td class="cell-center">${qtyLabel}</td>
+      <td class="cell-money">${formatRupiah(baseTagihan)}</td>
+      <td class="cell-money">${formatRupiah(otherFee)}</td>
+      <td class="cell-money">${formatRupiah(itemPph)}</td>
+      <td class="cell-money item-total">${formatRupiah(itemTotal)}</td>
     </tr>`;
   }).join('');
 
   const html = `<!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
   <meta charset="utf-8">
   <title>Invoice ${inv.invoice_number}</title>
   <style>
     @page { 
       size: A4; 
-      margin: 0;
+      margin: 12mm;
     }
     * { 
       box-sizing: border-box; 
@@ -1592,23 +1592,32 @@ async function printInvoice(inv: Invoice): Promise<void> {
     }
     html, body { 
       font-family: Arial, sans-serif; 
-      font-size: 11px; 
+      font-size: 10pt;
       color: #000; 
-      line-height: 1.3;
+      line-height: 1.4;
     }
     body { 
       padding: 0;
+      background: #eef1f5;
     }
     .container {
       width: 210mm;
-      height: 297mm;
+      min-height: 297mm;
       margin: 0 auto;
       padding: 12mm;
       background: white;
-      page-break-after: always;
       position: relative;
+      isolation: isolate;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
+    }
+    .header,
+    .content,
+    .bank-section,
+    .notes-section,
+    .footer {
+      position: relative;
+      z-index: 1;
     }
     .header {
       margin-bottom: 5mm;
@@ -1677,7 +1686,7 @@ async function printInvoice(inv: Invoice): Promise<void> {
       color: #12385f;
     }
     .invoice-meta-row {
-      font-size: 9pt;
+      font-size: 10pt;
       margin-bottom: 2px;
       display: flex;
       justify-content: space-between;
@@ -1700,92 +1709,131 @@ async function printInvoice(inv: Invoice): Promise<void> {
     }
     .bill-to-label {
       font-weight: bold;
-      font-size: 10px;
+      font-size: 10pt;
       margin-bottom: 2px;
     }
     .bill-to-content {
-      font-size: 10px;
-      padding: 6px;
+      font-size: 11pt;
+      padding: 2mm;
       background: #f8f8f8;
       border: 1px solid #999;
       overflow-wrap: anywhere;
     }
     .items-table {
+      --table-border-width: 1px;
       width: 100%;
-      border-collapse: collapse;
+      table-layout: fixed;
+      /* Keep outer borders inside the cells so print page clipping cannot cut them off. */
+      border-collapse: separate;
+      border-spacing: 0;
       margin-bottom: 8px;
-      font-size: 10px;
+      font-size: 10pt;
+    }
+    .items-table thead {
+      display: table-header-group;
+      break-inside: avoid;
+    }
+    .items-table tr {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .items-table th,
+    .items-table td {
+      padding: 1.8mm 1mm;
+      border: 0;
+      border-right: var(--table-border-width) solid #000;
+      border-bottom: var(--table-border-width) solid #000;
+      overflow-wrap: anywhere;
+    }
+    .items-table th:first-child,
+    .items-table td:first-child {
+      border-left: var(--table-border-width) solid #000;
     }
     .items-table th {
+      border-top: var(--table-border-width) solid #000;
       background: #fff;
-      border: 1px solid #000;
-      padding: 4px 3px;
       text-align: left;
       font-weight: bold;
-      font-size: 9px;
+      font-size: 9.5pt;
     }
-    .items-table td {
-      padding: 3px;
-      border: 1px solid #000;
+    .items-table .item-description {
+      font-size: 9.5pt;
+      line-height: 1.35;
+    }
+    .cell-center {
+      text-align: center;
+    }
+    .cell-money {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .item-total {
+      font-weight: bold;
     }
     .totals-section {
       margin-top: 8px;
       margin-left: auto;
       width: 50%;
+      break-inside: avoid;
     }
     .totals-row {
       display: flex;
       justify-content: space-between;
-      padding: 3px 6px;
-      font-size: 10px;
+      gap: 3mm;
+      padding: 1.5mm 2mm;
+      font-size: 11pt;
       border-bottom: 1px solid #ddd;
     }
     .totals-row.total {
       font-weight: bold;
-      font-size: 11px;
+      font-size: 13pt;
       border-bottom: 2px solid #000;
       border-top: 2px solid #000;
-      padding: 4px 6px;
+      padding: 2mm;
     }
     .bank-section {
       margin: 10px 0;
-      padding: 8px;
+      padding: 3mm;
       border: 1px solid #999;
       background: #f8f8f8;
-      font-size: 9px;
+      font-size: 10pt;
+      break-inside: avoid;
     }
     .bank-title {
       font-weight: bold;
       margin-bottom: 4px;
-      font-size: 10px;
+      font-size: 10.5pt;
     }
     .bank-row {
       margin: 2px 0;
-      font-size: 9px;
+      font-size: 10pt;
     }
     .bank-row strong {
       display: inline-block;
-      width: 100px;
+      width: 28mm;
     }
     .notes-section {
       margin: 8px 0;
-      padding: 6px;
+      padding: 2mm;
       background: #fffacd;
       border: 1px solid #daa520;
-      font-size: 9px;
-      line-height: 1.3;
+      font-size: 10pt;
+      line-height: 1.4;
       min-height: 25px;
+      overflow-wrap: anywhere;
+      break-inside: avoid;
     }
     .footer {
       margin-top: 15px;
       display: flex;
       justify-content: space-between;
       gap: 15px;
+      break-inside: avoid;
     }
     .signature-block {
       flex: 1;
       text-align: center;
-      font-size: 9px;
+      font-size: 10pt;
     }
     .signature-line {
       margin-top: 35px;
@@ -1814,20 +1862,22 @@ async function printInvoice(inv: Invoice): Promise<void> {
       pointer-events: none;
       z-index: 100;
     }
-    .container::before {
+    .watermark {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .watermark::before {
       content: '';
       position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
+      inset: 0;
       background-image: url('${LOGO_URL}');
       background-repeat: repeat;
       background-size: 180px auto;
       background-position: center;
       opacity: 0.03;
-      pointer-events: none;
-      z-index: 1;
       transform: rotate(-30deg) scale(1.5);
       transform-origin: center;
       -webkit-print-color-adjust: exact;
@@ -1839,77 +1889,42 @@ async function printInvoice(inv: Invoice): Promise<void> {
         height: auto;
         margin: 0;
         padding: 0;
+        background: #fff;
       }
       .container {
-        width: 100%;
-        height: auto;
+        width: auto;
+        min-height: 273mm;
         margin: 0;
-        padding: 12mm;
-        page-break-inside: avoid;
+        /* Leave room for edge rounding when Chromium fragments the page for printing. */
+        padding: 0 0.5mm 0 0;
         position: relative;
-      }
-      .header {
-        position: relative;
-        z-index: 10;
-      }
-      .content {
-        position: relative;
-        z-index: 10;
-      }
-      .bank-section {
-        position: relative;
-        z-index: 10;
-      }
-      .notes-section {
-        position: relative;
-        z-index: 10;
-      }
-      .footer {
-        position: relative;
-        z-index: 10;
       }
     }
     @media print and (min-resolution: 72dpi) and (max-resolution: 150dpi) {
       body {
         font-family: 'Courier New', Courier, monospace;
-        font-size: 12px;
       }
-      .items-table th,
-      .items-table td {
-        border: 2px solid #000;
-        padding: 6px 4px;
-        font-size: 11px;
+      .items-table {
+        --table-border-width: 2px;
       }
       .company-address,
       .company-contact {
         color: #000;
       }
-      .bill-to-label,
-      .bank-title {
-        font-size: 11px;
-        font-weight: bold;
-      }
       .bill-to-content,
       .bank-row {
-        font-size: 10px;
         color: #000;
       }
       .totals-row {
-        font-size: 11px;
         border-color: #000;
       }
       .totals-row.total {
-        font-size: 13px;
         border-width: 2px;
       }
       .notes-section {
-        font-size: 10px;
         color: #000;
         background: #fff;
         border: 2px solid #000;
-      }
-      .signature-block {
-        font-size: 11px;
       }
       .signature-line {
         border-top: 2px solid #000;
@@ -1925,7 +1940,7 @@ async function printInvoice(inv: Invoice): Promise<void> {
         border-width: 6px;
         z-index: 100;
       }
-      .container::before {
+      .watermark::before {
         opacity: 0.05;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
@@ -1935,6 +1950,7 @@ async function printInvoice(inv: Invoice): Promise<void> {
 </head>
 <body>
   <div class="container" style="position: relative;">
+    <div class="watermark" aria-hidden="true"></div>
     ${(inv.status === 'paid' || (inv.remaining_amount !== undefined && inv.remaining_amount <= 0)) ? '<div class="lunas-stamp">LUNAS</div>' : ''}
     <div class="header">
       <div class="company-info">
@@ -1976,16 +1992,26 @@ async function printInvoice(inv: Invoice): Promise<void> {
       </div>
 
       <table class="items-table">
+        <colgroup>
+          <col style="width: 10%;">
+          <col style="width: 20%;">
+          <col style="width: 6%;">
+          <col style="width: 9%;">
+          <col style="width: 14%;">
+          <col style="width: 14%;">
+          <col style="width: 13%;">
+          <col style="width: 14%;">
+        </colgroup>
         <thead>
           <tr>
-            <th style="width: 12%;">No. SPB</th>
-            <th style="width: 18%;">Deskripsi / Penerima</th>
-            <th style="width: 8%;">Colli</th>
-            <th style="width: 8%;">Qty / Unit</th>
-            <th style="width: 12%;">Tagihan</th>
-            <th style="width: 12%;">Biaya Lain</th>
-            <th style="width: 12%;">PPh</th>
-            <th style="width: 13%;">Total</th>
+            <th>No. SPB</th>
+            <th>Deskripsi / Penerima</th>
+            <th>Colli</th>
+            <th>Qty / Unit</th>
+            <th>Tagihan</th>
+            <th>Biaya Lain</th>
+            <th>PPh</th>
+            <th>Total</th>
           </tr>
         </thead>
         <tbody>

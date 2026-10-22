@@ -340,7 +340,7 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         .brand-title { font-weight: bold; font-size: 16px; line-height: 1.2; }
         .brand-sub { font-size: 9px; margin-top: 1px; }
         .addr { font-size: 10px; margin-top: 3px; line-height: 1.3; font-weight: 500; }
-         .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
+         .right-box { position: relative; border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
          .right-box .spb { font-size: 16px; font-weight: bold; }
          .right-box .eta { font-size: 10px; margin-top: 2px; font-weight: bold; }
 
@@ -371,7 +371,7 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         .sign-label { font-size: 11px; font-weight: bold; margin-bottom: 20px; }
         .sign-line { border-top: 1px solid #000; padding-top: 3px; font-size: 11px; font-weight: bold; }
         /* Keep the stamp out of flow to preserve the calibrated print layout. */
-        .goods-unchecked-stamp { position: absolute; top: 0; left: 50%; transform: translateX(-50%); border: 1px solid #000; padding: 3px 6px; color: #000; font-size: 10px; font-weight: bold; line-height: 1.2; white-space: nowrap; }
+        .goods-unchecked-stamp { position: absolute; top: 0; right: calc(100% + 12px); border: 1px solid #000; padding: 3px 6px; color: #000; font-size: 10px; font-weight: bold; line-height: 1.2; white-space: nowrap; }
 
         .delivered-stamp {
           position: absolute;
@@ -410,6 +410,7 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
             <div class="addr">${company?.address ?? ''}</div>
           </div>
            <div class="right-box">
+             <div class="goods-unchecked-stamp">ISI BARANG TIDAK DIPERIKSA</div>
              <div class="spb">${spbNumber}</div>
              ${etaDate && etaDate !== '-' ? `<div class="eta">ETA: ${etaDate}</div>` : ''}
            </div>
@@ -481,7 +482,6 @@ const printDeliveryNote = async (shipment: Shipment): Promise<void> => {
         </div>
 
         <div class="sign-row">
-          <div class="goods-unchecked-stamp">ISI BARANG TIDAK DIPERIKSA</div>
           <div class="sign">
             <div class="sign-label">Pengirim</div>
             <div class="sign-line">( ${shipment.sender_name || '................................'} )</div>
@@ -577,6 +577,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
               <div class="addr">${company?.address ?? ''}</div>
             </div>
           <div class="right-box">
+            <div class="goods-unchecked-stamp">ISI BARANG TIDAK DIPERIKSA</div>
             <div class="spb">${spbNumber}</div>
             ${etaDate && etaDate !== '-' ? `<div class="eta">ETA: ${etaDate}</div>` : ''}
           </div>
@@ -648,7 +649,6 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           </div>
 
           <div class="sign-row">
-            <div class="goods-unchecked-stamp">ISI BARANG TIDAK DIPERIKSA</div>
             <div class="sign">
               <div class="sign-label">Pengirim</div>
               <div class="sign-line">( ${shipment.sender_name || '................................'} )</div>
@@ -683,7 +683,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           .brand-title { font-weight: bold; font-size: 16px; line-height: 1.2; }
           .brand-sub { font-size: 9px; margin-top: 1px; }
           .addr { font-size: 10px; margin-top: 3px; line-height: 1.3; font-weight: 500; }
-          .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
+          .right-box { position: relative; border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
           .right-box .spb { font-size: 16px; font-weight: bold; }
           .right-box .eta { font-size: 10px; margin-top: 2px; font-weight: bold; }
 
@@ -714,7 +714,7 @@ const printBulkSuratJalan = async (dbl: DBLItem): Promise<void> => {
           .sign-label { font-size: 11px; font-weight: bold; margin-bottom: 20px; }
           .sign-line { border-top: 1px solid #000; padding-top: 3px; font-size: 11px; font-weight: bold; }
           /* Keep the stamp out of flow to preserve the calibrated print layout. */
-          .goods-unchecked-stamp { position: absolute; top: 0; left: 50%; transform: translateX(-50%); border: 1px solid #000; padding: 3px 6px; color: #000; font-size: 10px; font-weight: bold; line-height: 1.2; white-space: nowrap; }
+          .goods-unchecked-stamp { position: absolute; top: 0; right: calc(100% + 12px); border: 1px solid #000; padding: 3px 6px; color: #000; font-size: 10px; font-weight: bold; line-height: 1.2; white-space: nowrap; }
 
           .delivered-stamp {
             position: absolute;
@@ -813,6 +813,7 @@ const printSelectedShipments = async (): Promise<void> => {
             <div class="addr">${company?.address ?? ''}</div>
           </div>
           <div class="right-box">
+            <div class="goods-unchecked-stamp">ISI BARANG TIDAK DIPERIKSA</div>
             <div class="spb">${spbNumber}</div>
             ${etaDate && etaDate !== '-' ? `<div class="eta">ETA: ${etaDate}</div>` : ''}
           </div>
@@ -884,7 +885,6 @@ const printSelectedShipments = async (): Promise<void> => {
         </div>
 
         <div class="sign-row">
-          <div class="goods-unchecked-stamp">ISI BARANG TIDAK DIPERIKSA</div>
           <div class="sign">
             <div class="sign-label">Pengirim</div>
             <div class="sign-line">( ${shipment.sender_name || '................................'} )</div>
@@ -919,7 +919,7 @@ const printSelectedShipments = async (): Promise<void> => {
         .brand-title { font-weight: bold; font-size: 16px; line-height: 1.2; }
         .brand-sub { font-size: 9px; margin-top: 1px; }
         .addr { font-size: 10px; margin-top: 3px; line-height: 1.3; font-weight: 500; }
-        .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
+        .right-box { position: relative; border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
         .right-box .spb { font-size: 16px; font-weight: bold; }
         .right-box .eta { font-size: 10px; margin-top: 2px; font-weight: bold; }
 
@@ -950,7 +950,7 @@ const printSelectedShipments = async (): Promise<void> => {
         .sign-label { font-size: 11px; font-weight: bold; margin-bottom: 20px; }
         .sign-line { border-top: 1px solid #000; padding-top: 3px; font-size: 11px; font-weight: bold; }
         /* Keep the stamp out of flow to preserve the calibrated print layout. */
-        .goods-unchecked-stamp { position: absolute; top: 0; left: 50%; transform: translateX(-50%); border: 1px solid #000; padding: 3px 6px; color: #000; font-size: 10px; font-weight: bold; line-height: 1.2; white-space: nowrap; }
+        .goods-unchecked-stamp { position: absolute; top: 0; right: calc(100% + 12px); border: 1px solid #000; padding: 3px 6px; color: #000; font-size: 10px; font-weight: bold; line-height: 1.2; white-space: nowrap; }
 
         .delivered-stamp {
           position: absolute;
@@ -1080,6 +1080,7 @@ const printSelectedDBLs = async (): Promise<void> => {
             <div class="addr">${company?.address ?? ''}</div>
           </div>
         <div class="right-box">
+          <div class="goods-unchecked-stamp">ISI BARANG TIDAK DIPERIKSA</div>
           <div class="spb">${spbNumber}</div>
           ${etaDate && etaDate !== '-' ? `<div class="eta">ETA: ${etaDate}</div>` : ''}
         </div>
@@ -1151,7 +1152,6 @@ const printSelectedDBLs = async (): Promise<void> => {
         </div>
 
         <div class="sign-row">
-          <div class="goods-unchecked-stamp">ISI BARANG TIDAK DIPERIKSA</div>
           <div class="sign">
             <div class="sign-label">Pengirim</div>
             <div class="sign-line">( ${shipment.sender_name || '................................'} )</div>
@@ -1186,7 +1186,7 @@ const printSelectedDBLs = async (): Promise<void> => {
           .brand-title { font-weight: bold; font-size: 16px; line-height: 1.2; }
           .brand-sub { font-size: 9px; margin-top: 1px; }
           .addr { font-size: 10px; margin-top: 3px; line-height: 1.3; font-weight: 500; }
-          .right-box { border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
+          .right-box { position: relative; border: 1px solid #000; padding: 4px 8px; text-align: center; min-width: 180px; margin-top: 12px; }
           .right-box .spb { font-size: 16px; font-weight: bold; }
           .right-box .eta { font-size: 10px; margin-top: 2px; font-weight: bold; }
 
@@ -1217,7 +1217,7 @@ const printSelectedDBLs = async (): Promise<void> => {
         .sign-label { font-size: 11px; font-weight: bold; margin-bottom: 20px; }
         .sign-line { border-top: 1px solid #000; padding-top: 3px; font-size: 11px; font-weight: bold; }
         /* Keep the stamp out of flow to preserve the calibrated print layout. */
-        .goods-unchecked-stamp { position: absolute; top: 0; left: 50%; transform: translateX(-50%); border: 1px solid #000; padding: 3px 6px; color: #000; font-size: 10px; font-weight: bold; line-height: 1.2; white-space: nowrap; }
+        .goods-unchecked-stamp { position: absolute; top: 0; right: calc(100% + 12px); border: 1px solid #000; padding: 3px 6px; color: #000; font-size: 10px; font-weight: bold; line-height: 1.2; white-space: nowrap; }
 
         .delivered-stamp {
           position: absolute;

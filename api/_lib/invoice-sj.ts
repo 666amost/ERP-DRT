@@ -2,7 +2,7 @@ import type { Sql } from './db.js';
 
 export const INVOICE_SJ_EVENT = 'sj_status_changed';
 
-type InvoiceReference = { id?: number; number?: string };
+type InvoiceReference = { id?: number; number?: string; revision?: string; unpaidOnly?: boolean; preserveStatus?: boolean };
 type SjChange = { shipment_id: number; sj_returned: boolean };
 
 // Keep the previous state in the existing events table, in the same statement
@@ -11,15 +11,21 @@ export function updateInvoiceSj(sql: Sql, invoice: InvoiceReference, changes: Sj
   const unique = Array.from(new Map(changes.map(change => [String(change.shipment_id), change])).values());
   return sql`
     with target_invoice as (
-      select id from invoices
-      where id = ${invoice.id ?? null}::bigint or invoice_number = ${invoice.number ?? null}::text
+      select i.id from invoices i
+      where (i.id = ${invoice.id ?? null}::bigint or i.invoice_number = ${invoice.number ?? null}::text)
+        and (${invoice.revision ?? null}::text is null or i.xmin::text = ${invoice.revision ?? null}::text)
+        and (not ${Boolean(invoice.unpaidOnly)}::boolean or (
+          coalesce(i.paid_amount, 0) = 0 and coalesce(i.status, 'pending') not in ('paid', 'partial', 'cancelled')
+          and not exists (select 1 from invoice_payments p where p.invoice_id = i.id)
+        ))
     ), data as (
       select * from unnest(
         ${unique.map(change => change.shipment_id)}::bigint[],
         ${unique.map(change => change.sj_returned)}::boolean[]
       ) as t(id, sj_returned)
     ), previous as materialized (
-      select s.id, s.sj_returned, s.sj_returned_at, d.sj_returned as requested
+      select s.id, s.sj_returned, s.sj_returned_at,
+        case when ${Boolean(invoice.preserveStatus)}::boolean then s.sj_returned else d.sj_returned end as requested
       from shipments s join data d on d.id = s.id
       where exists (select 1 from target_invoice)
       order by s.id
@@ -56,6 +62,41 @@ export function updateInvoiceSj(sql: Sql, invoice: InvoiceReference, changes: Sj
   `;
 }
 
+export function restoreInvoiceSj(sql: Sql, invoice: InvoiceReference, shipmentIds?: number[]) {
+  return sql`
+      with target_invoice as (
+        select i.id from invoices i where i.id = ${invoice.id ?? null}::bigint
+          and (${invoice.revision ?? null}::text is null or i.xmin::text = ${invoice.revision ?? null}::text)
+          and (not ${Boolean(invoice.unpaidOnly)}::boolean or (
+            coalesce(i.paid_amount, 0) = 0 and coalesce(i.status, 'pending') not in ('paid', 'partial', 'cancelled')
+            and not exists (select 1 from invoice_payments p where p.invoice_id = i.id)
+          ))
+      ), latest as (
+        select distinct on (e.payload_json->>'shipment_id') e.payload_json
+        from events e join target_invoice i on i.id = e.entity_id
+        where e.entity_type = 'invoice' and e.event_type = ${INVOICE_SJ_EVENT}
+          and (${shipmentIds ?? null}::bigint[] is null
+            or (e.payload_json->>'shipment_id')::bigint = any(${shipmentIds ?? null}::bigint[]))
+        order by e.payload_json->>'shipment_id', e.id desc
+      )
+      update shipments s
+      set sj_returned = (h.payload_json->'before'->>'sj_returned')::boolean,
+          sj_returned_at = (h.payload_json->'before'->>'sj_returned_at')::timestamptz
+      from latest h
+      where s.id = (h.payload_json->>'shipment_id')::bigint
+        and s.sj_returned is not distinct from (h.payload_json->'after'->>'sj_returned')::boolean
+        and s.sj_returned_at is not distinct from (h.payload_json->'after'->>'sj_returned_at')::timestamptz
+        and not exists (
+          select 1 from invoices other
+          where other.id <> ${invoice.id ?? null} and coalesce(other.status, 'pending') <> 'cancelled'
+            and (other.shipment_id = s.id or exists (
+              select 1 from invoice_items ii where ii.invoice_id = other.id and ii.shipment_id = s.id
+            ))
+        )
+      returning s.id
+  `;
+}
+
 export async function deleteInvoiceWithSjRestore(sql: Sql, invoiceId: number) {
   const [targets, restored, deleted] = await sql.transaction([
     sql`
@@ -73,29 +114,7 @@ export async function deleteInvoiceWithSjRestore(sql: Sql, invoiceId: number) {
       from invoices i where i.id = ${invoiceId}
       for update of i
     `,
-    sql`
-      with latest as (
-        select distinct on (e.payload_json->>'shipment_id') e.payload_json
-        from events e join invoices i on i.id = e.entity_id
-        where e.entity_type = 'invoice' and e.entity_id = ${invoiceId} and e.event_type = ${INVOICE_SJ_EVENT}
-        order by e.payload_json->>'shipment_id', e.id desc
-      )
-      update shipments s
-      set sj_returned = (h.payload_json->'before'->>'sj_returned')::boolean,
-          sj_returned_at = (h.payload_json->'before'->>'sj_returned_at')::timestamptz
-      from latest h
-      where s.id = (h.payload_json->>'shipment_id')::bigint
-        and s.sj_returned is not distinct from (h.payload_json->'after'->>'sj_returned')::boolean
-        and s.sj_returned_at is not distinct from (h.payload_json->'after'->>'sj_returned_at')::timestamptz
-        and not exists (
-          select 1 from invoices other
-          where other.id <> ${invoiceId} and coalesce(other.status, 'pending') <> 'cancelled'
-            and (other.shipment_id = s.id or exists (
-              select 1 from invoice_items ii where ii.invoice_id = other.id and ii.shipment_id = s.id
-            ))
-        )
-      returning s.id
-    `,
+    restoreInvoiceSj(sql, { id: invoiceId }),
     sql`delete from invoices where id = ${invoiceId} returning id`
   ]) as { id: number; untracked_count?: number }[][];
   if (!deleted?.length) return null;

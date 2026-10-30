@@ -6,6 +6,8 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { randomUUID } from 'node:crypto';
 import { readJsonNode, writeJson } from './_lib/http.js';
 import { deleteInvoiceWithSjRestore, INVOICE_SJ_EVENT, updateInvoiceSj } from './_lib/invoice-sj.js';
+import { InvoiceEditError, saveInvoiceItems } from './_lib/invoice-items.js';
+import type { InvoiceItemsBody } from './_lib/invoice-items.js';
 
 type Invoice = {
   id: number;
@@ -873,7 +875,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         return;
       }
       if (dbError.code === '22001') {
-        fail('Data invoice melebihi batas panjang kolom. Coba kurangi jumlah SPB yang digabung atau panjang isian.', 400);
+        fail('Salah satu isian invoice melebihi batas panjang kolom database. Hubungi admin dengan kode referensi error.', 400);
         return;
       }
       fail('Invoice gagal disimpan karena gangguan server. Silakan coba lagi.');
@@ -957,6 +959,31 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
     writeJson(res, { success: true });
     return;
+  } else if (endpoint === 'available-spb' && req.method === 'GET') {
+    const invoiceId = Number(url.searchParams.get('invoice_id'));
+    if (!Number.isSafeInteger(invoiceId) || invoiceId <= 0) { fail('ID invoice tidak valid.', 400); return; }
+    const items = await sql`
+      select s.id as shipment_id, s.spb_number, s.public_code as tracking_code,
+        s.created_at as shipment_date, s.customer_id, s.customer_name, s.pengirim_name,
+        s.macam_barang as description, s.penerima_name as recipient_name,
+        s.destination as destination_city, coalesce(s.nominal, 0)::float as unit_price,
+        coalesce(s.total_colli, 1)::float as quantity, coalesce(s.berat, 0)::float as weight,
+        s.satuan as unit, coalesce(s.sj_returned, false) as sj_returned
+      from shipments s cross join invoices i
+      where i.id = ${invoiceId} and coalesce(s.nominal, 0) > 0
+        and (s.customer_id = i.customer_id
+          or lower(trim(coalesce(s.customer_name, ''))) = lower(trim(i.customer_name))
+          or lower(trim(coalesce(s.pengirim_name, ''))) = lower(trim(i.customer_name)))
+        and not exists (
+          select 1 from invoices other where coalesce(other.status, 'pending') <> 'cancelled'
+            and (other.shipment_id = s.id or exists (
+              select 1 from invoice_items ii where ii.invoice_id = other.id and ii.shipment_id = s.id
+            ))
+        )
+      order by s.created_at desc, s.id desc
+    `;
+    writeJson(res, { items });
+    return;
   } else if (endpoint === 'items' && req.method === 'GET') {
     const invoiceId = parseInt(url.searchParams.get('invoice_id') || '0');
     if (!invoiceId) { writeJson(res, { error: 'Missing invoice_id' }, 400); return; }
@@ -975,6 +1002,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         ii.item_discount::float as item_discount,
         s.spb_number,
         s.created_at as shipment_date,
+        s.customer_name,
+        s.customer_id,
+        s.destination as destination_city,
         s.public_code as tracking_code,
         s.satuan as unit,
         s.pengirim_name,
@@ -989,70 +1019,28 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     writeJson(res, { items });
     return;
   } else if (endpoint === 'set-items' && req.method === 'POST') {
-    let body: { invoice_id: number; items: (InvoiceItem & { id?: number })[]; tax_percent?: number; discount_amount?: number; notes?: string };
-    try { body = await readJsonNode(req) as { invoice_id: number; items: (InvoiceItem & { id?: number })[]; tax_percent?: number; discount_amount?: number; notes?: string }; } catch { body = null as any; }
-    if (!body || !body.invoice_id) { writeJson(res, { error: 'Missing invoice_id' }, 400); return; }
-
-    await sql`delete from invoice_items where invoice_id = ${body.invoice_id}`;
-    const itemsToInsert = body.items || [];
-    let insertedCount = 0;
-    const spbLookup: Record<string, number> = {};
-    for (const it of itemsToInsert) {
-      if (!it) continue;
-      const desc = it.description || 'Jasa pengiriman';
-      let shipmentId = it.shipment_id || null;
-      if (!shipmentId && it.spb_number) {
-        const spbKey = it.spb_number.trim();
-        if (spbLookup[spbKey] !== undefined) {
-          shipmentId = spbLookup[spbKey] || null;
-        } else {
-          const found = await sql`select id from shipments where spb_number = ${spbKey} limit 1` as { id: number }[];
-          shipmentId = found[0]?.id || null;
-          spbLookup[spbKey] = shipmentId || 0;
-        }
+    const body = await readJsonNode(req) as InvoiceItemsBody | null;
+    const invoiceId = Number(body?.invoice_id);
+    if (!body || !Number.isSafeInteger(invoiceId) || invoiceId <= 0) { fail('ID invoice tidak valid.', 400); return; }
+    try {
+      writeJson(res, await saveInvoiceItems(sql, { ...body, invoice_id: invoiceId }));
+    } catch (error) {
+      if (error instanceof InvoiceEditError) { fail(error.message, error.status); return; }
+      const code = (error as { code?: string }).code || '';
+      logInvoiceFailure(error, {
+        event: 'invoice.edit_failed', request_id: requestId, endpoint, method: req.method,
+        invoice_id: invoiceId, item_count: body.items?.length || 0, duration_ms: Date.now() - startedAt
+      }, ['40001', '40P01', '22001'].includes(code));
+      if (['40001', '40P01'].includes(code)) {
+        fail('Data invoice berubah saat disimpan. Muat ulang invoice lalu coba lagi.', 409);
+        return;
       }
-      await sql`insert into invoice_items (invoice_id, shipment_id, description, quantity, unit_price, other_fee, tax_type, item_discount) values (${body.invoice_id}, ${shipmentId}, ${desc}, ${it.quantity || 1}, ${it.unit_price || 0}, ${it.other_fee || 0}, ${it.tax_type || 'include'}, ${it.item_discount || 0})`;
-      insertedCount++;
-      if (shipmentId) {
-        await updateInvoiceSj(sql, { id: body.invoice_id }, [{
-          shipment_id: shipmentId, sj_returned: Boolean(it.sj_returned)
-        }]);
+      if (code === '22001') {
+        fail('Salah satu isian invoice melebihi batas panjang kolom database. Hubungi admin dengan kode referensi error.', 400);
+        return;
       }
+      fail('Perubahan invoice gagal disimpan karena gangguan server. Silakan coba lagi.');
     }
-    console.log(`[set-items] invoice_id=${body.invoice_id}, received=${itemsToInsert.length}, inserted=${insertedCount}`);
-    // unit_price is stored as the total per line, so ignore quantity when recalculating subtotal
-    const rows = await sql`
-      select coalesce(sum((unit_price + coalesce(other_fee,0)) - coalesce(item_discount,0)),0)::float as subtotal 
-      from invoice_items 
-      where invoice_id = ${body.invoice_id}
-    ` as [{ subtotal: number }];
-    const subtotal = rows[0]?.subtotal || 0;
-    
-    const inv = await sql`select paid_amount, pph_percent, pph_amount from invoices where id = ${body.invoice_id}` as [{ paid_amount: number; pph_percent: number; pph_amount: number }];
-    const paidAmount = Number(inv[0]?.paid_amount || 0);
-    const pphPercent = Number(inv[0]?.pph_percent || 0);
-    const discountAmount = Number(body.discount_amount || 0);
-    const subtotalAfterDiscount = Math.max(0, subtotal - discountAmount);
-    const pphAmount = pphPercent > 0 ? (subtotalAfterDiscount * pphPercent / 100) : 0;
-    const totalTagihan = subtotalAfterDiscount - pphAmount;
-    const remainingAmount = Math.max(0, totalTagihan - paidAmount);
-    
-    let status = 'pending';
-    if (remainingAmount <= 0 && paidAmount > 0) status = 'paid';
-    else if (paidAmount > 0) status = 'partial';
-    
-    await sql`update invoices set 
-      amount = ${totalTagihan}, 
-      subtotal = ${subtotal},
-      pph_amount = ${pphAmount},
-      total_tagihan = ${totalTagihan},
-      remaining_amount = ${remainingAmount},
-      status = ${status},
-      tax_percent = ${body.tax_percent || 0}, 
-      discount_amount = ${discountAmount}, 
-      notes = ${body.notes || null} 
-    where id = ${body.invoice_id}`;
-    writeJson(res, { success: true, subtotal, total: totalTagihan, remaining_amount: remainingAmount });
     return;
   } else if (endpoint === 'delete' && req.method === 'DELETE') {
     const rawId = url.searchParams.get('id') || '';

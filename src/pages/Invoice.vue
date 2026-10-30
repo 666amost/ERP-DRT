@@ -251,6 +251,92 @@ const selectedCustomerKey = ref<string>('');
 const invoiceFilterType = ref<'pengirim' | 'penerima'>('penerima');
 const addInvoiceTab = ref<'unpaid' | 'selected'>('unpaid');
 const sjBulkInputStatus = ref<SjBulkInputStatus>('');
+const editingStatus = ref('');
+const showEditSpbPicker = ref(false);
+const loadingEditSpb = ref(false);
+const editSpbError = ref('');
+const editSpbOptions = ref<Item[]>([]);
+const removedEditSpbItems = ref<Item[]>([]);
+const editSpbSearch = ref('');
+const editSelectedSpbIds = ref<Set<number>>(new Set());
+const canChangeEditSpb = computed(() => existingPaidAmount.value === 0
+  && !['paid', 'partial', 'cancelled'].includes(editingStatus.value));
+const availableEditSpb = computed(() => {
+  const currentIds = new Set(items.value.map(item => Number(item.shipment_id)));
+  const seen = new Set<number>();
+  const query = editSpbSearch.value.trim().toLowerCase();
+  return [...removedEditSpbItems.value, ...editSpbOptions.value].filter(item => {
+    const id = Number(item.shipment_id);
+    if (!id || currentIds.has(id) || seen.has(id)) return false;
+    seen.add(id);
+    return !query || [item.spb_number, item.tracking_code, item.recipient_name, item.destination_city]
+      .some(value => String(value || '').toLowerCase().includes(query));
+  });
+});
+
+async function openEditSpbPicker() {
+  if (!canChangeEditSpb.value || savingInvoice.value) return;
+  showEditSpbPicker.value = !showEditSpbPicker.value;
+  if (!showEditSpbPicker.value) return;
+  editSpbSearch.value = '';
+  editSelectedSpbIds.value = new Set();
+  editSpbError.value = '';
+  loadingEditSpb.value = true;
+  const invoiceId = editingId.value;
+  try {
+    const response = await fetch(`/api/invoices?endpoint=available-spb&invoice_id=${invoiceId}`);
+    const data = await readApiResponse<ApiErrorPayload & { items?: Item[] }>(response, 'Daftar SPB gagal dimuat');
+    if (editingId.value !== invoiceId) return;
+    editSpbOptions.value = (data.items || []).map(item => ({
+      ...item, shipment_id: Number(item.shipment_id), quantity: Number(item.quantity) || 1,
+      unit_price: Number(item.unit_price) || 0, other_fee: 0, tax_type: 'include', item_discount: 0
+    }));
+  } catch (error) {
+    editSpbError.value = error instanceof Error ? error.message : 'Daftar SPB gagal dimuat';
+  } finally {
+    loadingEditSpb.value = false;
+  }
+}
+
+function toggleEditSpb(id: number) {
+  const selected = new Set(editSelectedSpbIds.value);
+  if (selected.has(id)) selected.delete(id);
+  else selected.add(id);
+  editSelectedSpbIds.value = selected;
+}
+
+function toggleAllEditSpb() {
+  const allSelected = availableEditSpb.value.every(item => editSelectedSpbIds.value.has(Number(item.shipment_id)));
+  const selected = new Set(editSelectedSpbIds.value);
+  availableEditSpb.value.forEach(item => {
+    const id = Number(item.shipment_id);
+    if (allSelected) selected.delete(id);
+    else selected.add(id);
+  });
+  editSelectedSpbIds.value = selected;
+}
+
+function addEditSpb() {
+  if (!canChangeEditSpb.value || savingInvoice.value) return;
+  const currentIds = new Set(items.value.map(item => Number(item.shipment_id)));
+  const selected = [...removedEditSpbItems.value, ...editSpbOptions.value].filter(item => {
+    const id = Number(item.shipment_id);
+    if (!editSelectedSpbIds.value.has(id) || currentIds.has(id)) return false;
+    currentIds.add(id);
+    return true;
+  });
+  items.value.push(...selected.map(item => ({ ...item })));
+  editSelectedSpbIds.value = new Set();
+  showEditSpbPicker.value = false;
+}
+
+function removeEditSpb(index: number) {
+  if (!canChangeEditSpb.value || savingInvoice.value || items.value.length <= 1) return;
+  const [removed] = items.value.splice(index, 1);
+  if (removed?.shipment_id) {
+    removedEditSpbItems.value = [...removedEditSpbItems.value.filter(item => item.shipment_id !== removed.shipment_id), removed];
+  }
+}
 
 const showCicilanModal = ref(false);
 const loadingCicilan = ref(false);
@@ -625,6 +711,7 @@ async function loadItemsForInvoice(id: number | null, fallbackSpb?: string | nul
   }
   try {
     const res = await fetch(`/api/invoices?endpoint=items&invoice_id=${id}`);
+    if (!res.ok) throw new Error('Rincian invoice gagal dimuat. Silakan coba lagi.');
     const data = await res.json();
     const fallbackSpbList = (fallbackSpb || '').split(',').map(s => s.trim()).filter(Boolean);
     const rawItems: LoadedInvoiceItem[] = Array.isArray(data.items) ? data.items : [];
@@ -646,8 +733,9 @@ async function loadItemsForInvoice(id: number | null, fallbackSpb?: string | nul
         _unit_price_display: lineTotal ? formatRupiah(lineTotal) : ''
       };
     });
-  } catch {
+  } catch (error) {
     items.value = [];
+    throw error;
   }
 }
 
@@ -671,14 +759,12 @@ async function saveItemsForInvoice(invoiceId: number, itemsToSave?: Item[]): Pro
         sj_returned: Boolean(it.sj_returned)
       })),
       tax_percent: taxPercent.value,
+      pph_percent: pphPercent.value,
       discount_amount: discountAmount.value,
-      notes: notes.value || undefined
+      notes: notes.value || null
     })
   });
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.error || 'Failed to save items');
-  }
+  await readApiResponse(response, 'Perubahan invoice gagal disimpan');
 }
 
 function calcSubtotal(): number {
@@ -961,10 +1047,15 @@ async function bulkSettleCicilanAllInvoices(): Promise<void> {
 
 async function openEditModal(invoice: Invoice) {
   editingId.value = invoice.id;
+  editingStatus.value = invoice.status;
+  showEditSpbPicker.value = false;
+  editSpbOptions.value = [];
+  removedEditSpbItems.value = [];
+  editSelectedSpbIds.value = new Set();
   sjBulkInputStatus.value = '';
   manualAmountMode.value = true;
   invoiceSaveError.value = '';
-  existingPaidAmount.value = invoice.paid_amount || 0;
+  existingPaidAmount.value = Number(invoice.paid_amount || 0);
   editingCustomerName.value = invoice.customer_name || '';
   selectedCustomerKey.value = typeof invoice.customer_id === 'number'
     ? `id:${invoice.customer_id}`
@@ -982,7 +1073,12 @@ async function openEditModal(invoice: Invoice) {
   discountAmount.value = invoice.discount_amount || 0;
   pphPercent.value = invoice.pph_percent || 0;
   notes.value = invoice.notes || '';
-  await loadItemsForInvoice(invoice.id, invoice.spb_number || '');
+  try {
+    await loadItemsForInvoice(invoice.id, invoice.spb_number || '');
+  } catch (error) {
+    notify.error(error instanceof Error ? error.message : 'Rincian invoice gagal dimuat');
+    return;
+  }
   if (items.value.length === 0) {
     items.value = [{ 
       description: 'Jasa pengiriman', 
@@ -992,6 +1088,7 @@ async function openEditModal(invoice: Invoice) {
       tax_type: 'include', 
       item_discount: 0,
       spb_number: invoice.spb_number || '',
+      shipment_id: invoice.shipment_id,
       customer_name: invoice.customer_name,
       sj_returned: Boolean(invoice.sj_all_returned)
     }];
@@ -1063,39 +1160,6 @@ async function saveInvoice(mode: 'single' | 'bulk' = 'single') {
 
   try {
     if (editingId.value) {
-      const newRemaining = Math.max(0, totalTagihan - existingPaidAmount.value);
-      let newStatus = 'pending';
-      if (existingPaidAmount.value >= totalTagihan) {
-        newStatus = 'paid';
-      } else if (existingPaidAmount.value > 0) {
-        newStatus = 'partial';
-      }
-      
-      const allSpbNumbers = itemsSnapshot
-        .map(it => it.spb_number || it.tracking_code)
-        .filter(Boolean)
-        .join(', ');
-      
-      const res = await fetch('/api/invoices?endpoint=update', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: editingId.value,
-          spb_number: allSpbNumbers || undefined,
-          customer_name: form.value.customer_name,
-          customer_id: form.value.customer_id || undefined,
-          amount: totalTagihan,
-          subtotal: subtotal,
-          pph_percent: pphPercent.value,
-          pph_amount: pphAmount,
-          remaining_amount: newRemaining,
-          status: newStatus,
-          discount_amount: discountAmount.value || 0,
-          tax_percent: taxPercent.value || 0,
-          notes: notes.value || undefined
-        })
-      });
-      if (!res.ok) throw new Error('Update failed');
       await saveItemsForInvoice(editingId.value, itemsSnapshot);
       notify.success('Perubahan invoice berhasil disimpan');
     } else if (mode === 'bulk') {
@@ -2731,7 +2795,7 @@ function closeInvoiceModal() {
 
         <div class="flex-1 overflow-auto p-4">
           <div class="grid grid-cols-12 gap-4">
-            <div class="col-span-12 lg:col-span-8 space-y-4">
+            <div class="col-span-12 min-w-0 space-y-4" :class="editingId ? 'lg:col-span-9' : 'lg:col-span-8'">
           <div v-if="!editingId" class="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-700">
             <label class="block text-sm font-semibold mb-3 text-gray-700 dark:text-gray-200">Tagihan untuk:</label>
             <div class="flex gap-3">
@@ -2776,7 +2840,7 @@ function closeInvoiceModal() {
                   v-model="selectedCustomerKey"
                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-gray-100"
                   @change="onCustomerChange"
-                  :disabled="loadingUnpaidShipments"
+                  :disabled="loadingUnpaidShipments || !!editingId"
                 >
                   <option value="">-- Pilih Customer --</option>
                   <option v-for="c in uniqueCustomers" :key="c.key" :value="c.key">
@@ -2878,34 +2942,89 @@ function closeInvoiceModal() {
               </div>
             </div>
           </div>
-          <div v-if="editingId">
-            <label class="block text-sm font-medium mb-2 dark:text-gray-200">Daftar SPB</label>
-            <div class="overflow-x-auto">
-              <table class="w-full text-sm dark:text-gray-100">
-                <thead class="bg-gray-50 dark:bg-gray-700">
+          <div v-if="editingId" data-testid="invoice-edit-list" class="min-w-0 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h4 class="text-sm font-medium dark:text-gray-200">Daftar SPB ({{ items.length }})</h4>
+              <Button size="sm" :disabled="!canChangeEditSpb || savingInvoice" :aria-expanded="showEditSpbPicker" @click="openEditSpbPicker">
+                {{ showEditSpbPicker ? 'Tutup Pilihan SPB' : '+ Tambah SPB' }}
+              </Button>
+            </div>
+            <p v-if="!canChangeEditSpb" class="text-xs text-gray-500 dark:text-gray-400">
+              Tambah/hapus SPB tersedia untuk invoice yang belum memiliki pembayaran.
+            </p>
+            <div v-if="showEditSpbPicker" data-testid="invoice-edit-spb-picker" class="rounded-lg border border-blue-200 dark:border-blue-800 p-3 space-y-3">
+              <p class="text-xs text-gray-600 dark:text-gray-300">Pilih SPB tambahan untuk {{ form.customer_name }}.</p>
+              <input v-model="editSpbSearch" aria-label="Cari SPB tambahan" placeholder="Cari nomor SPB, resi, atau penerima..." :disabled="loadingEditSpb || savingInvoice" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm dark:bg-gray-700" />
+              <p v-if="loadingEditSpb" class="text-sm text-gray-500">Memuat SPB...</p>
+              <p v-else-if="editSpbError" role="alert" class="text-sm text-red-600 dark:text-red-400">{{ editSpbError }}</p>
+              <p v-else-if="availableEditSpb.length === 0" class="text-sm text-gray-500">Tidak ada SPB yang tersedia.</p>
+              <div v-else class="max-h-60 overflow-auto">
+                <table class="w-full min-w-[520px] text-xs dark:text-gray-100">
+                  <thead class="sticky top-0 bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                      <th class="p-2 w-8"><input type="checkbox" aria-label="Pilih semua SPB tambahan" :checked="availableEditSpb.every(it => editSelectedSpbIds.has(Number(it.shipment_id)))" :disabled="savingInvoice" @change="toggleAllEditSpb" /></th>
+                      <th class="p-2 text-left">No. SPB / Resi</th>
+                      <th class="p-2 text-left">Tanggal</th>
+                      <th class="p-2 text-left">Penerima</th>
+                      <th class="p-2 text-right">Tagihan</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="it in availableEditSpb" :key="it.shipment_id!" class="border-t dark:border-gray-700">
+                      <td class="p-2"><input type="checkbox" :aria-label="`Tambah SPB ${it.spb_number}`" :checked="editSelectedSpbIds.has(Number(it.shipment_id))" :disabled="savingInvoice" @change="toggleEditSpb(Number(it.shipment_id))" /></td>
+                      <td class="p-2"><div class="font-medium">{{ it.spb_number || '-' }}</div><div class="text-gray-500 dark:text-gray-400">{{ it.tracking_code }}</div></td>
+                      <td class="p-2 whitespace-nowrap">{{ formatShipmentDate(it.shipment_date) }}</td>
+                      <td class="p-2">{{ it.recipient_name || '-' }}</td>
+                      <td class="p-2 text-right whitespace-nowrap">{{ formatRupiah(it.unit_price) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="flex justify-end">
+                <Button size="sm" :disabled="loadingEditSpb || !!editSpbError || savingInvoice || editSelectedSpbIds.size === 0" @click="addEditSpb">Tambahkan ({{ editSelectedSpbIds.size }})</Button>
+              </div>
+            </div>
+            <div class="max-h-[45vh] overflow-auto rounded-lg border border-gray-200 dark:border-gray-700">
+              <table class="w-full min-w-[750px] table-fixed text-[10px] leading-snug xl:text-[11px] dark:text-gray-100">
+                <colgroup>
+                  <col class="w-[15%]" />
+                  <col class="w-[10%]" />
+                  <col class="w-[11%]" />
+                  <col class="w-[6%]" />
+                  <col class="w-[17%]" />
+                  <col class="w-[6%]" />
+                  <col class="w-[10%]" />
+                  <col class="w-[10%]" />
+                  <col class="w-[15%]" />
+                </colgroup>
+                <thead class="sticky top-0 z-20 bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th class="px-2 py-2 text-left text-xs font-medium">No. SPB / RESI</th>
-                    <th class="px-2 py-2 text-left text-xs font-medium">Customer</th>
-                    <th class="px-2 py-2 text-left text-xs font-medium">Nama Barang</th>
-                    <th class="px-2 py-2 text-right text-xs font-medium">Berat</th>
-                    <th class="px-2 py-2 text-right text-xs font-medium">QTY</th>
-                    <th class="px-2 py-2 text-left text-xs font-medium">Penerima</th>
-                    <th class="px-2 py-2 text-center text-xs font-medium">SJ Balik</th>
-                    <th class="px-2 py-2 text-right text-xs font-medium">Tagihan</th>
-                    <th class="px-2 py-2 text-right text-xs font-medium">Biaya Lain</th>
-                    <th class="px-2 py-2 text-right text-xs font-medium">PPh ({{ pphPercent }}%)</th>
-                    <th class="px-2 py-2 text-right text-xs font-medium">Total</th>
+                    <th class="px-1.5 py-2 text-left font-medium">No. SPB / RESI</th>
+                    <th class="px-1.5 py-2 text-left font-medium">Customer</th>
+                    <th class="px-1.5 py-2 text-left font-medium">Nama Barang</th>
+                    <th class="px-1 py-2 text-right font-medium">QTY / Berat</th>
+                    <th class="px-1.5 py-2 text-left font-medium">Penerima</th>
+                    <th class="px-1 py-2 text-center font-medium">SJ Balik</th>
+                    <th class="px-1 py-2 text-right font-medium">Tagihan</th>
+                    <th class="px-1 py-2 text-right font-medium">Biaya Lain</th>
+                    <th class="px-1.5 py-2 text-right font-medium">Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr
                     v-for="(it, idx) in items"
                     :key="`item-edit-${it.id}-${idx}`"
-                    class="border-t"
+                    class="border-t dark:border-gray-700 align-top"
                   >
-                    <td class="px-2 py-2">
-                      <div class="text-xs font-mono">
-                        <div>{{ it.spb_number || '-' }}</div>
+                    <td class="px-1.5 py-2">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="font-mono font-semibold break-words">{{ it.spb_number || '-' }}</span>
+                        <button type="button" class="shrink-0 rounded p-1 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed" :title="items.length <= 1 ? 'Invoice harus berisi minimal 1 SPB' : 'Hapus SPB dari invoice'" :aria-label="`Hapus SPB ${it.spb_number || idx + 1}`" :disabled="!canChangeEditSpb || savingInvoice || items.length <= 1" @click="removeEditSpb(idx)">
+                          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" /></svg>
+                        </button>
+                      </div>
+                      <div class="font-mono break-words">
+                        <div class="text-gray-500 dark:text-gray-400">{{ formatShipmentDate(it.shipment_date) }}</div>
                         <div class="text-gray-500 dark:text-gray-400">{{ it.tracking_code || '-' }}</div>
                     <div v-if="it.dbl_number" class="text-gray-500 dark:text-gray-400">
                           DBL: {{ it.dbl_number.startsWith('DBL') ? it.dbl_number : `DBL ${it.dbl_number}` }}
@@ -2913,37 +3032,37 @@ function closeInvoiceModal() {
                         </div>
                       </div>
                     </td>
-                    <td class="px-2 py-2 text-xs">{{ it.customer_name || '-' }}</td>
-                    <td class="px-2 py-2 text-xs">{{ it.description || '-' }}</td>
-                    <td class="px-2 py-2 text-right text-xs">{{ it.weight || 0 }} {{ it.unit || 'Kg' }}</td>
-                    <td class="px-2 py-2 text-right text-xs">{{ it.quantity || 0 }}</td>
-                    <td class="px-2 py-2">
-                      <div class="text-xs">
+                    <td class="px-1.5 py-2 break-words">{{ it.customer_name || '-' }}</td>
+                    <td class="px-1.5 py-2 break-words">{{ it.description || '-' }}</td>
+                    <td class="px-1 py-2 text-right tabular-nums">
+                      <div>{{ it.quantity || 0 }}</div>
+                      <div class="mt-1 text-gray-500 dark:text-gray-400">{{ it.weight || 0 }} {{ it.unit || 'Kg' }}</div>
+                    </td>
+                    <td class="px-1.5 py-2">
+                      <div class="break-words">
                         <div>{{ it.recipient_name || '-' }}</div>
                         <div class="text-gray-500 dark:text-gray-400">{{ it.destination_city || '-' }}</div>
                       </div>
                     </td>
-                    <td class="px-2 py-2 text-center">
-                      <Badge :variant="it.sj_returned ? 'success' : 'warning'">
+                    <td class="px-1 py-2 text-center">
+                      <Badge :variant="it.sj_returned ? 'success' : 'warning'" class="!px-1.5 !text-[10px] whitespace-nowrap">
                         {{ it.sj_returned ? 'Sudah' : 'Belum' }}
                       </Badge>
                     </td>
-                    <td class="px-2 py-2 text-right text-xs font-semibold">
+                    <td class="px-1 py-2 text-right font-semibold whitespace-nowrap tabular-nums">
                       {{ formatRupiah(it.unit_price || 0) }}
                     </td>
-                    <td class="px-2 py-2 text-right text-xs">
+                    <td class="px-1 py-2 text-right">
                       <input
                         v-model.number="it.other_fee"
                         type="number"
                         min="0"
-                        class="w-24 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-gray-100"
+                        class="w-full min-w-0 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-gray-100"
                       />
                     </td>
-                    <td class="px-2 py-2 text-right text-xs text-red-600">
-                      -{{ formatRupiah(lineSubtotal(it) * (pphPercent / 100)) }}
-                    </td>
-                    <td class="px-2 py-2 text-right text-xs font-semibold">
-                      {{ formatRupiah(lineSubtotal(it) * (1 - pphPercent / 100)) }}
+                    <td class="px-1.5 py-2 text-right whitespace-nowrap tabular-nums">
+                      <div class="font-semibold">{{ formatRupiah(lineSubtotal(it) * (1 - pphPercent / 100)) }}</div>
+                      <div class="mt-1 text-[9px] xl:text-[10px] text-red-600 dark:text-red-400">PPh {{ pphPercent }}%: -{{ formatRupiah(lineSubtotal(it) * (pphPercent / 100)) }}</div>
                     </td>
                   </tr>
                 </tbody>
@@ -2951,7 +3070,7 @@ function closeInvoiceModal() {
             </div>
           </div>
         </div>
-        <div class="col-span-12 lg:col-span-4 space-y-4">
+        <div class="col-span-12 min-w-0 space-y-4" :class="editingId ? 'lg:col-span-3' : 'lg:col-span-4'">
           <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3 bg-white dark:bg-gray-800">
             <div>
               <label class="block text-sm font-medium mb-1 dark:text-gray-200">PPh Rate (%)</label>
